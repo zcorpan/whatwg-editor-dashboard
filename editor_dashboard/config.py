@@ -33,6 +33,9 @@ class ReadyBoundedConfig:
 
 @dataclass(frozen=True)
 class SamplingConfig:
+    # Keep outer pages small because each PR includes several nested connections.
+    # GitHub terminates GraphQL requests that take too long, usually as HTTP 502/504.
+    graphql_page_size: int = 10
     timeline_each_end: int = 25
     viewer_reviews: int = 25
     review_threads: int = 50
@@ -123,6 +126,11 @@ def load_config(path: str | Path) -> DashboardConfig:
 
     sampling_raw = _mapping(raw.get("sampling", {}), "sampling")
     sampling = SamplingConfig(
+        graphql_page_size=_positive_int(
+            sampling_raw.get("graphql_page_size", 10),
+            "sampling.graphql_page_size",
+            maximum=100,
+        ),
         timeline_each_end=_positive_int(
             sampling_raw.get("timeline_each_end", 25),
             "sampling.timeline_each_end",

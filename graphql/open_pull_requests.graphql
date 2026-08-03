@@ -101,11 +101,9 @@ fragment PullRequestDashboardFields on PullRequest {
       id
       author { login }
       authorAssociation
-      body
       createdAt
       submittedAt
       updatedAt
-      url
       state
       commit { oid }
     }
@@ -130,7 +128,6 @@ fragment TimelineConnectionFields on PullRequestTimelineItemsConnection {
       body
       createdAt
       updatedAt
-      url
     }
     ... on PullRequestReview {
       id
@@ -140,7 +137,6 @@ fragment TimelineConnectionFields on PullRequestTimelineItemsConnection {
       createdAt
       submittedAt
       updatedAt
-      url
       state
       commit { oid }
     }

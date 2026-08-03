@@ -41,11 +41,9 @@ query RecentClosedPullRequests(
             id
             author { login }
             authorAssociation
-            body
             createdAt
             submittedAt
             updatedAt
-            url
             state
             commit { oid }
           }
@@ -69,20 +67,16 @@ fragment TimelineConnectionFields on PullRequestTimelineItemsConnection {
       id
       author { login }
       authorAssociation
-      body
       createdAt
       updatedAt
-      url
     }
     ... on PullRequestReview {
       id
       author { login }
       authorAssociation
-      body
       createdAt
       submittedAt
       updatedAt
-      url
       state
       commit { oid }
     }

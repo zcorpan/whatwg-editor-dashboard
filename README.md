@@ -100,6 +100,12 @@ python dashboard.py validate
 python -m unittest discover -s tests -v
 ```
 
+### GitHub 502 or 504 during a build
+
+For GraphQL, GitHub uses HTTP 502 and 504 when a request exceeds its processing-time limit. The client automatically retries and reduces `sampling.graphql_page_size`; the checked-in default is already a conservative 10 rather than 50. Retry messages show the attempt number, request ID when GitHub supplies one, delay, and any page-size reduction.
+
+A persistent failure at page size 1 is more likely to be a wider GitHub API incident or a pathological single item. Check GitHub Status and rerun the workflow. Do not add a PAT merely to address a 502/504; these status codes do not indicate missing permissions.
+
 ## Configuration
 
 `dashboard.yml` controls:
@@ -109,7 +115,7 @@ python -m unittest discover -s tests -v
 - the seven-day first-response target and 48-hour new-PR highlight;
 - ready/bounded diff and checklist thresholds (the HTML MVP defaults to all boxes checked);
 - labels treated as blockers;
-- GraphQL sampling sizes and historical window;
+- the outer GraphQL page size, nested sampling sizes, and historical window;
 - suggested-next interleaving order.
 
 The current editor list is deliberately explicit. Update it when the HTML editor group changes, because it affects response-time and waiting-on-editor metrics.
@@ -126,7 +132,9 @@ The Python builder uses GitHub's GraphQL API and paginates open PRs and recently
 
 Only derived public data is written to `site/data.json`; raw PR bodies and comment/review bodies are not published by the dashboard build.
 
-The build logs GraphQL query cost and remaining quota. Sampling limits are configurable, but increasing nested connection sizes also increases cost and output size.
+The outer GraphQL page defaults to 10 PRs because every PR includes several nested connections. GitHub documents HTTP 502 and 504 responses from the GraphQL endpoint as request timeouts. When either occurs, the client retries with exponential backoff, halves the outer page size, and retains that smaller size for the rest of the build. Other transient 5xx and network failures are retried without changing the page size.
+
+The build logs successful GraphQL query count, total request attempts, retries, query cost, remaining quota, and the effective outer page size. Sampling limits are configurable, but increasing the outer page or nested connection sizes increases server work and makes timeouts more likely.
 
 ## Deterministic rules and limitations
 

@@ -29,6 +29,9 @@ blocking_labels:
   - blocked
 
 sampling:
+  # The outer page is deliberately small because each PR includes several nested samples.
+  # On a GitHub 502/504 timeout, the client halves this automatically for the rest of the build.
+  graphql_page_size: 10
   timeline_each_end: 25
   viewer_reviews: 25
   review_threads: 50
