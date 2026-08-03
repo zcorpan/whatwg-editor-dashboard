@@ -1,0 +1,148 @@
+query OpenPullRequests(
+  $owner: String!
+  $name: String!
+  $cursor: String
+  $pageSize: Int!
+  $viewer: String!
+  $timelineEachEnd: Int!
+  $viewerReviewCount: Int!
+  $threadCount: Int!
+) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(
+      states: OPEN
+      first: $pageSize
+      after: $cursor
+      orderBy: {field: UPDATED_AT, direction: DESC}
+    ) {
+      totalCount
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        ...PullRequestDashboardFields
+      }
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}
+
+fragment PullRequestDashboardFields on PullRequest {
+  number
+  title
+  url
+  author { login }
+  authorAssociation
+  body
+  createdAt
+  updatedAt
+  lastEditedAt
+  closedAt
+  mergedAt
+  isDraft
+  additions
+  deletions
+  changedFiles
+  headRefOid
+  mergeable
+  mergeStateStatus
+  reviewDecision
+  statusCheckRollup { state }
+
+  labels(first: 20) {
+    nodes { name }
+  }
+  assignees(first: 10) {
+    nodes { login }
+  }
+  reviewRequests(first: 10) {
+    nodes {
+      requestedReviewer {
+        ... on User { login }
+        ... on Team {
+          slug
+          organization { login }
+        }
+      }
+    }
+  }
+  commits(last: 1) {
+    nodes {
+      commit {
+        oid
+        committedDate
+        author {
+          user { login }
+        }
+      }
+    }
+  }
+  timelineFirst: timelineItems(
+    first: $timelineEachEnd
+    itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW]
+  ) {
+    ...TimelineConnectionFields
+  }
+  timelineLast: timelineItems(
+    last: $timelineEachEnd
+    itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW]
+  ) {
+    ...TimelineConnectionFields
+  }
+  viewerReviews: reviews(last: $viewerReviewCount, author: $viewer) {
+    totalCount
+    nodes {
+      id
+      author { login }
+      authorAssociation
+      body
+      createdAt
+      submittedAt
+      updatedAt
+      url
+      state
+      commit { oid }
+    }
+  }
+  reviewThreads(first: $threadCount) {
+    totalCount
+    nodes {
+      isResolved
+      isOutdated
+    }
+  }
+}
+
+fragment TimelineConnectionFields on PullRequestTimelineItemsConnection {
+  totalCount
+  nodes {
+    __typename
+    ... on IssueComment {
+      id
+      author { login }
+      authorAssociation
+      body
+      createdAt
+      updatedAt
+      url
+    }
+    ... on PullRequestReview {
+      id
+      author { login }
+      authorAssociation
+      body
+      createdAt
+      submittedAt
+      updatedAt
+      url
+      state
+      commit { oid }
+    }
+  }
+}

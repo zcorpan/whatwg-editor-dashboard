@@ -1,0 +1,43 @@
+repository:
+  owner: whatwg
+  name: html
+
+viewer: zcorpan
+
+# Current HTML editors. These are public identities used for response-time metrics.
+editors:
+  - annevk
+  - domenic
+  - domfarolino
+  - foolip
+  - zcorpan
+
+response_targets:
+  initial_editor_response_days: 7
+  highlight_new_hours: 48
+
+ready_bounded:
+  max_changed_files: 8
+  max_changed_lines: 800
+  minimum_checklist_ratio: 1.0
+
+blocking_labels:
+  - do not merge yet
+  - needs implementer interest
+  - needs tests
+  - needs work
+  - blocked
+
+sampling:
+  timeline_each_end: 25
+  viewer_reviews: 25
+  review_threads: 50
+  history_days: 90
+
+suggested_next:
+  # Every currently active direct request is shown first. Remaining lanes are interleaved.
+  cycle:
+    - rereview
+    - new
+    - oldest_wait
+    - ready_bounded

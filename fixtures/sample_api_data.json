@@ -1,0 +1,2554 @@
+{
+  "metadata": {
+    "query_count": 0,
+    "graphql_cost": 0,
+    "warnings": [
+      "Demo fixture data; not fetched from GitHub."
+    ]
+  },
+  "open_pull_requests": [
+    {
+      "number": 13001,
+      "title": "Define the frobnication state",
+      "url": "https://github.com/whatwg/html/pull/13001",
+      "author": {
+        "login": "alice"
+      },
+      "authorAssociation": "FIRST_TIME_CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [ ] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [ ] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-29T09:00:00Z",
+      "updatedAt": "2026-08-03T10:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-13001",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": [
+          {
+            "requestedReviewer": {
+              "login": "zcorpan"
+            }
+          }
+        ]
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-13001",
+              "committedDate": "2026-08-03T10:00:00Z",
+              "author": {
+                "user": {
+                  "login": "alice"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "timelineLast": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 13002,
+      "title": "Clarify navigation cleanup steps",
+      "url": "https://github.com/whatwg/html/pull/13002",
+      "author": {
+        "login": "bob"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-15T08:00:00Z",
+      "updatedAt": "2026-08-02T15:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-after",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-after",
+              "committedDate": "2026-08-02T14:00:00Z",
+              "author": {
+                "user": {
+                  "login": "bob"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-13002",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-28T10:00:00Z",
+            "submittedAt": "2026-07-28T10:00:00Z",
+            "updatedAt": "2026-07-28T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-13002",
+            "state": "CHANGES_REQUESTED",
+            "commit": {
+              "oid": "sha-before"
+            }
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13002",
+            "author": {
+              "login": "bob"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Addressed the review feedback.",
+            "createdAt": "2026-08-02T15:00:00Z",
+            "updatedAt": "2026-08-02T15:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13002"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-13002",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-28T10:00:00Z",
+            "submittedAt": "2026-07-28T10:00:00Z",
+            "updatedAt": "2026-07-28T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-13002",
+            "state": "CHANGES_REQUESTED",
+            "commit": {
+              "oid": "sha-before"
+            }
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13002",
+            "author": {
+              "login": "bob"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Addressed the review feedback.",
+            "createdAt": "2026-08-02T15:00:00Z",
+            "updatedAt": "2026-08-02T15:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13002"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-13002",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-28T10:00:00Z",
+            "submittedAt": "2026-07-28T10:00:00Z",
+            "updatedAt": "2026-07-28T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-13002",
+            "state": "CHANGES_REQUESTED",
+            "commit": {
+              "oid": "sha-before"
+            }
+          }
+        ]
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 13003,
+      "title": "Editorial: fix parser cross-reference",
+      "url": "https://github.com/whatwg/html/pull/13003",
+      "author": {
+        "login": "carol"
+      },
+      "authorAssociation": "FIRST_TIMER",
+      "body": "- [x] Commit message is clear",
+      "createdAt": "2026-08-02T07:00:00Z",
+      "updatedAt": "2026-08-02T07:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 6,
+      "deletions": 2,
+      "changedFiles": 1,
+      "headRefOid": "sha-13003",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-13003",
+              "committedDate": "2026-08-02T07:00:00Z",
+              "author": {
+                "user": {
+                  "login": "carol"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "timelineLast": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 12900,
+      "title": "Specify legacy table recovery behavior",
+      "url": "https://github.com/whatwg/html/pull/12900",
+      "author": {
+        "login": "dana"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [ ] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [ ] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-03-01T12:00:00Z",
+      "updatedAt": "2026-06-01T12:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 500,
+      "deletions": 140,
+      "changedFiles": 12,
+      "headRefOid": "sha-12900",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-12900",
+              "committedDate": "2026-06-01T12:00:00Z",
+              "author": {
+                "user": {
+                  "login": "dana"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-12900",
+            "author": {
+              "login": "dana"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "I have added the requested examples.",
+            "createdAt": "2026-06-01T12:00:00Z",
+            "updatedAt": "2026-06-01T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12900"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-12900",
+            "author": {
+              "login": "dana"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "I have added the requested examples.",
+            "createdAt": "2026-06-01T12:00:00Z",
+            "updatedAt": "2026-06-01T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12900"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 13004,
+      "title": "Editorial: align a definition",
+      "url": "https://github.com/whatwg/html/pull/13004",
+      "author": {
+        "login": "erin"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-20T12:00:00Z",
+      "updatedAt": "2026-07-31T12:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 22,
+      "deletions": 12,
+      "changedFiles": 2,
+      "headRefOid": "sha-13004",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-13004",
+              "committedDate": "2026-07-31T12:00:00Z",
+              "author": {
+                "user": {
+                  "login": "erin"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13004a",
+            "author": {
+              "login": "domenic"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "This looks well-scoped.",
+            "createdAt": "2026-07-21T10:00:00Z",
+            "updatedAt": "2026-07-21T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13004a"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13004b",
+            "author": {
+              "login": "erin"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Updated as suggested.",
+            "createdAt": "2026-07-31T12:00:00Z",
+            "updatedAt": "2026-07-31T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13004b"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13004a",
+            "author": {
+              "login": "domenic"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "This looks well-scoped.",
+            "createdAt": "2026-07-21T10:00:00Z",
+            "updatedAt": "2026-07-21T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13004a"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13004b",
+            "author": {
+              "login": "erin"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Updated as suggested.",
+            "createdAt": "2026-07-31T12:00:00Z",
+            "updatedAt": "2026-07-31T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13004b"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 13005,
+      "title": "Explore a new media capability",
+      "url": "https://github.com/whatwg/html/pull/13005",
+      "author": {
+        "login": "frank"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [ ] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [ ] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-30T12:00:00Z",
+      "updatedAt": "2026-08-01T12:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": true,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-13005",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-13005",
+              "committedDate": "2026-08-01T12:00:00Z",
+              "author": {
+                "user": {
+                  "login": "frank"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "timelineLast": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 13006,
+      "title": "Change the event ordering model",
+      "url": "https://github.com/whatwg/html/pull/13006",
+      "author": {
+        "login": "grace"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-01T12:00:00Z",
+      "updatedAt": "2026-08-01T13:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 100,
+      "deletions": 80,
+      "changedFiles": 5,
+      "headRefOid": "sha-13006",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "FAILURE"
+      },
+      "labels": {
+        "nodes": [
+          {
+            "name": "do not merge yet"
+          }
+        ]
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-13006",
+              "committedDate": "2026-08-01T13:00:00Z",
+              "author": {
+                "user": {
+                  "login": "grace"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13006",
+            "author": {
+              "login": "grace"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "CI appears unrelated.",
+            "createdAt": "2026-08-01T13:00:00Z",
+            "updatedAt": "2026-08-01T13:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13006"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13006",
+            "author": {
+              "login": "grace"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "CI appears unrelated.",
+            "createdAt": "2026-08-01T13:00:00Z",
+            "updatedAt": "2026-08-01T13:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13006"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 13007,
+      "title": "Handle an edge case in forms",
+      "url": "https://github.com/whatwg/html/pull/13007",
+      "author": {
+        "login": "heidi"
+      },
+      "authorAssociation": "FIRST_TIME_CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-25T10:00:00Z",
+      "updatedAt": "2026-07-27T11:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-13007",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-13007",
+              "committedDate": "2026-07-27T11:00:00Z",
+              "author": {
+                "user": {
+                  "login": "heidi"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13007",
+            "author": {
+              "login": "annevk"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Thanks; I will take a look.",
+            "createdAt": "2026-07-27T11:00:00Z",
+            "updatedAt": "2026-07-27T11:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13007"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13007",
+            "author": {
+              "login": "annevk"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Thanks; I will take a look.",
+            "createdAt": "2026-07-27T11:00:00Z",
+            "updatedAt": "2026-07-27T11:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13007"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 13008,
+      "title": "Make serialization wording consistent",
+      "url": "https://github.com/whatwg/html/pull/13008",
+      "author": {
+        "login": "ivan"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-10T08:00:00Z",
+      "updatedAt": "2026-08-03T09:30:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-13008",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-13008",
+              "committedDate": "2026-08-03T09:30:00Z",
+              "author": {
+                "user": {
+                  "login": "ivan"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13008",
+            "author": {
+              "login": "ivan"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "@zcorpan could you review the updated wording?",
+            "createdAt": "2026-08-03T09:30:00Z",
+            "updatedAt": "2026-08-03T09:30:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13008"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13008",
+            "author": {
+              "login": "ivan"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "@zcorpan could you review the updated wording?",
+            "createdAt": "2026-08-03T09:30:00Z",
+            "updatedAt": "2026-08-03T09:30:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13008"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 13009,
+      "title": "Refactor the custom element reaction stack",
+      "url": "https://github.com/whatwg/html/pull/13009",
+      "author": {
+        "login": "judy"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-06-12T08:00:00Z",
+      "updatedAt": "2026-07-30T09:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-13009",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-13009",
+              "committedDate": "2026-07-30T09:00:00Z",
+              "author": {
+                "user": {
+                  "login": "judy"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13009",
+            "author": {
+              "login": "foolip"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "One thread remains.",
+            "createdAt": "2026-07-25T09:00:00Z",
+            "updatedAt": "2026-07-25T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13009"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13009b",
+            "author": {
+              "login": "judy"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "I replied in the thread.",
+            "createdAt": "2026-07-30T09:00:00Z",
+            "updatedAt": "2026-07-30T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13009b"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13009",
+            "author": {
+              "login": "foolip"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "One thread remains.",
+            "createdAt": "2026-07-25T09:00:00Z",
+            "updatedAt": "2026-07-25T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13009"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13009b",
+            "author": {
+              "login": "judy"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "I replied in the thread.",
+            "createdAt": "2026-07-30T09:00:00Z",
+            "updatedAt": "2026-07-30T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13009b"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "isResolved": false,
+            "isOutdated": false
+          }
+        ]
+      }
+    },
+    {
+      "number": 13010,
+      "title": "Large mechanical ID rewrite",
+      "url": "https://github.com/whatwg/html/pull/13010",
+      "author": {
+        "login": "kate"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-05-01T08:00:00Z",
+      "updatedAt": "2026-07-15T09:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 5000,
+      "deletions": 4800,
+      "changedFiles": 120,
+      "headRefOid": "sha-13010",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-13010",
+              "committedDate": "2026-07-15T09:00:00Z",
+              "author": {
+                "user": {
+                  "login": "kate"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 80,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-0",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-01T09:00:00Z",
+            "updatedAt": "2026-07-01T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-0"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-1",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-02T09:00:00Z",
+            "updatedAt": "2026-07-02T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-1"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-2",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-03T09:00:00Z",
+            "updatedAt": "2026-07-03T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-2"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-3",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-04T09:00:00Z",
+            "updatedAt": "2026-07-04T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-3"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-4",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-05T09:00:00Z",
+            "updatedAt": "2026-07-05T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-4"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-5",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-06T09:00:00Z",
+            "updatedAt": "2026-07-06T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-5"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-6",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-07T09:00:00Z",
+            "updatedAt": "2026-07-07T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-6"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-7",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-08T09:00:00Z",
+            "updatedAt": "2026-07-08T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-7"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-8",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-09T09:00:00Z",
+            "updatedAt": "2026-07-09T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-8"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-9",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-10T09:00:00Z",
+            "updatedAt": "2026-07-10T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-9"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-10",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-11T09:00:00Z",
+            "updatedAt": "2026-07-11T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-10"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-11",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-12T09:00:00Z",
+            "updatedAt": "2026-07-12T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-11"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-12",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-13T09:00:00Z",
+            "updatedAt": "2026-07-13T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-12"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-13",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-14T09:00:00Z",
+            "updatedAt": "2026-07-14T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-13"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-14",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-15T09:00:00Z",
+            "updatedAt": "2026-07-15T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-14"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-15",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-16T09:00:00Z",
+            "updatedAt": "2026-07-16T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-15"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-16",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-17T09:00:00Z",
+            "updatedAt": "2026-07-17T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-16"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-17",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-18T09:00:00Z",
+            "updatedAt": "2026-07-18T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-17"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-18",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-19T09:00:00Z",
+            "updatedAt": "2026-07-19T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-18"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-19",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-20T09:00:00Z",
+            "updatedAt": "2026-07-20T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-19"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-20",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-21T09:00:00Z",
+            "updatedAt": "2026-07-21T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-20"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-21",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-22T09:00:00Z",
+            "updatedAt": "2026-07-22T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-21"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-22",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-23T09:00:00Z",
+            "updatedAt": "2026-07-23T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-22"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-23",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-24T09:00:00Z",
+            "updatedAt": "2026-07-24T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-23"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-24",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-25T09:00:00Z",
+            "updatedAt": "2026-07-25T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-24"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 80,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-25",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-01T09:00:00Z",
+            "updatedAt": "2026-07-01T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-25"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-26",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-02T09:00:00Z",
+            "updatedAt": "2026-07-02T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-26"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-27",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-03T09:00:00Z",
+            "updatedAt": "2026-07-03T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-27"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-28",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-04T09:00:00Z",
+            "updatedAt": "2026-07-04T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-28"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-29",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-05T09:00:00Z",
+            "updatedAt": "2026-07-05T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-29"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-30",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-06T09:00:00Z",
+            "updatedAt": "2026-07-06T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-30"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-31",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-07T09:00:00Z",
+            "updatedAt": "2026-07-07T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-31"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-32",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-08T09:00:00Z",
+            "updatedAt": "2026-07-08T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-32"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-33",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-09T09:00:00Z",
+            "updatedAt": "2026-07-09T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-33"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-34",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-10T09:00:00Z",
+            "updatedAt": "2026-07-10T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-34"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-35",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-11T09:00:00Z",
+            "updatedAt": "2026-07-11T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-35"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-36",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-12T09:00:00Z",
+            "updatedAt": "2026-07-12T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-36"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-37",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-13T09:00:00Z",
+            "updatedAt": "2026-07-13T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-37"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-38",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-14T09:00:00Z",
+            "updatedAt": "2026-07-14T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-38"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-39",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-15T09:00:00Z",
+            "updatedAt": "2026-07-15T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-39"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-40",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-16T09:00:00Z",
+            "updatedAt": "2026-07-16T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-40"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-41",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-17T09:00:00Z",
+            "updatedAt": "2026-07-17T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-41"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-42",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-18T09:00:00Z",
+            "updatedAt": "2026-07-18T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-42"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-43",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-19T09:00:00Z",
+            "updatedAt": "2026-07-19T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-43"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-44",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-20T09:00:00Z",
+            "updatedAt": "2026-07-20T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-44"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-45",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-21T09:00:00Z",
+            "updatedAt": "2026-07-21T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-45"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-46",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-22T09:00:00Z",
+            "updatedAt": "2026-07-22T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-46"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-47",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-23T09:00:00Z",
+            "updatedAt": "2026-07-23T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-47"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-48",
+            "author": {
+              "login": "whatwg-bot"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-24T09:00:00Z",
+            "updatedAt": "2026-07-24T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-48"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-13010-49",
+            "author": {
+              "login": "kate"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Automated update",
+            "createdAt": "2026-07-25T09:00:00Z",
+            "updatedAt": "2026-07-25T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13010-49"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  ],
+  "recently_closed_pull_requests": [
+    {
+      "number": 12890,
+      "title": "Tighten the input activation wording",
+      "url": "https://github.com/whatwg/html/pull/12890",
+      "author": {
+        "login": "lena"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-30T09:00:00Z",
+      "updatedAt": "2026-08-02T15:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": "2026-08-02T15:00:00Z",
+      "mergedAt": "2026-08-02T15:00:00Z",
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-12890",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-12890",
+              "committedDate": "2026-08-02T15:00:00Z",
+              "author": {
+                "user": {
+                  "login": "lena"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-12890",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Thanks, reviewing.",
+            "createdAt": "2026-07-31T09:00:00Z",
+            "updatedAt": "2026-07-31T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12890"
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12890",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-08-01T12:00:00Z",
+            "submittedAt": "2026-08-01T12:00:00Z",
+            "updatedAt": "2026-08-01T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12890",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12890"
+            }
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-12890",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Thanks, reviewing.",
+            "createdAt": "2026-07-31T09:00:00Z",
+            "updatedAt": "2026-07-31T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12890"
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12890",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-08-01T12:00:00Z",
+            "submittedAt": "2026-08-01T12:00:00Z",
+            "updatedAt": "2026-08-01T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12890",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12890"
+            }
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12890",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-08-01T12:00:00Z",
+            "submittedAt": "2026-08-01T12:00:00Z",
+            "updatedAt": "2026-08-01T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12890",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12890"
+            }
+          }
+        ]
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 12880,
+      "title": "Remove obsolete prose",
+      "url": "https://github.com/whatwg/html/pull/12880",
+      "author": {
+        "login": "mike"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-10T09:00:00Z",
+      "updatedAt": "2026-07-24T15:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": "2026-07-24T15:00:00Z",
+      "mergedAt": "2026-07-24T15:00:00Z",
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-12880",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-12880",
+              "committedDate": "2026-07-24T15:00:00Z",
+              "author": {
+                "user": {
+                  "login": "mike"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-12880",
+            "author": {
+              "login": "domenic"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Looks reasonable.",
+            "createdAt": "2026-07-12T09:00:00Z",
+            "updatedAt": "2026-07-12T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12880"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-12880",
+            "author": {
+              "login": "domenic"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Looks reasonable.",
+            "createdAt": "2026-07-12T09:00:00Z",
+            "updatedAt": "2026-07-12T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12880"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 12870,
+      "title": "Clarify session history traversal",
+      "url": "https://github.com/whatwg/html/pull/12870",
+      "author": {
+        "login": "nora"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-06-20T09:00:00Z",
+      "updatedAt": "2026-07-16T15:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": "2026-07-16T15:00:00Z",
+      "mergedAt": "2026-07-16T15:00:00Z",
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-12870",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-12870",
+              "committedDate": "2026-07-16T15:00:00Z",
+              "author": {
+                "user": {
+                  "login": "nora"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-12870a",
+            "author": {
+              "login": "nora"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Ready for review.",
+            "createdAt": "2026-07-01T09:00:00Z",
+            "updatedAt": "2026-07-01T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12870a"
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12870",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-14T10:00:00Z",
+            "submittedAt": "2026-07-14T10:00:00Z",
+            "updatedAt": "2026-07-14T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12870",
+            "state": "COMMENTED",
+            "commit": {
+              "oid": "sha-12870"
+            }
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-12870a",
+            "author": {
+              "login": "nora"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Ready for review.",
+            "createdAt": "2026-07-01T09:00:00Z",
+            "updatedAt": "2026-07-01T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12870a"
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12870",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-14T10:00:00Z",
+            "submittedAt": "2026-07-14T10:00:00Z",
+            "updatedAt": "2026-07-14T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12870",
+            "state": "COMMENTED",
+            "commit": {
+              "oid": "sha-12870"
+            }
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12870",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-14T10:00:00Z",
+            "submittedAt": "2026-07-14T10:00:00Z",
+            "updatedAt": "2026-07-14T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12870",
+            "state": "COMMENTED",
+            "commit": {
+              "oid": "sha-12870"
+            }
+          }
+        ]
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 12860,
+      "title": "Editorial cleanup for tokenization",
+      "url": "https://github.com/whatwg/html/pull/12860",
+      "author": {
+        "login": "zcorpan"
+      },
+      "authorAssociation": "MEMBER",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-22T09:00:00Z",
+      "updatedAt": "2026-07-23T12:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": "2026-07-23T12:00:00Z",
+      "mergedAt": "2026-07-23T12:00:00Z",
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-12860",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-12860",
+              "committedDate": "2026-07-23T12:00:00Z",
+              "author": {
+                "user": {
+                  "login": "zcorpan"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "timelineLast": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 12850,
+      "title": "Define interaction with nested browsing contexts",
+      "url": "https://github.com/whatwg/html/pull/12850",
+      "author": {
+        "login": "olivia"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-05-01T09:00:00Z",
+      "updatedAt": "2026-08-01T11:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": "2026-08-01T13:00:00Z",
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-12850",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-12850",
+              "committedDate": "2026-08-01T11:00:00Z",
+              "author": {
+                "user": {
+                  "login": "olivia"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-12850a",
+            "author": {
+              "login": "olivia"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Initial proposal.",
+            "createdAt": "2026-05-01T09:00:00Z",
+            "updatedAt": "2026-05-01T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12850a"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-12850b",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Thanks; here is a direction.",
+            "createdAt": "2026-08-01T11:00:00Z",
+            "updatedAt": "2026-08-01T11:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12850b"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-12850a",
+            "author": {
+              "login": "olivia"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Initial proposal.",
+            "createdAt": "2026-05-01T09:00:00Z",
+            "updatedAt": "2026-05-01T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12850a"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-12850b",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Thanks; here is a direction.",
+            "createdAt": "2026-08-01T11:00:00Z",
+            "updatedAt": "2026-08-01T11:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12850b"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 12840,
+      "title": "Correct a Web IDL type",
+      "url": "https://github.com/whatwg/html/pull/12840",
+      "author": {
+        "login": "pat"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-06-09T09:00:00Z",
+      "updatedAt": "2026-06-11T15:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": "2026-06-11T15:00:00Z",
+      "mergedAt": "2026-06-11T15:00:00Z",
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-12840",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-12840",
+              "committedDate": "2026-06-11T15:00:00Z",
+              "author": {
+                "user": {
+                  "login": "pat"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12840",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-06-10T10:00:00Z",
+            "submittedAt": "2026-06-10T10:00:00Z",
+            "updatedAt": "2026-06-10T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12840",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12840"
+            }
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-12840",
+            "author": {
+              "login": "pat"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Thanks!",
+            "createdAt": "2026-06-10T12:00:00Z",
+            "updatedAt": "2026-06-10T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12840"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12840",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-06-10T10:00:00Z",
+            "submittedAt": "2026-06-10T10:00:00Z",
+            "updatedAt": "2026-06-10T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12840",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12840"
+            }
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-12840",
+            "author": {
+              "login": "pat"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Thanks!",
+            "createdAt": "2026-06-10T12:00:00Z",
+            "updatedAt": "2026-06-10T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12840"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12840",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-06-10T10:00:00Z",
+            "submittedAt": "2026-06-10T10:00:00Z",
+            "updatedAt": "2026-06-10T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12840",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12840"
+            }
+          }
+        ]
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 12830,
+      "title": "Investigate a parser interoperability issue",
+      "url": "https://github.com/whatwg/html/pull/12830",
+      "author": {
+        "login": "quinn"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [ ] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [ ] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-05-20T09:00:00Z",
+      "updatedAt": "2026-06-15T15:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": "2026-06-15T15:00:00Z",
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-12830",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-12830",
+              "committedDate": "2026-06-15T15:00:00Z",
+              "author": {
+                "user": {
+                  "login": "quinn"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "timelineLast": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    },
+    {
+      "number": 12820,
+      "title": "Make a conformance requirement explicit",
+      "url": "https://github.com/whatwg/html/pull/12820",
+      "author": {
+        "login": "riley"
+      },
+      "authorAssociation": "CONTRIBUTOR",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [x] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [x] MDN issue filed\n- [x] Commit message is clear\n",
+      "createdAt": "2026-07-03T09:00:00Z",
+      "updatedAt": "2026-07-06T15:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": "2026-07-06T15:00:00Z",
+      "mergedAt": "2026-07-06T15:00:00Z",
+      "isDraft": false,
+      "additions": 40,
+      "deletions": 10,
+      "changedFiles": 2,
+      "headRefOid": "sha-12820",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-12820",
+              "committedDate": "2026-07-06T15:00:00Z",
+              "author": {
+                "user": {
+                  "login": "riley"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12820",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-05T10:00:00Z",
+            "submittedAt": "2026-07-05T10:00:00Z",
+            "updatedAt": "2026-07-05T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12820",
+            "state": "COMMENTED",
+            "commit": {
+              "oid": "sha-12820"
+            }
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-12820",
+            "author": {
+              "login": "riley"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Updated.",
+            "createdAt": "2026-07-05T12:00:00Z",
+            "updatedAt": "2026-07-05T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12820"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 2,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12820",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-05T10:00:00Z",
+            "submittedAt": "2026-07-05T10:00:00Z",
+            "updatedAt": "2026-07-05T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12820",
+            "state": "COMMENTED",
+            "commit": {
+              "oid": "sha-12820"
+            }
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "c-12820",
+            "author": {
+              "login": "riley"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "Updated.",
+            "createdAt": "2026-07-05T12:00:00Z",
+            "updatedAt": "2026-07-05T12:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12820"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12820",
+            "author": {
+              "login": "zcorpan"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-05T10:00:00Z",
+            "submittedAt": "2026-07-05T10:00:00Z",
+            "updatedAt": "2026-07-05T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12820",
+            "state": "COMMENTED",
+            "commit": {
+              "oid": "sha-12820"
+            }
+          }
+        ]
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
+    }
+  ]
+}
