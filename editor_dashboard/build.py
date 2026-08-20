@@ -14,17 +14,25 @@ from .models import isoformat
 
 
 LANE_DESCRIPTIONS = {
+    "active": {
+        "title": "Active now",
+        "description": "Recently changed PRs the editor is already involved in, newest activity first.",
+    },
     "direct": {
         "title": "Direct requests",
-        "description": "Public mentions, assignments, and review requests for the configured editor.",
+        "description": "Current review requests and assignments, plus public mentions inside the activity window.",
+    },
+    "stale_direct": {
+        "title": "Stale direct requests",
+        "description": "Public mentions older than the activity window, kept findable but no longer claiming the queue.",
     },
     "rereview": {
         "title": "Re-review owed",
         "description": "The PR changed or the author replied after the editor's latest sampled review.",
     },
     "new": {
-        "title": "New PR turnaround",
-        "description": "New non-draft contributor PRs without a sampled editor response, targeting a response within seven days.",
+        "title": "Awaiting first response",
+        "description": "Non-draft contributor PRs that have never received a sampled editor response, oldest first.",
     },
     "oldest_wait": {
         "title": "Oldest contributor waits",
@@ -45,6 +53,10 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
     return {
         "principles": [
             "No LLM is used. Every classification is produced by deterministic, inspectable rules.",
+            (
+                "The queue leads with recent activity on PRs the editor is already involved in. "
+                f"'Recent' means the latest {config.attention.activity_window_days} days."
+            ),
             "The generated site contains public GitHub data only.",
             "Seen, addressed, pinned, snoozed, and opened state is stored only in the browser.",
             "Description checklist completion is descriptive and is not an assessment of test sufficiency or specification readiness.",
@@ -64,6 +76,15 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
         },
         "known_limitations": [
             "GitHub notification unread state is not fetched; the browser shows locally unseen public attention signals instead.",
+            (
+                "A public mention stops counting as a direct request once it falls outside the activity "
+                "window; it moves to the stale lane rather than disappearing. Review requests and "
+                "assignments do not expire because GitHub clears them on review."
+            ),
+            (
+                "First-time contributor detection treats an author with no repository association as a "
+                "first-time contributor, which also covers authors whose only prior PRs were closed unmerged."
+            ),
             "Inline review-thread replies are not inspected for mentions or response-time metrics in this MVP.",
             "Review-request and assignment connections expose current state, not a complete timestamped history; their displayed timestamp uses the PR update time.",
             "The configured current editor list is applied to the full sampled history; historical editor-membership changes are not reconstructed.",
@@ -118,8 +139,11 @@ def build_site(
             "initial_editor_response_days": config.response_targets.initial_editor_response_days,
             "highlight_new_hours": config.response_targets.highlight_new_hours,
         },
+        "attention": {
+            "activity_window_days": config.attention.activity_window_days,
+        },
         "suggested_next": {
-            "direct": "all",
+            "active": "all",
             "cycle": list(config.suggested_next.cycle),
         },
         "lane_descriptions": LANE_DESCRIPTIONS,

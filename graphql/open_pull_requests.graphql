@@ -118,7 +118,12 @@ fragment PullRequestDashboardFields on PullRequest {
 }
 
 fragment TimelineConnectionFields on PullRequestTimelineItemsConnection {
+  # totalCount counts every timeline item kind, not just the itemTypes requested
+  # below, so completeness is derived from pageInfo instead. See models.py.
   totalCount
+  pageInfo {
+    hasNextPage
+  }
   nodes {
     __typename
     ... on IssueComment {

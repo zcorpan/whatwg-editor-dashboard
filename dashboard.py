@@ -39,6 +39,7 @@ def build_command(args: argparse.Namespace) -> int:
     current = payload["metrics"]["repository"]["current"]
     print(
         f"Built {args.output}: {current['open_prs']} open PRs, "
+        f"{current['active_now']} active now, "
         f"{current['direct_requests']} direct requests, "
         f"{current['waiting_on_editor']} waiting on an editor."
     )

@@ -57,6 +57,29 @@ class Activity:
         )
 
 
+def _timeline_sample_complete(
+    node: dict[str, Any],
+    window_ids: dict[str, set[str]],
+) -> bool:
+    """Decide whether the sampled comment/review timeline holds every such item.
+
+    ``timelineItems.totalCount`` reports every timeline item kind — commits, label
+    changes, assignments — regardless of the ``itemTypes`` filter applied to
+    ``nodes``. Comparing the filtered nodes against it therefore reports almost
+    every PR as incompletely sampled, because virtually all of them have at least
+    one commit. That silently degraded "no editor has responded" into "unknown".
+
+    ``pageInfo.hasNextPage`` on the forward window answers the question directly.
+    When it is absent (older fixtures), fall back on the fact that ``first: n`` and
+    ``last: n`` over one connection return the same items exactly when the filtered
+    total is at most ``n``.
+    """
+    page_info = (node.get("timelineFirst") or {}).get("pageInfo") or {}
+    if "hasNextPage" in page_info:
+        return not bool(page_info.get("hasNextPage"))
+    return window_ids["timelineFirst"] == window_ids["timelineLast"]
+
+
 @dataclass(frozen=True)
 class PullRequestSnapshot:
     number: int
@@ -86,6 +109,7 @@ class PullRequestSnapshot:
     review_requests: tuple[str, ...]
     timeline: tuple[Activity, ...]
     timeline_first_ids: frozenset[str]
+    timeline_sampled_count: int
     timeline_total_count: int
     timeline_sample_complete: bool
     viewer_reviews: tuple[Activity, ...]
@@ -110,7 +134,7 @@ class PullRequestSnapshot:
             raise ValueError(f"PR #{node.get('number')} is missing required timestamps")
 
         timeline_nodes: dict[str, dict[str, Any]] = {}
-        timeline_first_ids: set[str] = set()
+        window_ids: dict[str, set[str]] = {"timelineFirst": set(), "timelineLast": set()}
         timeline_total = 0
         for alias in ("timelineFirst", "timelineLast"):
             connection = node.get(alias) or {}
@@ -119,14 +143,16 @@ class PullRequestSnapshot:
                 if activity_node:
                     activity_id = str(activity_node.get("id") or repr(activity_node))
                     timeline_nodes[activity_id] = activity_node
-                    if alias == "timelineFirst":
-                        timeline_first_ids.add(activity_id)
+                    window_ids[alias].add(activity_id)
+        timeline_first_ids = window_ids["timelineFirst"]
         timeline = tuple(
             sorted(
                 (activity for value in timeline_nodes.values() if (activity := Activity.from_graphql(value)) is not None),
                 key=lambda activity: (activity.created_at, activity.id),
             )
         )
+
+        timeline_sample_complete = _timeline_sample_complete(node, window_ids)
 
         reviews_connection = node.get("viewerReviews") or {}
         viewer_reviews = tuple(
@@ -203,8 +229,9 @@ class PullRequestSnapshot:
             review_requests=tuple(sorted(set(requested))),
             timeline=timeline,
             timeline_first_ids=frozenset(timeline_first_ids),
+            timeline_sampled_count=len(timeline),
             timeline_total_count=timeline_total,
-            timeline_sample_complete=len(timeline) >= timeline_total,
+            timeline_sample_complete=timeline_sample_complete,
             viewer_reviews=viewer_reviews,
             viewer_reviews_total_count=int(reviews_connection.get("totalCount") or 0),
             unresolved_review_threads=unresolved,

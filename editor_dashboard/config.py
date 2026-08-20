@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 
-_ALLOWED_SUGGESTED_LANES = {"rereview", "new", "oldest_wait", "ready_bounded"}
+_ALLOWED_SUGGESTED_LANES = {"rereview", "new", "oldest_wait", "ready_bounded", "stale_direct"}
 
 @dataclass(frozen=True)
 class RepositoryConfig:
@@ -22,6 +22,14 @@ class RepositoryConfig:
 class ResponseTargets:
     initial_editor_response_days: int = 7
     highlight_new_hours: int = 48
+
+
+@dataclass(frozen=True)
+class AttentionConfig:
+    # How recently a PR must have moved to count as currently active, and how long a
+    # public mention keeps claiming attention. Review requests and assignments are
+    # current API state that GitHub clears on review, so they never expire.
+    activity_window_days: int = 30
 
 
 @dataclass(frozen=True)
@@ -53,6 +61,7 @@ class DashboardConfig:
     viewer: str
     editors: frozenset[str]
     response_targets: ResponseTargets = field(default_factory=ResponseTargets)
+    attention: AttentionConfig = field(default_factory=AttentionConfig)
     ready_bounded: ReadyBoundedConfig = field(default_factory=ReadyBoundedConfig)
     blocking_labels: frozenset[str] = field(default_factory=frozenset)
     sampling: SamplingConfig = field(default_factory=SamplingConfig)
@@ -105,6 +114,14 @@ def load_config(path: str | Path) -> DashboardConfig:
         highlight_new_hours=_positive_int(
             targets_raw.get("highlight_new_hours", 48),
             "response_targets.highlight_new_hours",
+        ),
+    )
+
+    attention_raw = _mapping(raw.get("attention", {}), "attention")
+    attention = AttentionConfig(
+        activity_window_days=_positive_int(
+            attention_raw.get("activity_window_days", 30),
+            "attention.activity_window_days",
         ),
     )
 
@@ -172,6 +189,7 @@ def load_config(path: str | Path) -> DashboardConfig:
         viewer=viewer,
         editors=editors,
         response_targets=targets,
+        attention=attention,
         ready_bounded=bounded,
         blocking_labels=frozenset(str(value).strip().lower() for value in blocking_labels_raw if str(value).strip()),
         sampling=sampling,

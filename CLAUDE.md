@@ -53,7 +53,7 @@ The pipeline is a strict one-way chain; keep the layer boundaries intact when ex
 6. [build.py](editor_dashboard/build.py) — assembles the `data.json` payload (`schema_version`, lanes, items, metrics, methodology, build metadata), copies `web/*` into the output, writes `.nojekyll`.
 7. [web/app.js](web/app.js) — fetches `data.json`, resolves lane key lists against `items`, and layers browser-local state on top.
 
-Lane identifiers (`direct`, `rereview`, `new`, `oldest_wait`, `ready_bounded`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four.
+Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `new`, `oldest_wait`, `ready_bounded`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four.
 
 ### The two fingerprints
 
@@ -66,14 +66,54 @@ Changing what goes into either hash silently invalidates users' stored state, so
 
 ### Determinism and sampling honesty
 
-Every classification is rule-based; no LLM, no heuristics that cannot be shown as evidence. Two properties the code deliberately maintains:
+Every classification is rule-based; no LLM, no heuristics that cannot be shown as evidence (see [Design intent](#design-intent-and-deliberate-non-goals)). Two properties the code deliberately maintains:
 
 - **Deterministic output.** `now` is threaded explicitly through analysis, metrics, and build so a fixture build is byte-reproducible. Sorts always break ties on PR number. Never call `datetime.now()` below `dashboard.py`.
 - **Incomplete samples are visible, not silent.** Only the first and last `timeline_each_end` comments/reviews are fetched. `timeline_sample_complete`, `first_editor_response_known`, and `review_threads_sample_complete` gate which metrics are reported; the `coverage` block in `data.json` publishes the shortfall. When adding a metric that needs middle history, gate it the same way rather than assuming completeness.
 
+Two GitHub API traps have already cost this codebase a silent wrong answer each. Both produced plausible zeros rather than errors, so assert on real values in tests instead of trusting that a number exists:
+
+- **`timelineItems.totalCount` ignores the `itemTypes` filter.** It counts commits, labels and assignments too, so it can never be compared against the filtered `nodes`. Completeness comes from `pageInfo.hasNextPage` ([models.py](editor_dashboard/models.py) `_timeline_sample_complete`). Comparing against `totalCount` marked 283 of 283 open PRs incompletely sampled, which turned every "no editor has responded" into "unknown" and reported `known_without_editor_response: 0`.
+- **`authorAssociation` never returns `FIRST_TIME*` on this repo.** It returns `CONTRIBUTOR`, `MEMBER`, or `NONE`, so first-time-contributor detection keys off `NONE`. Checking only for `FIRST_TIMER`/`FIRST_TIME_CONTRIBUTOR` left the flag false on all 283 PRs and every first-time-contributor metric at zero.
+
 ### GraphQL resilience
 
 GitHub returns HTTP 502/504 for GraphQL request timeouts, and this query is nested-connection heavy. `GraphQLClient.execute` retries with exponential backoff and, on 502/504 only, halves `pageSize` and retains the reduced cap for the rest of the build (`_page_size_cap`). 403 with `X-RateLimit-Remaining: 0` fails fast; secondary-rate-limit 403s get at least a 60 s delay. `fetch_repository_data` also deduplicates PRs that appear twice across pages and drops open-PR nodes that also came back in the closed search, appending a human-readable note to `metadata.warnings` (which is published in `data.json`) rather than failing.
+
+## Design intent and deliberate non-goals
+
+This codebase is milestones 1–2 of a longer plan, and several apparent gaps are decisions rather than omissions. Don't "fix" these without a deliberate change of direction.
+
+**Lanes, not a score.** A single numeric ranking across all open PRs was considered and rejected: buckets plus visible `Reason` chips are the product. Any scoring may only order items *within* a lane, and the reasons must always be shown. The `active` lane outranks everything else.
+
+**Recency is the primary axis for "what needs me now".** The top of the queue answers "which reviews am I currently in the middle of", not "which claim on my attention is oldest". The `active` lane holds PRs with public activity inside `activity_window_days` (30) where the editor is involved — a direct signal, a re-review owed, or a review previously submitted. It sorts newest activity first, and `suggested_next` emits all of it before the cycle.
+
+This inverts the original design, which put every direct request first, oldest first. On real `whatwg/html` data that buried the live work: of 283 open PRs only 39 had any activity within 30 days, yet 35 direct requests preceded the cycle, led by a mention from 2016 on a PR untouched for 953 days. Age is a poor proxy for actionability on a decade-old backlog.
+
+Consequences to preserve:
+
+- Newest-first is the default for the attention lanes (`active`, `direct`, `rereview`). `oldest_wait` is the **only** lane sorted oldest-first, because fairness to waiting contributors is exactly what it exists to measure.
+- When a PR carries several direct signals, the **freshest** one represents it. Taking the oldest meant one stale mention outranked a review request filed the same week.
+
+**Direct signals expire; current state does not.** A review request or assignment is current API state — GitHub clears it when the editor reviews — so it persists as a direct request indefinitely. A mention is a past *event* with no clearing mechanism; once `@zcorpan` appeared in a 2016 comment, that PR claimed a direct request forever. Mentions therefore count only inside the activity window. Expired ones move to a separate stale lane rather than being discarded, so an old mention stays findable without leading the queue.
+
+**`oldest_wait` measures the current wait, not PR age.** It is time since the latest non-editor human activity that no editor answered. A five-year-old PR whose author replied yesterday has a one-day wait; a three-week-old PR with no editor response has a three-week wait. Bot activity must never reset this clock — hence `is_bot()` filtering throughout [analysis.py](editor_dashboard/analysis.py).
+
+**The `suggested_next` interleave resolves a specific tension.** Active work first, then a cycle, so that incoming work cannot permanently starve long-waiting contributors while new PRs still get a fast turnaround. Changing the cycle changes that balance. The cycle is what keeps the backlog from being abandoned now that the top of the queue is recency-driven.
+
+**`new` means "never got a first response", with no age cap.** It previously required `age <= initial_editor_response_days`, so a PR left the lane on the very day it missed the target — the lane could only show successes in progress, never failures. It is now unbounded and sorted oldest-first, and past target the reason chip escalates to `first-response-overdue`. It stays distinct from `oldest_wait`, which covers stalled conversations an editor *did* join at some point.
+
+**No GitHub notification / unread state, on purpose.** The REST notifications endpoint requires a *classic* PAT (fine-grained PATs and GitHub App tokens are unsupported), and putting such a token in a workflow that publishes public output is an unacceptable leakage risk. "Unseen" therefore means "this browser has not opened this public attention signal". Proper unread sync is deferred to a future OAuth-backed service, not to a secret in this workflow.
+
+**No LLM.** If advisory summaries are ever added, they must stay advisory: they may never decide whether an item disappears, becomes "ready", or outranks a direct request, and they must be cached by content fingerprint.
+
+**Wording is a requirement, not style.** Impact metrics describe event order, never causation — "PRs merged after your review", never "PRs you caused to merge" (`test_metrics.py` guards this). Likewise the task list is a *description checklist* and never "requirements complete": it says the author ticked boxes, nothing about test sufficiency, implementer interest, or merge readiness.
+
+**All GitHub-derived text is untrusted.** PR titles, bodies, logins, and comments can contain deliberate HTML or script-like content; they reach the page only as text nodes.
+
+**The workflow is read-only apart from the Pages deploy.** Rolling 90-day metrics are recomputed from the API each run rather than kept in a database. If daily aggregates are added later they belong on a separate data branch, which is the only thing that should ever need `contents: write`.
+
+**Deferred by plan:** issues (PRs only for now), other WHATWG repositories (`dashboard.yml` is single-repo, though the layering is meant to allow more), cross-device state, OAuth/multi-user, and assessment of actual WPT coverage, implementer interest, web-compat risk, or consensus quality.
 
 ## Constraints enforced by tests
 
