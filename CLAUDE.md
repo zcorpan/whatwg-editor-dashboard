@@ -51,7 +51,7 @@ The pipeline is a strict one-way chain; keep the layer boundaries intact when ex
 4. [analysis.py](editor_dashboard/analysis.py) — the heart. `analyze_pull_request` produces one `PRAnalysis` per PR: lane membership, `Reason` evidence chips, blockers, and the two fingerprints. `build_lanes` produces the per-lane ordering as lists of `owner/repo#number` keys.
 5. [metrics.py](editor_dashboard/metrics.py) — aggregates `PRAnalysis` values into repository-health, flow-window (7/28/90 day), viewer-impact, and sampling-coverage numbers.
 6. [build.py](editor_dashboard/build.py) — assembles the `data.json` payload (`schema_version`, lanes, items, metrics, methodology, build metadata), copies `web/*` into the output, writes `.nojekyll`.
-7. [web/app.js](web/app.js) — fetches `data.json`, resolves lane key lists against `items`, and layers browser-local state on top.
+7. [web/app.js](web/app.js) — fetches `data.json`, resolves lane key lists against `items`, and layers browser-local state on top. `checkForFreshData` re-fetches and re-renders in place when a long-lived tab's `generated_at` is older than the 24 h build interval, gated on tab visibility and a throttle; keep the whole render path re-runnable from `applyDashboard`.
 
 Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `new`, `oldest_wait`, `ready_bounded`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four.
 

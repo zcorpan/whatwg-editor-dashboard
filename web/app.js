@@ -5,12 +5,23 @@ const LANE_ORDER = ["active", "direct", "rereview", "new", "oldest_wait", "ready
 const SUGGESTED_LIMIT_AFTER_ACTIVE = 12;
 const SORT_ORDERS = new Set(["queue", "checklist", "unchecked", "wait", "updated", "created"]);
 
+const DATA_URL = "data.json";
+// The scheduled build runs once every 24 hours, so data younger than that cannot have a successor yet.
+const BUILD_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// Once the data is old enough for a new build to exist, poll on this cadence until one appears.
+const STALE_POLL_INTERVAL_MS = 15 * 60 * 1000;
+// Floor between any two network checks, so returning to the tab repeatedly cannot hammer the origin.
+const MIN_CHECK_INTERVAL_MS = 60 * 1000;
+const CLOCK_TICK_MS = 60 * 1000;
+
 let dashboard = null;
 let itemsByKey = new Map();
 let localState = loadLocalState();
 let activeLane = "active";
 let searchQuery = "";
 let storageWarningShown = false;
+let lastCheckAt = 0;
+let checkInFlight = false;
 
 function element(tag, options = {}, children = []) {
   const node = document.createElement(tag);
@@ -720,11 +731,15 @@ function renderMethodology() {
   content.replaceChildren(principles, limitations, sampling, rules, privacy);
 }
 
-function renderBuildMetadata() {
-  const generated = new Date(dashboard.generated_at);
+function updateBuildIndicator() {
   const indicator = document.querySelector("#build-indicator");
   indicator.textContent = `Updated ${relativeTime(dashboard.generated_at)}`;
   indicator.title = `Generated ${localDate(dashboard.generated_at)} · source: ${dashboard.build.source}`;
+}
+
+function renderBuildMetadata() {
+  const generated = new Date(dashboard.generated_at);
+  updateBuildIndicator();
   document.querySelector("#repository-label").textContent = dashboard.repository.slug;
   document.querySelector("#health-intro").textContent = `Track flow, contributor wait, backlog shape, and public @${dashboard.viewer.login} activity. Metrics describe observed sequence, not causation.`;
   document.querySelector("#impact-eyebrow").textContent = `Public activity by @${dashboard.viewer.login}`;
@@ -834,19 +849,78 @@ function installEventHandlers() {
   });
 }
 
+async function fetchDashboard() {
+  const response = await fetch(DATA_URL, {cache: "no-store"});
+  if (!response.ok) throw new Error(`Dashboard data returned HTTP ${response.status}.`);
+  return response.json();
+}
+
+function applyDashboard(payload, {preserveScroll = false} = {}) {
+  const scrollY = window.scrollY;
+  dashboard = payload;
+  itemsByKey = new Map(dashboard.items.map(item => [item.key, item]));
+  renderBuildMetadata();
+  renderQueues();
+  renderHealth();
+  renderMethodology();
+  if (preserveScroll && window.scrollY !== scrollY) window.scrollTo(window.scrollX, scrollY);
+}
+
+function dataOldEnoughForANewBuild() {
+  const generated = Date.parse(dashboard?.generated_at);
+  if (!Number.isFinite(generated)) return true;
+  return Date.now() - generated >= BUILD_INTERVAL_MS;
+}
+
+// Reload data.json in place when the deployed build is newer than the one this tab is showing, so a
+// tab left open across a scheduled build does not keep serving yesterday's queue. Also retries the
+// initial load when that failed.
+async function checkForFreshData({userReturned = false} = {}) {
+  if (checkInFlight || document.hidden) return;
+  if (dashboard && !dataOldEnoughForANewBuild()) return;
+  const sinceLastCheck = Date.now() - lastCheckAt;
+  if (sinceLastCheck < (userReturned ? MIN_CHECK_INTERVAL_MS : STALE_POLL_INTERVAL_MS)) return;
+
+  checkInFlight = true;
+  lastCheckAt = Date.now();
+  const hadData = Boolean(dashboard);
+  try {
+    const payload = await fetchDashboard();
+    if (!payload?.generated_at || payload.generated_at === dashboard?.generated_at) return;
+    applyDashboard(payload, {preserveScroll: hadData});
+    toast(hadData
+      ? `Loaded a fresh build generated ${relativeTime(dashboard.generated_at)}.`
+      : "Dashboard data loaded.");
+  } catch {
+    // Keep whatever is already on screen; the next check tries again.
+  } finally {
+    checkInFlight = false;
+  }
+}
+
+function installRefreshHandlers() {
+  const onReturn = () => {
+    if (document.hidden) return;
+    if (dashboard) updateBuildIndicator();
+    checkForFreshData({userReturned: true});
+  };
+  window.addEventListener("pageshow", onReturn);
+  window.addEventListener("focus", onReturn);
+  document.addEventListener("visibilitychange", onReturn);
+  setInterval(() => {
+    if (dashboard) updateBuildIndicator();
+    checkForFreshData();
+  }, CLOCK_TICK_MS);
+}
+
 async function start() {
   installEventHandlers();
+  installRefreshHandlers();
   syncControlState();
   showView();
+  lastCheckAt = Date.now();
   try {
-    const response = await fetch("data.json", {cache: "no-store"});
-    if (!response.ok) throw new Error(`Dashboard data returned HTTP ${response.status}.`);
-    dashboard = await response.json();
-    itemsByKey = new Map(dashboard.items.map(item => [item.key, item]));
-    renderBuildMetadata();
-    renderQueues();
-    renderHealth();
-    renderMethodology();
+    applyDashboard(await fetchDashboard());
   } catch (error) {
     document.querySelector("#build-indicator").textContent = "Data unavailable";
     document.querySelector("#suggested-list").replaceChildren(emptyState(error.message || "Could not load dashboard data."));

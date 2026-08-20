@@ -33,6 +33,7 @@ Every card exposes the evidence and detected limitations behind its classificati
 - Pin, snooze, and lane-sort preferences are local.
 - State can be exported and imported manually as JSON.
 - Clearing site data clears the local state.
+- A tab left open reloads `data.json` in place once a newer build is deployed, so it does not keep showing yesterday's queue. It only looks once the displayed data is at least 24 hours old — the scheduled build interval — and only while the tab is visible; local state, the selected lane, the search box, and the scroll position survive the swap.
 
 `localStorage` is origin-scoped rather than path-scoped. The key is namespaced by the dashboard path to prevent accidental collisions, but scripts on other pages under the same origin could technically read it. Use a dedicated Pages origin or custom subdomain when other projects on that origin are not equally trusted. The stored values are workflow metadata, not credentials.
 
