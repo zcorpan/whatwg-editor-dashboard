@@ -4,7 +4,7 @@ A static, deterministic dashboard for prioritizing reviews in `whatwg/html` and 
 
 See [`PRIVACY.md`](PRIVACY.md) for the public/private boundary and threat model.
 
-The dashboard is rebuilt by GitHub Actions every six hours and deployed to GitHub Pages. It uses public GitHub data only. Personal workflow state—seen signals, addressed items, pins, snoozes, and opened timestamps—stays in the browser's `localStorage`.
+The dashboard is rebuilt by GitHub Actions once every 24 hours and deployed to GitHub Pages. It uses public GitHub data only. Personal workflow state—seen signals, addressed items, pins, snoozes, and opened timestamps—stays in the browser's `localStorage`.
 
 ## MVP scope
 
@@ -59,7 +59,7 @@ No PAT or repository secret is required. The workflow uses its short-lived `GITH
 
 The workflow:
 
-- runs only on `main`, a six-hour schedule, or manual dispatch;
+- runs only on `main`, a daily schedule, or manual dispatch;
 - never runs code from `whatwg/html` PR branches;
 - does not use `pull_request_target`;
 - pins every action to a full commit SHA;
@@ -172,7 +172,7 @@ Current drafts are excluded from response-target and contributor-wait counts. Fo
 ├── web/                             # static HTML, CSS, and browser-local state UI
 ├── fixtures/                        # offline demo data
 ├── tests/                           # unit and build tests
-└── .github/workflows/dashboard.yml  # six-hour Pages deployment
+└── .github/workflows/dashboard.yml  # daily Pages deployment
 ```
 
 ## Extending beyond the MVP
