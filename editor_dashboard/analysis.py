@@ -3,8 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 from .checklist import Checklist, parse_checklist
@@ -41,6 +41,7 @@ class PRAnalysis:
     attention_fingerprint: str
     has_attention_signal: bool
     direct_request_at: datetime | None
+    stale_direct_at: datetime | None
     rereview_trigger_at: datetime | None
     latest_viewer_review: Activity | None
     latest_contributor_activity_at: datetime | None
@@ -81,7 +82,7 @@ class PRAnalysis:
             "unresolved_review_threads": pr.unresolved_review_threads,
             "review_threads_total_count": pr.review_threads_total_count,
             "review_threads_sample_complete": pr.review_threads_sample_complete,
-            "timeline_total_count": pr.timeline_total_count,
+            "timeline_sampled_count": pr.timeline_sampled_count,
             "timeline_sample_complete": pr.timeline_sample_complete,
             "viewer_reviews_total_count": pr.viewer_reviews_total_count,
             "checklist": self.checklist.to_public_dict(),
@@ -92,6 +93,7 @@ class PRAnalysis:
             "attention_fingerprint": self.attention_fingerprint,
             "has_attention_signal": self.has_attention_signal,
             "direct_request_at": isoformat(self.direct_request_at),
+            "stale_direct_at": isoformat(self.stale_direct_at),
             "rereview_trigger_at": isoformat(self.rereview_trigger_at),
             "latest_viewer_review_at": isoformat(self.latest_viewer_review.created_at if self.latest_viewer_review else None),
             "latest_contributor_activity_at": isoformat(self.latest_contributor_activity_at),
@@ -200,38 +202,59 @@ def _editor_activity_times(pr: PullRequestSnapshot, editors: frozenset[str]) -> 
 def _direct_reasons(
     pr: PullRequestSnapshot,
     config: DashboardConfig,
-) -> list[Reason]:
+    *,
+    now: datetime,
+) -> tuple[list[Reason], list[Reason]]:
+    """Split direct-attention signals into currently active and expired ones.
+
+    A review request or assignment is *current state*: GitHub removes it once the
+    editor reviews, so it keeps claiming attention for as long as it is set. A
+    mention is a past *event* with no such clearing mechanism — without an expiry a
+    single 2016 comment marks a PR as a direct request forever, which is what buried
+    the live queue under a decade of archaeology.
+    """
     viewer = config.viewer
     pattern = _mention_pattern(viewer)
-    reasons: list[Reason] = []
+    cutoff = now - timedelta(days=config.attention.activity_window_days)
+    active: list[Reason] = []
+    expired: list[Reason] = []
+
+    def record(reason: Reason, *, expires: bool) -> None:
+        if expires and reason.timestamp is not None and reason.timestamp < cutoff:
+            expired.append(replace(reason, tone="muted"))
+        else:
+            active.append(reason)
 
     if viewer in pr.review_requests:
-        reasons.append(
+        record(
             Reason(
                 "review-requested",
                 f"Review requested from @{viewer}",
                 timestamp=pr.updated_at,
                 tone="urgent",
-            )
+            ),
+            expires=False,
         )
     if viewer in pr.assignees:
-        reasons.append(
+        record(
             Reason(
                 "assigned",
                 f"Assigned to @{viewer}",
                 timestamp=pr.updated_at,
                 tone="urgent",
-            )
+            ),
+            expires=False,
         )
 
     if pr.author != viewer and pattern.search(pr.body):
-        reasons.append(
+        record(
             Reason(
                 "mentioned-in-description",
                 f"@{viewer} mentioned in the description",
                 timestamp=pr.last_edited_at or pr.created_at,
                 tone="urgent",
-            )
+            ),
+            expires=True,
         )
 
     mention_activities = [
@@ -243,17 +266,18 @@ def _direct_reasons(
     ]
     if mention_activities:
         latest = max(mention_activities, key=lambda activity: (activity.updated_at, activity.id))
-        reasons.append(
+        record(
             Reason(
                 "mentioned-in-discussion",
                 f"@{viewer} mentioned in the discussion",
                 detail=f"by @{latest.author}" if latest.author else None,
                 timestamp=latest.updated_at,
                 tone="urgent",
-            )
+            ),
+            expires=True,
         )
 
-    return reasons
+    return active, expired
 
 
 def _rereview_reasons(
@@ -478,7 +502,7 @@ def analyze_pull_request(
 ) -> PRAnalysis:
     now = now.astimezone(timezone.utc)
     checklist = parse_checklist(pr.body)
-    direct_reasons = _direct_reasons(pr, config)
+    direct_reasons, expired_direct_reasons = _direct_reasons(pr, config, now=now)
     latest_review = _latest_viewer_review(pr)
     rereview_reasons = _rereview_reasons(pr, latest_review)
 
@@ -503,19 +527,33 @@ def analyze_pull_request(
 
     ready_bounded, positive_reasons, blockers = _ready_and_blockers(pr, checklist, config)
     age_hours = _hours_between(pr.created_at, now)
+    target_hours = config.response_targets.initial_editor_response_days * 24
+
+    # "Never received a first editor response" — deliberately unbounded by age. The
+    # previous seven-day cap removed a PR from this lane on the very day it missed
+    # the response target, so the lane could only ever show successes in progress.
     is_new = bool(
         not pr.is_draft
         and pr.author not in config.editors
         and not is_bot(pr.author)
-        and age_hours <= config.response_targets.initial_editor_response_days * 24
         and first_editor is None
         and first_response_known
     )
     oldest_wait = bool(waiting_on_editor and not pr.is_draft)
 
+    # Recency is the primary axis: the top of the queue answers "which reviews am I
+    # currently in the middle of", not "which claim on my attention is oldest".
+    activity_cutoff = now - timedelta(days=config.attention.activity_window_days)
+    editor_involved = bool(direct_reasons) or bool(rereview_reasons) or latest_review is not None
+    is_active = bool(pr.updated_at >= activity_cutoff and editor_involved)
+
     lanes: list[str] = []
+    if is_active:
+        lanes.append("active")
     if direct_reasons:
         lanes.append("direct")
+    elif expired_direct_reasons:
+        lanes.append("stale_direct")
     if rereview_reasons:
         lanes.append("rereview")
     if is_new:
@@ -526,11 +564,39 @@ def analyze_pull_request(
         lanes.append("ready_bounded")
     lanes.append("all")
 
-    reasons: list[Reason] = [*direct_reasons, *rereview_reasons]
+    reasons: list[Reason] = []
+    if is_active:
+        reasons.append(
+            Reason(
+                "recently-active",
+                f"Active within {config.attention.activity_window_days} days",
+                timestamp=pr.updated_at,
+                tone="attention",
+            )
+        )
+    reasons.extend((*direct_reasons, *expired_direct_reasons, *rereview_reasons))
     if is_new:
-        label = "New PR: first response due within 7 days"
-        tone = "positive" if age_hours <= config.response_targets.highlight_new_hours else "attention"
-        reasons.append(Reason("new-untriaged", label, timestamp=pr.created_at, tone=tone))
+        if age_hours > target_hours:
+            reasons.append(
+                Reason(
+                    "first-response-overdue",
+                    "First editor response overdue",
+                    detail=f"{age_hours / 24:.1f} days open",
+                    timestamp=pr.created_at,
+                    tone="urgent",
+                )
+            )
+        else:
+            tone = "positive" if age_hours <= config.response_targets.highlight_new_hours else "attention"
+            reasons.append(
+                Reason(
+                    "new-untriaged",
+                    "Awaiting a first editor response",
+                    detail=f"target {config.response_targets.initial_editor_response_days} days",
+                    timestamp=pr.created_at,
+                    tone=tone,
+                )
+            )
     if oldest_wait and current_wait_hours is not None:
         days = current_wait_hours / 24
         reasons.append(
@@ -546,8 +612,17 @@ def analyze_pull_request(
         reasons.append(Reason("ready-bounded", "Appears ready and bounded", tone="positive"))
         reasons.extend(positive_reasons)
 
-    direct_at = min((reason.timestamp for reason in direct_reasons if reason.timestamp), default=pr.updated_at) if direct_reasons else None
-    rereview_at = min((reason.timestamp for reason in rereview_reasons if reason.timestamp), default=pr.updated_at) if rereview_reasons else None
+    # The freshest signal represents the PR. Taking the oldest meant one stale
+    # mention outranked a review request filed on the same PR the same week.
+    def _latest(reasons_in: Iterable[Reason]) -> datetime | None:
+        values = list(reasons_in)
+        if not values:
+            return None
+        return max((reason.timestamp for reason in values if reason.timestamp), default=pr.updated_at)
+
+    direct_at = _latest(direct_reasons)
+    rereview_at = _latest(rereview_reasons)
+    stale_direct_at = _latest(expired_direct_reasons)
 
     body_hash = hashlib.sha256(pr.body.encode("utf-8")).hexdigest()
     activity_fingerprint = [
@@ -570,7 +645,9 @@ def analyze_pull_request(
     }
     content_fingerprint = _hash_payload(content_payload)
 
-    attention_reasons = [*direct_reasons, *rereview_reasons]
+    # Expired mentions stay in the fingerprint so that a signal ageing out does not
+    # by itself mark an already-seen item unseen again.
+    attention_reasons = [*direct_reasons, *expired_direct_reasons, *rereview_reasons]
     attention_payload = [
         (reason.code, isoformat(reason.timestamp), reason.detail)
         for reason in attention_reasons
@@ -578,7 +655,10 @@ def analyze_pull_request(
     attention_fingerprint = _hash_payload(attention_payload or [("none", None, None)])
 
     waiting_reason = _waiting_reason(pr, blockers, waiting_on_editor)
-    first_time = pr.author_association in {"FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR"}
+    # GitHub reports NONE for an author with no prior merged contribution to the
+    # repository; whatwg/html never returns the FIRST_TIME* values in practice, so
+    # checking only for those left this signal permanently false.
+    first_time = pr.author_association in {"FIRST_TIMER", "FIRST_TIME_CONTRIBUTOR", "NONE"}
 
     return PRAnalysis(
         pr=pr,
@@ -588,8 +668,9 @@ def analyze_pull_request(
         blockers=tuple(blockers),
         content_fingerprint=content_fingerprint,
         attention_fingerprint=attention_fingerprint,
-        has_attention_signal=bool(attention_reasons),
+        has_attention_signal=bool(direct_reasons or rereview_reasons),
         direct_request_at=direct_at,
+        stale_direct_at=stale_direct_at,
         rereview_trigger_at=rereview_at,
         latest_viewer_review=latest_review,
         latest_contributor_activity_at=latest_contributor,
@@ -619,13 +700,28 @@ def build_lanes(analyses: Iterable[PRAnalysis], repository_slug: str) -> dict[st
     def key(analysis: PRAnalysis) -> str:
         return f"{repository_slug}#{analysis.pr.number}"
 
+    # Newest first for the attention lanes: on a decade-old backlog, age is a poor
+    # proxy for actionability. `oldest_wait` and `new` keep oldest-first ordering
+    # because fairness to waiting contributors is exactly what they measure.
+    active = sorted(
+        (analysis for analysis in values if "active" in analysis.lanes),
+        key=lambda analysis: (analysis.pr.updated_at, analysis.pr.number),
+        reverse=True,
+    )
     direct = sorted(
         (analysis for analysis in values if "direct" in analysis.lanes),
         key=lambda analysis: (analysis.direct_request_at or analysis.pr.updated_at, analysis.pr.number),
+        reverse=True,
+    )
+    stale_direct = sorted(
+        (analysis for analysis in values if "stale_direct" in analysis.lanes),
+        key=lambda analysis: (analysis.stale_direct_at or analysis.pr.updated_at, analysis.pr.number),
+        reverse=True,
     )
     rereview = sorted(
         (analysis for analysis in values if "rereview" in analysis.lanes),
         key=lambda analysis: (analysis.rereview_trigger_at or analysis.pr.updated_at, analysis.pr.number),
+        reverse=True,
     )
     new = sorted(
         (analysis for analysis in values if "new" in analysis.lanes),
@@ -642,7 +738,9 @@ def build_lanes(analyses: Iterable[PRAnalysis], repository_slug: str) -> dict[st
     all_items = sorted(values, key=lambda analysis: (analysis.pr.updated_at, analysis.pr.number), reverse=True)
 
     return {
+        "active": [key(value) for value in active],
         "direct": [key(value) for value in direct],
+        "stale_direct": [key(value) for value in stale_direct],
         "rereview": [key(value) for value in rereview],
         "new": [key(value) for value in new],
         "oldest_wait": [key(value) for value in oldest_wait],

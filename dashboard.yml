@@ -16,6 +16,12 @@ response_targets:
   initial_editor_response_days: 7
   highlight_new_hours: 48
 
+attention:
+  # How recently a PR must have changed to count as "active now", and how long a
+  # public mention keeps claiming attention. Review requests and assignments are
+  # current GitHub state and never expire.
+  activity_window_days: 30
+
 ready_bounded:
   max_changed_files: 8
   max_changed_lines: 800
@@ -38,9 +44,11 @@ sampling:
   history_days: 90
 
 suggested_next:
-  # Every currently active direct request is shown first. Remaining lanes are interleaved.
+  # Everything in the "active now" lane is shown first, newest activity first.
+  # Remaining lanes are interleaved so the backlog cannot be starved by new work.
   cycle:
     - rereview
     - new
     - oldest_wait
     - ready_bounded
+    - stale_direct

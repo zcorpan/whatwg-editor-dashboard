@@ -25,11 +25,32 @@ class MetricsTests(unittest.TestCase):
 
     def test_current_repository_metrics(self) -> None:
         current = self.metrics["repository"]["current"]
-        self.assertEqual(current["open_prs"], 11)
+        self.assertEqual(current["open_prs"], 12)
+        self.assertEqual(current["active_now"], 3)
         self.assertEqual(current["direct_requests"], 2)
+        self.assertEqual(current["stale_direct_requests"], 1)
         self.assertEqual(current["rereview_owed"], 1)
         self.assertEqual(current["ready_and_bounded"], 5)
         self.assertEqual(current["first_response_unknown_due_to_sampling"], 1)
+
+    def test_missing_editor_response_is_counted_rather_than_called_unknown(self) -> None:
+        """Regression: timelineItems.totalCount counts every timeline item kind.
+
+        Comparing it against the comment/review nodes marked nearly every PR as
+        incompletely sampled, which turned "no editor has responded" into "unknown"
+        and silently reported zero everywhere.
+        """
+        current = self.metrics["repository"]["current"]
+        self.assertEqual(current["known_without_editor_response"], 6)
+
+        coverage = self.metrics["coverage"]
+        self.assertEqual(coverage["open_timeline_complete"], 11)
+        self.assertEqual(coverage["open_timeline_total"], 12)
+
+        week = self.metrics["repository"]["windows"]["7"]["first_editor_response"]
+        self.assertEqual(week["known_no_response"], 2)
+        self.assertEqual(week["unknown_due_to_sampling"], 0)
+        self.assertEqual(week["first_time_contributors"]["eligible_prs"], 2)
 
     def test_flow_windows(self) -> None:
         week = self.metrics["repository"]["windows"]["7"]

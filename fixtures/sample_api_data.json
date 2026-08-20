@@ -64,10 +64,16 @@
       },
       "timelineFirst": {
         "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": []
       },
       "timelineLast": {
         "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": []
       },
       "viewerReviews": {
@@ -130,6 +136,9 @@
       },
       "timelineFirst": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "PullRequestReview",
@@ -164,6 +173,9 @@
       },
       "timelineLast": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "PullRequestReview",
@@ -274,10 +286,16 @@
       },
       "timelineFirst": {
         "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": []
       },
       "timelineLast": {
         "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": []
       },
       "viewerReviews": {
@@ -340,6 +358,9 @@
       },
       "timelineFirst": {
         "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -357,6 +378,9 @@
       },
       "timelineLast": {
         "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -432,6 +456,9 @@
       },
       "timelineFirst": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -461,6 +488,9 @@
       },
       "timelineLast": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -548,10 +578,16 @@
       },
       "timelineFirst": {
         "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": []
       },
       "timelineLast": {
         "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": []
       },
       "viewerReviews": {
@@ -618,6 +654,9 @@
       },
       "timelineFirst": {
         "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -635,6 +674,9 @@
       },
       "timelineLast": {
         "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -710,6 +752,9 @@
       },
       "timelineFirst": {
         "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -727,6 +772,9 @@
       },
       "timelineLast": {
         "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -802,6 +850,9 @@
       },
       "timelineFirst": {
         "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -819,6 +870,9 @@
       },
       "timelineLast": {
         "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -894,6 +948,9 @@
       },
       "timelineFirst": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -923,6 +980,9 @@
       },
       "timelineLast": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -1015,6 +1075,9 @@
       },
       "timelineFirst": {
         "totalCount": 80,
+        "pageInfo": {
+          "hasNextPage": true
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -1320,6 +1383,9 @@
       },
       "timelineLast": {
         "totalCount": 80,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -1631,6 +1697,104 @@
         "totalCount": 0,
         "nodes": []
       }
+    },
+    {
+      "number": 13011,
+      "title": "Clarify legacy parser edge case",
+      "url": "https://github.com/whatwg/html/pull/13011",
+      "author": {
+        "login": "leo"
+      },
+      "authorAssociation": "NONE",
+      "body": "Prose fix for a legacy parser edge case.\n",
+      "createdAt": "2026-01-05T09:00:00Z",
+      "updatedAt": "2026-02-01T09:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "mergedAt": null,
+      "isDraft": false,
+      "additions": 12,
+      "deletions": 3,
+      "changedFiles": 1,
+      "headRefOid": "sha-13011",
+      "mergeable": "MERGEABLE",
+      "mergeStateStatus": "CLEAN",
+      "reviewDecision": null,
+      "statusCheckRollup": {
+        "state": "SUCCESS"
+      },
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "reviewRequests": {
+        "nodes": []
+      },
+      "commits": {
+        "nodes": [
+          {
+            "commit": {
+              "oid": "sha-13011",
+              "committedDate": "2026-01-05T09:00:00Z",
+              "author": {
+                "user": {
+                  "login": "leo"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "timelineFirst": {
+        "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13011",
+            "author": {
+              "login": "mallory"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "@zcorpan does this match the parser spec?",
+            "createdAt": "2026-01-10T10:00:00Z",
+            "updatedAt": "2026-01-10T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13011"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "c-13011",
+            "author": {
+              "login": "mallory"
+            },
+            "authorAssociation": "CONTRIBUTOR",
+            "body": "@zcorpan does this match the parser spec?",
+            "createdAt": "2026-01-10T10:00:00Z",
+            "updatedAt": "2026-01-10T10:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13011"
+          }
+        ]
+      },
+      "viewerReviews": {
+        "totalCount": 0,
+        "nodes": []
+      },
+      "reviewThreads": {
+        "totalCount": 0,
+        "nodes": []
+      }
     }
   ],
   "recently_closed_pull_requests": [
@@ -1685,6 +1849,9 @@
       },
       "timelineFirst": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -1719,6 +1886,9 @@
       },
       "timelineLast": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -1829,6 +1999,9 @@
       },
       "timelineFirst": {
         "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -1846,6 +2019,9 @@
       },
       "timelineLast": {
         "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -1921,6 +2097,9 @@
       },
       "timelineFirst": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -1955,6 +2134,9 @@
       },
       "timelineLast": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -2065,10 +2247,16 @@
       },
       "timelineFirst": {
         "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": []
       },
       "timelineLast": {
         "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": []
       },
       "viewerReviews": {
@@ -2131,6 +2319,9 @@
       },
       "timelineFirst": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -2160,6 +2351,9 @@
       },
       "timelineLast": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "IssueComment",
@@ -2247,6 +2441,9 @@
       },
       "timelineFirst": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "PullRequestReview",
@@ -2281,6 +2478,9 @@
       },
       "timelineLast": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "PullRequestReview",
@@ -2391,10 +2591,16 @@
       },
       "timelineFirst": {
         "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": []
       },
       "timelineLast": {
         "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": []
       },
       "viewerReviews": {
@@ -2457,6 +2663,9 @@
       },
       "timelineFirst": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "PullRequestReview",
@@ -2491,6 +2700,9 @@
       },
       "timelineLast": {
         "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
         "nodes": [
           {
             "__typename": "PullRequestReview",

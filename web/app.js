@@ -1,14 +1,14 @@
 const STATE_VERSION = 1;
 const STATE_NAMESPACE = location.pathname.replace(/\/+$/, "") || "/";
 const STATE_KEY = `whatwg-editor-dashboard:v${STATE_VERSION}:${STATE_NAMESPACE}`;
-const LANE_ORDER = ["direct", "rereview", "new", "oldest_wait", "ready_bounded", "all"];
-const SUGGESTED_LIMIT_AFTER_DIRECT = 12;
+const LANE_ORDER = ["active", "direct", "rereview", "new", "oldest_wait", "ready_bounded", "stale_direct", "all"];
+const SUGGESTED_LIMIT_AFTER_ACTIVE = 12;
 const SORT_ORDERS = new Set(["queue", "checklist", "unchecked", "wait", "updated", "created"]);
 
 let dashboard = null;
 let itemsByKey = new Map();
 let localState = loadLocalState();
-let activeLane = "direct";
+let activeLane = "active";
 let searchQuery = "";
 let storageWarningShown = false;
 
@@ -476,14 +476,14 @@ function suggestedItems() {
     return true;
   };
 
-  for (const item of orderedVisibleItems(dashboard.lanes.direct || [])) add(item);
+  for (const item of orderedVisibleItems(dashboard.lanes.active || [])) add(item);
 
   const cycle = dashboard.suggested_next.cycle || [];
   const laneItems = new Map(cycle.map(lane => [lane, orderedVisibleItems(dashboard.lanes[lane] || [])]));
   const indexes = new Map(cycle.map(lane => [lane, 0]));
-  let addedAfterDirect = 0;
+  let addedAfterActive = 0;
   let madeProgress = true;
-  while (madeProgress && addedAfterDirect < SUGGESTED_LIMIT_AFTER_DIRECT) {
+  while (madeProgress && addedAfterActive < SUGGESTED_LIMIT_AFTER_ACTIVE) {
     madeProgress = false;
     for (const lane of cycle) {
       const values = laneItems.get(lane) || [];
@@ -492,8 +492,8 @@ function suggestedItems() {
       indexes.set(lane, index + 1);
       if (index < values.length && add(values[index])) {
         madeProgress = true;
-        addedAfterDirect += 1;
-        if (addedAfterDirect >= SUGGESTED_LIMIT_AFTER_DIRECT) break;
+        addedAfterActive += 1;
+        if (addedAfterActive >= SUGGESTED_LIMIT_AFTER_ACTIVE) break;
       }
     }
   }
@@ -542,10 +542,10 @@ function renderQueues() {
   renderLocalSummary();
   renderLaneTabs();
 
-  const direct = orderedVisibleItems(dashboard.lanes.direct || []);
+  const active = orderedVisibleItems(dashboard.lanes.active || []);
   const summary = document.querySelector("#attention-summary");
-  summary.querySelector(".hero-stat-value").textContent = numberFormat(direct.length);
-  summary.querySelector(".hero-stat-label").textContent = direct.length === 1 ? "active direct request" : "active direct requests";
+  summary.querySelector(".hero-stat-value").textContent = numberFormat(active.length);
+  summary.querySelector(".hero-stat-label").textContent = active.length === 1 ? "active review" : "active reviews";
 
   const suggested = suggestedItems();
   document.querySelector("#suggested-count").textContent = numberFormat(suggested.length);

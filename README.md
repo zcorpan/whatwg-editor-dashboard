@@ -12,13 +12,17 @@ The dashboard is rebuilt by GitHub Actions once every 24 hours and deployed to G
 
 The review dashboard contains these explainable lanes:
 
-1. **Direct requests** — current review requests, assignments, and sampled public `@zcorpan` mentions.
-2. **Re-review owed** — a head commit, PR description, or sampled author activity changed after the latest sampled `@zcorpan` review.
-3. **New PR turnaround** — non-draft contributor PRs without a sampled editor response, targeting a first response within seven days.
-4. **Oldest contributor waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
-5. **Ready and bounded** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
+1. **Active now** — PRs changed within the activity window that `@zcorpan` is already involved in, through a direct request, an owed re-review, or a previously submitted review. Newest activity first.
+2. **Direct requests** — current review requests and assignments, plus sampled public `@zcorpan` mentions inside the activity window.
+3. **Stale direct requests** — mentions older than the activity window, kept findable without leading the queue.
+4. **Re-review owed** — a head commit, PR description, or sampled author activity changed after the latest sampled `@zcorpan` review.
+5. **Awaiting first response** — non-draft contributor PRs that have never received a sampled editor response, oldest first, escalating once past the seven-day target.
+6. **Oldest contributor waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
+7. **Ready and bounded** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
 
-“Suggested next” shows every active direct request first, then interleaves re-review, new, oldest-wait, and ready/bounded candidates. The cycle is configurable in `dashboard.yml`. The current lane can also be sorted by checklist completion, unchecked-box count, contributor wait, update time, or age.
+“Suggested next” shows the whole **Active now** lane first, then interleaves re-review, awaiting-first-response, oldest-wait, ready/bounded, and stale-direct candidates. The cycle is configurable in `dashboard.yml`. The current lane can also be sorted by checklist completion, unchecked-box count, contributor wait, update time, or age.
+
+The queue leads with recent activity rather than with the oldest claim on the editor's attention. On a backlog where most PRs have not moved in years, age is a poor proxy for actionability: sorting direct requests oldest-first put a mention from 2016 at the top of the list and pushed the week's live reviews to the bottom. A review request or assignment keeps claiming attention until GitHub clears it on review, but a mention expires out of the direct lane once it leaves the activity window.
 
 Every card exposes the evidence and detected limitations behind its classification. No LLM is used.
 
@@ -38,7 +42,7 @@ The generated site never fetches GitHub notification inbox data. “Unseen” me
 
 The public health view includes:
 
-- Current open, draft, waiting-on-editor, over-target, direct-attention, re-review, and ready/bounded counts.
+- Current open, draft, active-now, waiting-on-editor, over-target, direct-attention, stale-direct, re-review, and ready/bounded counts.
 - Contributor-wait distribution and deterministic waiting-reason breakdown.
 - PRs opened, closed, merged, and net backlog change over 7, 28, and 90 days.
 - Median and p90 sampled first-editor-response time.
@@ -113,6 +117,7 @@ A persistent failure at page size 1 is more likely to be a wider GitHub API inci
 - repository owner and name;
 - viewer login and public editor logins;
 - the seven-day first-response target and 48-hour new-PR highlight;
+- the activity window that defines “active now” and how long a mention keeps claiming attention;
 - ready/bounded diff and checklist thresholds (the HTML MVP defaults to all boxes checked);
 - labels treated as blockers;
 - the outer GraphQL page size, nested sampling sizes, and historical window;
@@ -149,6 +154,8 @@ This MVP intentionally does **not**:
 - claim that a ready/bounded PR should be merged.
 
 Description task lists are parsed while fenced code blocks are ignored. Their completion is shown as a descriptive signal only.
+
+A first-time contributor is detected from an author with no GitHub association to the repository, which also covers an author whose only earlier pull requests were closed unmerged.
 
 For long discussions, only the beginning and end of the comment/review timeline are sampled. First-response metrics are reported only when the beginning sample establishes the response or the sampled timeline is complete. Later response-interval metrics require a complete sampled timeline.
 The configured current editor list is applied retroactively to the 90-day sample; historical editor-membership changes are not reconstructed. Description edits are attributed to the PR author because the sampled API fields do not identify the editor of the description.
