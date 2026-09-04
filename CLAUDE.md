@@ -41,6 +41,8 @@ python -m unittest tests.test_analysis.AnalysisTests.test_expected_mvp_lanes  # 
 
 `--log-level DEBUG` on `dashboard.py` surfaces GraphQL retry detail.
 
+There is no linter, formatter, or JS toolchain. `site/` is build output and gitignored; CI builds on Python 3.12.
+
 ## Architecture
 
 The pipeline is a strict one-way chain; keep the layer boundaries intact when extending.
@@ -53,7 +55,11 @@ The pipeline is a strict one-way chain; keep the layer boundaries intact when ex
 6. [build.py](editor_dashboard/build.py) — assembles the `data.json` payload (`schema_version`, lanes, items, metrics, methodology, build metadata), copies `web/*` into the output, writes `.nojekyll`.
 7. [web/app.js](web/app.js) — fetches `data.json`, resolves lane key lists against `items`, and layers browser-local state on top. `checkForFreshData` re-fetches and re-renders in place when a long-lived tab's `generated_at` is older than the 24 h build interval, gated on tab visibility and a throttle; keep the whole render path re-runnable from `applyDashboard`.
 
+[checklist.py](editor_dashboard/checklist.py) sits outside the chain as a leaf called from `analysis.py`: it parses GitHub task-list items out of a PR description while skipping fenced code blocks. PR bodies stay on the in-memory snapshot; `analysis.py` reduces each one to a mention match, a sha256 for the content fingerprint, and a `Checklist`, and only the checklist's counts plus its short labels cross into `data.json`.
+
 Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `new`, `oldest_wait`, `ready_bounded`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four.
+
+Two smaller vocabularies cross the Python/browser boundary the same way. Sort orders (`queue`, `checklist`, `unchecked`, `wait`, `updated`, `created`) must agree between `web/app.js` `SORT_ORDERS` and the `<option value>` list in [web/index.html](web/index.html); `test_build.py` pins two of them. A `Reason`'s `tone` becomes a `chip <tone>` class, so it has to be one of the `.chip.*` rules in [web/style.css](web/style.css) (`urgent`, `attention`, `positive`, `warning`, `muted`) — `neutral` is the JS default and is deliberately unstyled.
 
 ### The two fingerprints
 
@@ -63,6 +69,10 @@ Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `new`, `oldest
 - `attention_fingerprint` hashes only the direct-request and re-review reason codes/timestamps. "Seen" stores it; a new attention signal makes the item unseen again.
 
 Changing what goes into either hash silently invalidates users' stored state, so treat the payloads as a compatibility surface.
+
+### Browser-local state
+
+`localStorage` holds the only user-owned data in the system, and there is no migration path, so its shape is as much a compatibility surface as the fingerprints. The key is `whatwg-editor-dashboard:v${STATE_VERSION}:${location.pathname}` — path-namespaced against other projects on the same origin (see the caveat in [README.md](README.md)), and version-gated: `loadLocalState` discards any payload whose `version` differs, so bumping `STATE_VERSION` silently throws away every user's seen/addressed/pinned/snoozed state. Per-item state is keyed by `owner/repo#number`. Renaming a direct-request or re-review `Reason` code has the same effect on a smaller scale, because those codes are hashed into `attention_fingerprint` and every affected item becomes unseen again.
 
 ### Determinism and sampling honesty
 
@@ -119,6 +129,7 @@ Consequences to preserve:
 
 - `test_build.py` asserts the published payload contains no `body` or `comments` keys anywhere. Raw PR descriptions and comment/review bodies must never reach `data.json` — only derived signals and short quoted checklist labels.
 - `test_build.py` also asserts `web/app.js` contains no `innerHTML` and `web/index.html` retains its `Content-Security-Policy`. Build DOM via the `element()` helper and text nodes.
+- Four of the six test modules load the real [dashboard.yml](dashboard.yml) and [fixtures/sample_api_data.json](fixtures/sample_api_data.json) at `NOW = 2026-08-03T12:00:00Z` (the same `--now` as the demo build) and assert on named PR numbers and exact lane orderings. So a threshold change in `dashboard.yml`, or a new fixture PR, is expected to break tests in modules that look unrelated to the change; re-derive the expectations rather than loosening the assertions.
 - `web/` is vanilla ES modules, no build step, no third-party scripts, fonts, or network calls other than same-origin `data.json`. Files are copied verbatim into `site/`.
 
 ## Configuration notes
