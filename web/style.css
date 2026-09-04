@@ -254,7 +254,7 @@ main {
    a short lane shrinks the document and the browser scrolls the tabs out from
    under the pointer. A collapsed section keeps no floor, which is the point of
    collapsing it. */
-.queue-section[open], .metrics-section { min-height: calc(100vh - 4rem); }
+#lanes-section { min-height: calc(100vh - 4rem); }
 .queue-section > summary { margin-bottom: .9rem; cursor: pointer; }
 .section-heading {
   display: flex;
