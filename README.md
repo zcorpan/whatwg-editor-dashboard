@@ -14,11 +14,11 @@ The review dashboard contains these explainable lanes:
 
 1. **Active now** — PRs changed within the activity window that `@zcorpan` is already involved in, through a direct request, an owed re-review, or a previously submitted review. Newest activity first.
 2. **Direct requests** — current review requests and assignments, plus sampled public `@zcorpan` mentions inside the activity window.
-3. **Stale direct requests** — mentions older than the activity window, kept findable without leading the queue.
+3. **Stale mentions** — mentions older than the activity window, kept findable without leading the queue.
 4. **Re-review owed** — a head commit, PR description, or sampled author activity changed after the latest sampled `@zcorpan` review.
-5. **Needs first response** — non-draft contributor PRs that have never received a sampled editor response, oldest first, escalating once past the seven-day target.
+5. **First response** — non-draft contributor PRs that have never received a sampled editor response, oldest first, escalating once past the seven-day target.
 6. **Longest waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
-7. **Ready and bounded** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
+7. **Ready** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
 
 “Suggested next” shows the whole **Active now** lane first, then interleaves re-review, awaiting-first-response, oldest-wait, ready/bounded, and stale-direct candidates. The cycle is configurable in `dashboard.yml`. The current lane can also be sorted by checklist completion, unchecked-box count, contributor wait, update time, or age.
 

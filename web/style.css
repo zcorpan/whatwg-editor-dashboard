@@ -249,10 +249,13 @@ main {
 .state-actions button:hover { background: var(--surface-subtle); }
 .state-actions .danger-button { color: var(--danger); }
 
+.queue-section, .metrics-section { margin-top: 2.3rem; }
 /* Sections hold wildly different numbers of items. Without a floor, switching to
    a short lane shrinks the document and the browser scrolls the tabs out from
-   under the pointer. */
-.queue-section, .metrics-section { margin-top: 2.3rem; min-height: calc(100vh - 4rem); }
+   under the pointer. A collapsed section keeps no floor, which is the point of
+   collapsing it. */
+.queue-section[open], .metrics-section { min-height: calc(100vh - 4rem); }
+.queue-section > summary { margin-bottom: .9rem; cursor: pointer; }
 .section-heading {
   display: flex;
   align-items: baseline;
@@ -260,7 +263,8 @@ main {
   gap: 1rem;
   margin-bottom: .9rem;
 }
-.section-heading h2, .chart-panel h2, .motivation-panel h2 {
+.queue-section > summary h2 { display: inline; }
+.section-heading h2, .queue-section > summary h2, .chart-panel h2, .motivation-panel h2 {
   margin: 0;
   font-size: 1.2rem;
   letter-spacing: -.02em;
@@ -305,12 +309,12 @@ main {
 .lane-tab-count {
   display: inline-grid;
   place-items: center;
-  min-width: 1.15rem;
-  height: 1.25rem;
-  padding: 0 .3rem;
+  min-width: 1rem;
+  height: 1.15rem;
+  padding: 0 .22rem;
   border-radius: 999px;
   background: color-mix(in srgb, currentColor 10%, transparent);
-  font-size: .72rem;
+  font-size: .68rem;
 }
 .lane-description {
   min-height: 1.5rem;

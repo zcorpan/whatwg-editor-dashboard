@@ -14,8 +14,9 @@ const STALE_POLL_INTERVAL_MS = 15 * 60 * 1000;
 const MIN_CHECK_INTERVAL_MS = 60 * 1000;
 const CLOCK_TICK_MS = 60 * 1000;
 
-// The queue controls are collapsed until opened, and stay as the browser left them.
-const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, sortOrder: "queue", controlsOpen: false});
+// Collapsible sections, and how each one starts before this browser has an opinion.
+const SECTION_DEFAULTS = {"queue-controls": false, "suggested-section": true, "lanes-section": true};
+const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, sortOrder: "queue", openSections: {}});
 
 let dashboard = null;
 let itemsByKey = new Map();
@@ -52,6 +53,14 @@ function element(tag, options = {}, children = []) {
   return node;
 }
 
+function readOpenSections(value) {
+  const result = {};
+  for (const id of Object.keys(SECTION_DEFAULTS)) {
+    if (typeof value?.[id] === "boolean") result[id] = value[id];
+  }
+  return result;
+}
+
 function loadLocalState() {
   try {
     const parsed = JSON.parse(localStorage.getItem(STATE_KEY) || "null");
@@ -65,7 +74,7 @@ function loadLocalState() {
         showAddressed: Boolean(parsed.settings?.showAddressed),
         showSnoozed: Boolean(parsed.settings?.showSnoozed),
         sortOrder: SORT_ORDERS.has(parsed.settings?.sortOrder) ? parsed.settings.sortOrder : "queue",
-        controlsOpen: Boolean(parsed.settings?.controlsOpen),
+        openSections: readOpenSections(parsed.settings?.openSections),
       },
     };
   } catch {
@@ -777,7 +786,7 @@ async function importState(file) {
       showAddressed: Boolean(parsed.settings?.showAddressed),
       showSnoozed: Boolean(parsed.settings?.showSnoozed),
       sortOrder: SORT_ORDERS.has(parsed.settings?.sortOrder) ? parsed.settings.sortOrder : "queue",
-      controlsOpen: Boolean(parsed.settings?.controlsOpen),
+      openSections: readOpenSections(parsed.settings?.openSections),
     },
   };
   saveLocalState();
@@ -787,7 +796,10 @@ async function importState(file) {
 }
 
 function syncControlState() {
-  document.querySelector("#queue-controls").open = localState.settings.controlsOpen;
+  for (const [id, fallback] of Object.entries(SECTION_DEFAULTS)) {
+    const stored = localState.settings.openSections[id];
+    document.querySelector(`#${id}`).open = typeof stored === "boolean" ? stored : fallback;
+  }
   document.querySelector("#show-addressed").checked = localState.settings.showAddressed;
   document.querySelector("#show-snoozed").checked = localState.settings.showSnoozed;
   document.querySelector("#sort-order").value = localState.settings.sortOrder;
@@ -814,10 +826,12 @@ function installEventHandlers() {
     saveLocalState();
     renderQueues();
   });
-  document.querySelector("#queue-controls").addEventListener("toggle", event => {
-    localState.settings.controlsOpen = event.target.open;
-    saveLocalState();
-  });
+  for (const id of Object.keys(SECTION_DEFAULTS)) {
+    document.querySelector(`#${id}`).addEventListener("toggle", event => {
+      localState.settings.openSections[id] = event.target.open;
+      saveLocalState();
+    });
+  }
   document.querySelector("#export-state").addEventListener("click", exportState);
   document.querySelector("#import-state").addEventListener("click", () => document.querySelector("#import-state-file").click());
   document.querySelector("#import-state-file").addEventListener("change", async event => {

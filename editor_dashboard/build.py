@@ -23,7 +23,7 @@ LANE_DESCRIPTIONS = {
         "description": "Current review requests and assignments, plus public mentions inside the activity window.",
     },
     "stale_direct": {
-        "title": "Stale direct requests",
+        "title": "Stale mentions",
         "description": "Public mentions older than the activity window, kept findable but no longer claiming the queue.",
     },
     "rereview": {
@@ -31,7 +31,7 @@ LANE_DESCRIPTIONS = {
         "description": "The PR changed or the author replied after the editor's latest sampled review.",
     },
     "new": {
-        "title": "Needs first response",
+        "title": "First response",
         "description": "Non-draft contributor PRs that have never received a sampled editor response, oldest first.",
     },
     "oldest_wait": {
@@ -39,11 +39,11 @@ LANE_DESCRIPTIONS = {
         "description": "Time since the latest sampled non-editor human activity not followed by editor activity.",
     },
     "ready_bounded": {
-        "title": "Ready and bounded",
+        "title": "Ready",
         "description": "A deterministic quick-win heuristic: mergeable, no detected blocker, bounded diff, and sufficient description-checklist completion.",
     },
     "all": {
-        "title": "All open PRs",
+        "title": "All open",
         "description": "Every open pull request ordered by latest public GitHub update.",
     },
 }

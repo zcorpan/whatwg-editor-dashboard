@@ -57,20 +57,17 @@
         </div>
       </details>
 
-      <section class="queue-section" aria-labelledby="suggested-heading">
-        <div class="section-heading">
-          <h2 id="suggested-heading">Suggested next</h2>
-          <span class="count-badge" id="suggested-count">0</span>
-        </div>
+      <details class="queue-section" id="suggested-section" open>
+        <summary><h2 id="suggested-heading">Suggested next <span class="count-badge" id="suggested-count">0</span></h2></summary>
         <div id="suggested-list" class="card-list" aria-live="polite"></div>
-      </section>
+      </details>
 
-      <section class="queue-section" aria-labelledby="lanes-heading">
-        <h2 class="visually-hidden" id="lanes-heading">Queues</h2>
+      <details class="queue-section" id="lanes-section" open>
+        <summary><h2 id="lanes-heading">Browse by reason</h2></summary>
         <div class="lane-tabs" id="lane-tabs" role="tablist" aria-label="Review queues"></div>
         <div class="lane-description" id="lane-description"></div>
         <div id="lane-list" class="card-list" aria-live="polite"></div>
-      </section>
+      </details>
     </section>
 
     <section class="view" id="health-view" data-view="health" hidden>
