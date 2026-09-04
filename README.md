@@ -29,7 +29,7 @@ Every card exposes the evidence and detected limitations behind its classificati
 ### Browser-local workflow state
 
 - Opening a GitHub link marks the current public attention signal as seen in that browser.
-- **Address until changed** records the current public content fingerprint. The PR automatically returns when that fingerprint changes.
+- **Address until changed** records the current public content fingerprint. The PR automatically returns when that fingerprint changes. The fingerprint deliberately excludes the editor's own footprint — their comments and reviews, the review threads they started, their cleared review request, the review decision, and the PR's `updatedAt` — so replying to a PR and then addressing it does not bring it straight back.
 - Pin, snooze, and lane-sort preferences are local.
 - State can be exported and imported manually as JSON.
 - Clearing site data clears the local state.

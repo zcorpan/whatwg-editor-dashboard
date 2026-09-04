@@ -1019,7 +1019,16 @@
         "nodes": [
           {
             "isResolved": false,
-            "isOutdated": false
+            "isOutdated": false,
+            "comments": {
+              "nodes": [
+                {
+                  "author": {
+                    "login": "annevk"
+                  }
+                }
+              ]
+            }
           }
         ]
       }

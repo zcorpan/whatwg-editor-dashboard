@@ -40,6 +40,24 @@ def node(
     }
 
 
+class ReviewThreadTests(unittest.TestCase):
+    def test_thread_author_comes_from_the_first_comment(self) -> None:
+        payload = node(total_count=0, first=[], last=[])
+        payload["reviewThreads"] = {
+            "totalCount": 2,
+            "nodes": [
+                {"isResolved": False, "isOutdated": False, "comments": {"nodes": [{"author": {"login": "ZCorpan"}}]}},
+                {"isResolved": False, "isOutdated": False, "comments": {"nodes": [{"author": None}]}},
+            ],
+        }
+        snapshot = PullRequestSnapshot.from_graphql(payload)
+        self.assertEqual([thread.author for thread in snapshot.review_threads], ["zcorpan", None])
+        self.assertEqual(snapshot.unresolved_review_threads, 2)
+        # The published counts stay unfiltered; only the fingerprint drops the
+        # viewer's own threads.
+        self.assertEqual(snapshot.review_threads_started_by_others("zcorpan"), (1, 1))
+
+
 class TimelineSampleCompletenessTests(unittest.TestCase):
     def test_unfiltered_total_count_does_not_mark_a_full_sample_incomplete(self) -> None:
         """`timelineItems.totalCount` ignores the itemTypes filter.

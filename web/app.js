@@ -433,7 +433,7 @@ function createPRCard(item) {
     onClick: () => {
       setAddressed(item, !isAddressed(item));
       renderQueues();
-      toast(isAddressed(item) ? "Hidden until the PR's public fingerprint changes." : "PR returned to active queues.");
+      toast(isAddressed(item) ? "Hidden until somebody else changes the PR." : "PR returned to active queues.");
     },
   }));
 

@@ -127,6 +127,12 @@ def is_bot(login: str | None) -> bool:
     return normalized in _KNOWN_BOTS or normalized.endswith("[bot]")
 
 
+# Direct-request reasons that describe current GitHub state rather than a dated
+# event. Their timestamps are stand-ins, so they stay out of the attention
+# fingerprint; see analyze_pull_request.
+_STATE_ATTENTION_CODES = frozenset({"review-requested", "assigned"})
+
+
 def _mention_pattern(viewer: str) -> re.Pattern[str]:
     return re.compile(rf"(?<![A-Za-z0-9-])@{re.escape(viewer)}(?![A-Za-z0-9-])", re.IGNORECASE)
 
@@ -501,6 +507,7 @@ def analyze_pull_request(
     now: datetime,
 ) -> PRAnalysis:
     now = now.astimezone(timezone.utc)
+    viewer = config.viewer
     checklist = parse_checklist(pr.body)
     direct_reasons, expired_direct_reasons = _direct_reasons(pr, config, now=now)
     latest_review = _latest_viewer_review(pr)
@@ -625,23 +632,51 @@ def analyze_pull_request(
     stale_direct_at = _latest(expired_direct_reasons)
 
     body_hash = hashlib.sha256(pr.body.encode("utf-8")).hexdigest()
-    activity_fingerprint = [
-        (activity.id, isoformat(activity.updated_at), activity.state, activity.commit_oid)
-        for activity in pr.timeline
-    ]
+    # "Address until changed" means "until somebody other than me changes it", so
+    # every field below has to be independent of the viewer's own actions.
+    # Reviewing a PR used to change five of them at once — pr.updated_at, the
+    # sampled activity list, the viewer's own review request, review_decision and
+    # the review-thread counts — which brought every addressed item straight back
+    # the next morning.
+    #
+    # pr.updated_at is therefore left out entirely: it bumps on the viewer's own
+    # comment and cannot be attributed. The public state it stood proxy for is
+    # hashed field by field instead, so a change by anyone else is still caught.
+    external_activity = [activity for activity in pr.timeline if activity.author != viewer]
+    # Only the newest foreign comment or review, not the whole sampled list: on a
+    # PR with more than 2 * timeline_each_end of them, the viewer's own comment
+    # shifts the sampling window and drops an older foreign item out of it, which
+    # would move a list-based hash for exactly the same reason. Comments other
+    # than the newest can therefore be edited unnoticed.
+    latest_external = external_activity[-1] if external_activity else None
+    open_threads_by_others, threads_by_others = pr.review_threads_started_by_others(viewer)
     content_payload = {
         "number": pr.number,
-        "updated_at": isoformat(pr.updated_at),
-        "head_oid": pr.head_oid,
+        "title": pr.title,
         "body_hash": body_hash,
+        "is_draft": pr.is_draft,
+        "head_oid": pr.head_oid,
         "labels": pr.labels,
-        "assignees": pr.assignees,
-        "review_requests": pr.review_requests,
-        "review_decision": pr.review_decision,
+        # GitHub clears the viewer's review request the moment they review, and
+        # review_decision reflects the viewer's own verdict, so neither the
+        # viewer's request nor the decision can be hashed. A re-request from
+        # somebody else no longer resurfaces an addressed item on its own; in
+        # practice it arrives with a comment or a push, which does.
+        "assignees": [login for login in pr.assignees if login != viewer],
+        "review_requests": [login for login in pr.review_requests if login != viewer],
         "status_state": pr.status_state,
         "mergeable": pr.mergeable,
-        "activities": activity_fingerprint,
-        "threads": [pr.unresolved_review_threads, pr.review_threads_total_count],
+        "latest_activity": (
+            [
+                latest_external.id,
+                isoformat(latest_external.updated_at),
+                latest_external.state,
+                latest_external.commit_oid,
+            ]
+            if latest_external is not None
+            else None
+        ),
+        "threads": [open_threads_by_others, threads_by_others],
     }
     content_fingerprint = _hash_payload(content_payload)
 
@@ -649,7 +684,15 @@ def analyze_pull_request(
     # by itself mark an already-seen item unseen again.
     attention_reasons = [*direct_reasons, *expired_direct_reasons, *rereview_reasons]
     attention_payload = [
-        (reason.code, isoformat(reason.timestamp), reason.detail)
+        (
+            reason.code,
+            # A review request and an assignment are current state; this query
+            # cannot see when either was set, so the reason carries pr.updated_at
+            # as a stand-in for ordering. Hashing that made an unrelated push —
+            # or the viewer's own comment — mark the item unseen again.
+            None if reason.code in _STATE_ATTENTION_CODES else isoformat(reason.timestamp),
+            reason.detail,
+        )
         for reason in attention_reasons
     ]
     attention_fingerprint = _hash_payload(attention_payload or [("none", None, None)])

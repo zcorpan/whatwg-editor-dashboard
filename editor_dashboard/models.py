@@ -57,6 +57,28 @@ class Activity:
         )
 
 
+@dataclass(frozen=True)
+class ReviewThread:
+    is_resolved: bool
+    is_outdated: bool
+    author: str | None = None
+
+    @classmethod
+    def from_graphql(cls, node: dict[str, Any]) -> "ReviewThread":
+        comments = [comment for comment in ((node.get("comments") or {}).get("nodes") or []) if comment]
+        first = comments[0] if comments else {}
+        login = (first.get("author") or {}).get("login")
+        return cls(
+            is_resolved=bool(node.get("isResolved")),
+            is_outdated=bool(node.get("isOutdated")),
+            author=(str(login).lower() if login else None),
+        )
+
+    @property
+    def is_open(self) -> bool:
+        return not self.is_resolved and not self.is_outdated
+
+
 def _timeline_sample_complete(
     node: dict[str, Any],
     window_ids: dict[str, set[str]],
@@ -114,6 +136,7 @@ class PullRequestSnapshot:
     timeline_sample_complete: bool
     viewer_reviews: tuple[Activity, ...]
     viewer_reviews_total_count: int
+    review_threads: tuple[ReviewThread, ...]
     unresolved_review_threads: int
     review_threads_total_count: int
     review_threads_sample_complete: bool
@@ -125,6 +148,15 @@ class PullRequestSnapshot:
     @property
     def changed_lines(self) -> int:
         return self.additions + self.deletions
+
+    def review_threads_started_by_others(self, login: str) -> tuple[int, int]:
+        """Return (open, sampled) review-thread counts excluding ``login``'s own threads.
+
+        The content fingerprint needs thread counts that the viewer's own inline
+        comments cannot move; the published counts stay unfiltered.
+        """
+        others = [thread for thread in self.review_threads if thread.author != login]
+        return sum(thread.is_open for thread in others), len(others)
 
     @classmethod
     def from_graphql(cls, node: dict[str, Any]) -> "PullRequestSnapshot":
@@ -194,8 +226,10 @@ class PullRequestSnapshot:
         commit_author = ((commit.get("author") or {}).get("user") or {}).get("login")
 
         threads = node.get("reviewThreads") or {}
-        thread_nodes = [thread for thread in (threads.get("nodes") or []) if thread]
-        unresolved = sum(not bool(thread.get("isResolved")) and not bool(thread.get("isOutdated")) for thread in thread_nodes)
+        thread_nodes = tuple(
+            ReviewThread.from_graphql(thread) for thread in (threads.get("nodes") or []) if thread
+        )
+        unresolved = sum(thread.is_open for thread in thread_nodes)
         thread_total = int(threads.get("totalCount") or 0)
 
         status_rollup = node.get("statusCheckRollup") or {}
@@ -234,6 +268,7 @@ class PullRequestSnapshot:
             timeline_sample_complete=timeline_sample_complete,
             viewer_reviews=viewer_reviews,
             viewer_reviews_total_count=int(reviews_connection.get("totalCount") or 0),
+            review_threads=thread_nodes,
             unresolved_review_threads=unresolved,
             review_threads_total_count=thread_total,
             review_threads_sample_complete=len(thread_nodes) >= thread_total,

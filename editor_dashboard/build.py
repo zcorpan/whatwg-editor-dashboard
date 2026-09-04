@@ -86,7 +86,14 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
                 "first-time contributor, which also covers authors whose only prior PRs were closed unmerged."
             ),
             "Inline review-thread replies are not inspected for mentions or response-time metrics in this MVP.",
-            "Review-request and assignment connections expose current state, not a complete timestamped history; their displayed timestamp uses the PR update time.",
+            "Review-request and assignment connections expose current state, not a complete timestamped history; their displayed timestamp uses the PR update time and is excluded from the seen-signal fingerprint.",
+            (
+                "The addressed-content fingerprint ignores the viewer's own comments, reviews and review threads, "
+                "along with the review request GitHub clears when they review, so that reviewing a PR does not "
+                "undo 'address until changed'. A renewed review request with no other change therefore does not "
+                "return the PR on its own, and only the newest comment or review by somebody else is "
+                "fingerprinted, so an edit to an older one is not detected."
+            ),
             "The configured current editor list is applied to the full sampled history; historical editor-membership changes are not reconstructed.",
             "A PR description edit is attributed to the PR author because the sampled API data does not identify who edited the description.",
             "First-response clocks use PR creation time for non-draft PRs; this MVP does not reconstruct when a formerly draft PR became ready for review.",

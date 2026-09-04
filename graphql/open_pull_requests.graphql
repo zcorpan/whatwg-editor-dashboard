@@ -113,6 +113,14 @@ fragment PullRequestDashboardFields on PullRequest {
     nodes {
       isResolved
       isOutdated
+      # The first comment's author is the reviewer who started the thread. The
+      # content fingerprint ignores threads the viewer started, so that leaving
+      # inline comments does not undo "address until changed". See analysis.py.
+      comments(first: 1) {
+        nodes {
+          author { login }
+        }
+      }
     }
   }
 }

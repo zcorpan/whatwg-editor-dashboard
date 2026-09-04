@@ -8,6 +8,7 @@ from pathlib import Path
 from editor_dashboard.analysis import analyze_all, analyze_pull_request, build_lanes
 from editor_dashboard.config import load_config
 from editor_dashboard.github import load_fixture
+from editor_dashboard.models import Activity, ReviewThread
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -115,6 +116,64 @@ class AnalysisTests(unittest.TestCase):
         )
         changed = analyze_pull_request(changed_pr, self.config, now=NOW)
         self.assertNotEqual(original.content_fingerprint, changed.content_fingerprint)
+
+    def _comment(self, author: str) -> Activity:
+        at = NOW - timedelta(hours=1)
+        return Activity(
+            id=f"c-{author}-new",
+            kind="IssueComment",
+            author=author,
+            author_association="MEMBER",
+            created_at=at,
+            updated_at=at,
+            body="Looks good to me.",
+            url=None,
+        )
+
+    def test_address_fingerprint_ignores_the_viewers_own_review(self) -> None:
+        # Reviewing bumps updated_at, adds a timeline item, clears the viewer's
+        # own review request, sets review_decision and opens review threads. None
+        # of that may bring an addressed PR back.
+        original = self.by_number[13001]
+        self.assertIn("zcorpan", original.pr.review_requests)
+        reviewed = replace(
+            original.pr,
+            updated_at=NOW - timedelta(hours=1),
+            timeline=(*original.pr.timeline, self._comment("zcorpan")),
+            review_requests=(),
+            review_decision="CHANGES_REQUESTED",
+            review_threads=(*original.pr.review_threads, ReviewThread(False, False, "zcorpan")),
+            unresolved_review_threads=original.pr.unresolved_review_threads + 1,
+            review_threads_total_count=original.pr.review_threads_total_count + 1,
+        )
+        analysis = analyze_pull_request(reviewed, self.config, now=NOW)
+        self.assertEqual(original.content_fingerprint, analysis.content_fingerprint)
+
+    def test_address_fingerprint_changes_on_somebody_elses_comment(self) -> None:
+        original = self.by_number[13001]
+        commented = replace(original.pr, timeline=(*original.pr.timeline, self._comment("carol")))
+        analysis = analyze_pull_request(commented, self.config, now=NOW)
+        self.assertNotEqual(original.content_fingerprint, analysis.content_fingerprint)
+
+    def test_address_fingerprint_changes_on_somebody_elses_review_thread(self) -> None:
+        original = self.by_number[13009]
+        threaded = replace(
+            original.pr,
+            review_threads=(*original.pr.review_threads, ReviewThread(False, False, "annevk")),
+        )
+        analysis = analyze_pull_request(threaded, self.config, now=NOW)
+        self.assertNotEqual(original.content_fingerprint, analysis.content_fingerprint)
+
+    def test_attention_fingerprint_ignores_updates_that_are_not_new_signals(self) -> None:
+        original = self.by_number[13001]
+        self.assertIn("review-requested", {reason.code for reason in original.reasons})
+        touched = replace(
+            original.pr,
+            updated_at=NOW,
+            timeline=(*original.pr.timeline, self._comment("zcorpan")),
+        )
+        analysis = analyze_pull_request(touched, self.config, now=NOW)
+        self.assertEqual(original.attention_fingerprint, analysis.attention_fingerprint)
 
 
 if __name__ == "__main__":
