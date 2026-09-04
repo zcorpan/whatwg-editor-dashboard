@@ -16,8 +16,8 @@ The review dashboard contains these explainable lanes:
 2. **Direct requests** — current review requests and assignments, plus sampled public `@zcorpan` mentions inside the activity window.
 3. **Stale direct requests** — mentions older than the activity window, kept findable without leading the queue.
 4. **Re-review owed** — a head commit, PR description, or sampled author activity changed after the latest sampled `@zcorpan` review.
-5. **Awaiting first response** — non-draft contributor PRs that have never received a sampled editor response, oldest first, escalating once past the seven-day target.
-6. **Oldest contributor waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
+5. **Needs first response** — non-draft contributor PRs that have never received a sampled editor response, oldest first, escalating once past the seven-day target.
+6. **Longest waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
 7. **Ready and bounded** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
 
 “Suggested next” shows the whole **Active now** lane first, then interleaves re-review, awaiting-first-response, oldest-wait, ready/bounded, and stale-direct candidates. The cycle is configurable in `dashboard.yml`. The current lane can also be sorted by checklist completion, unchecked-box count, contributor wait, update time, or age.
@@ -30,7 +30,7 @@ Every card exposes the evidence and detected limitations behind its classificati
 
 - Opening a GitHub link marks the current public attention signal as seen in that browser.
 - **Address until changed** records the current public content fingerprint. The PR automatically returns when that fingerprint changes. The fingerprint deliberately excludes the editor's own footprint — their comments and reviews, the review threads they started, their cleared review request, the review decision, and the PR's `updatedAt` — so replying to a PR and then addressing it does not bring it straight back.
-- Pin, snooze, and lane-sort preferences are local.
+- Pin, snooze, lane-sort, and queue-controls preferences are local; the controls panel starts collapsed and stays as this browser left it.
 - State can be exported and imported manually as JSON.
 - Clearing site data clears the local state.
 - A tab left open reloads `data.json` in place once a newer build is deployed, so it does not keep showing yesterday's queue. It only looks once the displayed data is at least 24 hours old — the scheduled build interval — and only while the tab is visible; local state, the selected lane, the search box, and the scroll position survive the swap.

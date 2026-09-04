@@ -31,11 +31,11 @@ LANE_DESCRIPTIONS = {
         "description": "The PR changed or the author replied after the editor's latest sampled review.",
     },
     "new": {
-        "title": "Awaiting first response",
+        "title": "Needs first response",
         "description": "Non-draft contributor PRs that have never received a sampled editor response, oldest first.",
     },
     "oldest_wait": {
-        "title": "Oldest contributor waits",
+        "title": "Longest waits",
         "description": "Time since the latest sampled non-editor human activity not followed by editor activity.",
     },
     "ready_bounded": {

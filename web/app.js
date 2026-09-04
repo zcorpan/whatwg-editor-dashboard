@@ -14,6 +14,9 @@ const STALE_POLL_INTERVAL_MS = 15 * 60 * 1000;
 const MIN_CHECK_INTERVAL_MS = 60 * 1000;
 const CLOCK_TICK_MS = 60 * 1000;
 
+// The queue controls are collapsed until opened, and stay as the browser left them.
+const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, sortOrder: "queue", controlsOpen: false});
+
 let dashboard = null;
 let itemsByKey = new Map();
 let localState = loadLocalState();
@@ -62,14 +65,11 @@ function loadLocalState() {
         showAddressed: Boolean(parsed.settings?.showAddressed),
         showSnoozed: Boolean(parsed.settings?.showSnoozed),
         sortOrder: SORT_ORDERS.has(parsed.settings?.sortOrder) ? parsed.settings.sortOrder : "queue",
+        controlsOpen: Boolean(parsed.settings?.controlsOpen),
       },
     };
   } catch {
-    return {
-      version: STATE_VERSION,
-      items: {},
-      settings: {showAddressed: false, showSnoozed: false, sortOrder: "queue"},
-    };
+    return {version: STATE_VERSION, items: {}, settings: DEFAULT_SETTINGS()};
   }
 }
 
@@ -463,8 +463,10 @@ function createPRCard(item) {
     renderQueues();
   });
   actions.append(snooze);
-  actions.append(createDetails(item));
   card.append(actions);
+  // The disclosure sits in its own card row: inside the action row, opening it
+  // re-centred and re-wrapped the buttons and moved the summary itself.
+  card.append(createDetails(item));
   return card;
 }
 
@@ -552,11 +554,6 @@ function renderQueues() {
   if (!dashboard) return;
   renderLocalSummary();
   renderLaneTabs();
-
-  const active = orderedVisibleItems(dashboard.lanes.active || []);
-  const summary = document.querySelector("#attention-summary");
-  summary.querySelector(".hero-stat-value").textContent = numberFormat(active.length);
-  summary.querySelector(".hero-stat-label").textContent = active.length === 1 ? "active review" : "active reviews";
 
   const suggested = suggestedItems();
   document.querySelector("#suggested-count").textContent = numberFormat(suggested.length);
@@ -738,15 +735,8 @@ function updateBuildIndicator() {
 }
 
 function renderBuildMetadata() {
-  const generated = new Date(dashboard.generated_at);
   updateBuildIndicator();
-  document.querySelector("#repository-label").textContent = dashboard.repository.slug;
-  document.querySelector("#health-intro").textContent = `Track flow, contributor wait, backlog shape, and public @${dashboard.viewer.login} activity. Metrics describe observed sequence, not causation.`;
-  document.querySelector("#impact-eyebrow").textContent = `Public activity by @${dashboard.viewer.login}`;
   document.querySelector("#impact-caption").textContent = `Public @${dashboard.viewer.login} activity in rolling windows`;
-  document.querySelector("#source-repository-link").href = dashboard.repository.url;
-  document.querySelector("#source-repository-link").textContent = `Open ${dashboard.repository.slug} pull requests`;
-  document.querySelector("#footer-copy").textContent = `Built ${generated.toLocaleString()} from public GitHub data · no LLM`;
 }
 
 function showView() {
@@ -787,6 +777,7 @@ async function importState(file) {
       showAddressed: Boolean(parsed.settings?.showAddressed),
       showSnoozed: Boolean(parsed.settings?.showSnoozed),
       sortOrder: SORT_ORDERS.has(parsed.settings?.sortOrder) ? parsed.settings.sortOrder : "queue",
+      controlsOpen: Boolean(parsed.settings?.controlsOpen),
     },
   };
   saveLocalState();
@@ -796,6 +787,7 @@ async function importState(file) {
 }
 
 function syncControlState() {
+  document.querySelector("#queue-controls").open = localState.settings.controlsOpen;
   document.querySelector("#show-addressed").checked = localState.settings.showAddressed;
   document.querySelector("#show-snoozed").checked = localState.settings.showSnoozed;
   document.querySelector("#sort-order").value = localState.settings.sortOrder;
@@ -822,6 +814,10 @@ function installEventHandlers() {
     saveLocalState();
     renderQueues();
   });
+  document.querySelector("#queue-controls").addEventListener("toggle", event => {
+    localState.settings.controlsOpen = event.target.open;
+    saveLocalState();
+  });
   document.querySelector("#export-state").addEventListener("click", exportState);
   document.querySelector("#import-state").addEventListener("click", () => document.querySelector("#import-state-file").click());
   document.querySelector("#import-state-file").addEventListener("change", async event => {
@@ -838,11 +834,7 @@ function installEventHandlers() {
   document.querySelector("#reset-state").addEventListener("click", () => {
     if (!confirm("Reset all seen, addressed, pinned, snoozed, and opened state in this browser?")) return;
     clearStoredState();
-    localState = {
-      version: STATE_VERSION,
-      items: {},
-      settings: {showAddressed: false, showSnoozed: false, sortOrder: "queue"},
-    };
+    localState = {version: STATE_VERSION, items: {}, settings: DEFAULT_SETTINGS()};
     syncControlState();
     renderQueues();
     toast("Local state reset.");

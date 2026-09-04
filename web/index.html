@@ -13,16 +13,9 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="header-inner">
-      <a class="brand" href="#queue" aria-label="WHATWG HTML editor dashboard home">
-        <span class="brand-mark" aria-hidden="true">&lt;/&gt;</span>
-        <span>
-          <strong>HTML editor dashboard</strong>
-          <small id="repository-label">WHATWG</small>
-        </span>
-      </a>
       <nav class="primary-nav" aria-label="Dashboard sections">
-        <a href="#queue" data-view-link="queue">Review queue</a>
-        <a href="#health" data-view-link="health">Project health</a>
+        <a href="#queue" data-view-link="queue">Queue</a>
+        <a href="#health" data-view-link="health">Health</a>
         <a href="#methodology" data-view-link="methodology">Methodology</a>
       </nav>
       <div class="build-indicator" id="build-indicator" aria-live="polite">Loading…</div>
@@ -31,78 +24,49 @@
 
   <main id="main">
     <section class="view" id="queue-view" data-view="queue">
-      <div class="hero">
-        <div>
-          <p class="eyebrow">Public prioritization · private browser state</p>
-          <h1>Decide what to review next</h1>
-          <p class="hero-copy" id="queue-intro">Public GitHub activity is ranked with deterministic rules. Your seen, addressed, pinned, and snoozed state never leaves this browser.</p>
-        </div>
-        <div class="hero-stat" id="attention-summary" aria-live="polite">
-          <span class="hero-stat-value">—</span>
-          <span class="hero-stat-label">active reviews</span>
-        </div>
-      </div>
+      <h1 class="visually-hidden">Review queue</h1>
 
-      <section class="privacy-note" aria-label="Privacy model">
-        <span class="privacy-icon" aria-hidden="true">◉</span>
-        <div>
-          <strong>No GitHub notification inbox data is fetched.</strong>
-          <span>“Unseen” means a public attention signal has not been opened in this browser.</span>
-        </div>
-      </section>
-
-      <section class="panel queue-controls" aria-labelledby="queue-controls-heading">
-        <div>
-          <h2 id="queue-controls-heading">Queue controls</h2>
-          <p class="muted" id="local-state-summary">Local state is loading.</p>
-        </div>
-        <label class="search-field">
-          <span class="visually-hidden">Search pull requests</span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
-          <input type="search" id="search-input" placeholder="Search title, number, author, or label">
-        </label>
-        <label class="sort-field">
-          <span>Sort current lane</span>
-          <select id="sort-order">
-            <option value="queue">Queue priority</option>
-            <option value="checklist">Checklist completion</option>
-            <option value="unchecked">Fewest unchecked boxes</option>
-            <option value="wait">Longest contributor wait</option>
-            <option value="updated">Recently updated</option>
-            <option value="created">Oldest opened</option>
-          </select>
-        </label>
-        <label class="toggle"><input type="checkbox" id="show-addressed"> <span>Show addressed</span></label>
-        <label class="toggle"><input type="checkbox" id="show-snoozed"> <span>Show snoozed</span></label>
-        <details class="local-state-menu">
-          <summary>Local state</summary>
-          <div class="menu-content">
+      <details class="panel queue-controls" id="queue-controls">
+        <summary>Queue controls</summary>
+        <div class="queue-controls-content">
+          <label class="search-field">
+            <span class="visually-hidden">Search pull requests</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
+            <input type="search" id="search-input" placeholder="Search title, number, author, or label">
+          </label>
+          <label class="sort-field">
+            <span>Sort current lane</span>
+            <select id="sort-order">
+              <option value="queue">Queue priority</option>
+              <option value="checklist">Checklist completion</option>
+              <option value="unchecked">Fewest unchecked boxes</option>
+              <option value="wait">Longest contributor wait</option>
+              <option value="updated">Recently updated</option>
+              <option value="created">Oldest opened</option>
+            </select>
+          </label>
+          <label class="toggle"><input type="checkbox" id="show-addressed"> <span>Show addressed</span></label>
+          <label class="toggle"><input type="checkbox" id="show-snoozed"> <span>Show snoozed</span></label>
+          <div class="state-actions">
             <button type="button" id="export-state">Export</button>
             <button type="button" id="import-state">Import</button>
             <input type="file" id="import-state-file" accept="application/json" hidden>
             <button type="button" id="reset-state" class="danger-button">Reset</button>
           </div>
-        </details>
-      </section>
+          <p class="muted" id="local-state-summary">Local state is loading.</p>
+        </div>
+      </details>
 
       <section class="queue-section" aria-labelledby="suggested-heading">
         <div class="section-heading">
-          <div>
-            <p class="eyebrow">Direct requests first, then a balanced cycle</p>
-            <h2 id="suggested-heading">Suggested next</h2>
-          </div>
+          <h2 id="suggested-heading">Suggested next</h2>
           <span class="count-badge" id="suggested-count">0</span>
         </div>
         <div id="suggested-list" class="card-list" aria-live="polite"></div>
       </section>
 
       <section class="queue-section" aria-labelledby="lanes-heading">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Explainable queues</p>
-            <h2 id="lanes-heading">Browse by reason</h2>
-          </div>
-        </div>
+        <h2 class="visually-hidden" id="lanes-heading">Queues</h2>
         <div class="lane-tabs" id="lane-tabs" role="tablist" aria-label="Review queues"></div>
         <div class="lane-description" id="lane-description"></div>
         <div id="lane-list" class="card-list" aria-live="polite"></div>
@@ -110,58 +74,37 @@
     </section>
 
     <section class="view" id="health-view" data-view="health" hidden>
-      <div class="hero health-hero">
-        <div>
-          <p class="eyebrow">Public repository and editor impact metrics</p>
-          <h1>Project health</h1>
-          <p class="hero-copy" id="health-intro">Track flow, contributor wait, backlog shape, and public editor activity. Metrics describe observed sequence, not causation.</p>
-        </div>
+      <div class="view-heading">
+        <h1>Project health</h1>
         <div class="health-date" id="health-date">Generated —</div>
       </div>
 
       <section class="motivation-panel" aria-labelledby="motivation-heading">
-        <p class="eyebrow">The last seven days</p>
-        <h2 id="motivation-heading">Momentum</h2>
+        <h2 id="motivation-heading">Last 7 days</h2>
         <ul id="motivation-list"></ul>
       </section>
 
       <section class="metrics-section" aria-labelledby="current-health-heading">
         <div class="section-heading">
-          <div>
-            <p class="eyebrow">Current snapshot</p>
-            <h2 id="current-health-heading">Repository attention</h2>
-          </div>
+          <h2 id="current-health-heading">Repository attention</h2>
         </div>
         <div class="metric-grid" id="current-metrics"></div>
       </section>
 
       <section class="metrics-section split-grid" aria-label="Current wait breakdowns">
         <article class="panel chart-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Current open PRs</p>
-              <h2>Contributor wait</h2>
-            </div>
-          </div>
+          <h2>Contributor wait</h2>
           <div id="wait-chart" class="bar-chart"></div>
         </article>
         <article class="panel chart-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Primary deterministic state</p>
-              <h2>Waiting reasons</h2>
-            </div>
-          </div>
+          <h2>Waiting reasons</h2>
           <div id="reason-chart" class="bar-chart"></div>
         </article>
       </section>
 
       <section class="metrics-section" aria-labelledby="flow-heading">
         <div class="section-heading">
-          <div>
-            <p class="eyebrow">7, 28, and 90-day windows</p>
-            <h2 id="flow-heading">Repository flow</h2>
-          </div>
+          <h2 id="flow-heading">Repository flow</h2>
         </div>
         <div class="table-wrap">
           <table id="flow-table">
@@ -185,10 +128,7 @@
 
       <section class="metrics-section" aria-labelledby="impact-heading">
         <div class="section-heading">
-          <div>
-            <p class="eyebrow" id="impact-eyebrow">Public editor activity</p>
-            <h2 id="impact-heading">Editor impact indicators</h2>
-          </div>
+          <h2 id="impact-heading">Editor impact indicators</h2>
         </div>
         <p class="section-note">“Merged after review” and similar measures describe event order; they do not assert that one event caused another. Comment/review-derived indicators use the bounded samples reported below.</p>
         <div class="table-wrap">
@@ -209,43 +149,24 @@
 
       <section class="metrics-section split-grid" aria-label="Checklist and data coverage">
         <article class="panel chart-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Description only</p>
-              <h2>Checklist completion</h2>
-            </div>
-          </div>
+          <h2>Description checklist completion</h2>
           <div id="checklist-metrics" class="compact-stats"></div>
           <p class="fine-print">This does not assess actual test coverage, implementer interest, or whether a PR is ready to merge.</p>
         </article>
         <article class="panel chart-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Interpretation guardrails</p>
-              <h2>Sampling coverage</h2>
-            </div>
-          </div>
+          <h2>Sampling coverage</h2>
           <div id="coverage-metrics" class="compact-stats"></div>
         </article>
       </section>
     </section>
 
     <section class="view" id="methodology-view" data-view="methodology" hidden>
-      <div class="hero">
-        <div>
-          <p class="eyebrow">Transparent by design</p>
-          <h1>Methodology</h1>
-          <p class="hero-copy">The MVP uses public GitHub data and deterministic rules. This page records what each result means—and what it does not mean.</p>
-        </div>
+      <div class="view-heading">
+        <h1>Methodology</h1>
       </div>
       <div id="methodology-content" class="methodology-grid"></div>
     </section>
   </main>
-
-  <footer class="site-footer">
-    <p id="footer-copy">Built from public GitHub data.</p>
-    <a id="source-repository-link" href="https://github.com/whatwg/html/pulls">Open WHATWG HTML pull requests</a>
-  </footer>
 
   <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
   <script type="module" src="app.js"></script>
