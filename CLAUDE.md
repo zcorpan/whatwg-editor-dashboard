@@ -67,12 +67,14 @@ Two smaller vocabularies cross the Python/browser boundary the same way. Sort or
 
 `analysis.py` computes both, and they drive distinct browser behaviours — do not conflate them:
 
-- `content_fingerprint` hashes the PR's public content *excluding the viewer's own footprint* (title, body hash, draft state, head OID, labels, other people's assignments and review requests, status, mergeability, the newest non-viewer comment/review, and the counts of review threads somebody else started). "Address until changed" stores it; the PR reappears when it changes.
+- `content_fingerprint` hashes the PR's public content *excluding the viewer's own footprint* (title, body hash, draft state, head OID, labels, other people's assignments and review requests, check-rollup state, the newest non-viewer comment/review, and the counts of review threads somebody else started). "Address until changed" stores it; the PR reappears when it changes.
 - `attention_fingerprint` hashes only the direct-request and re-review reason codes/timestamps, and drops the timestamps of the two current-state codes in `_STATE_ATTENTION_CODES`, which carry `pr.updated_at` as a stand-in. "Seen" stores it; a new attention signal makes the item unseen again.
 
 Changing what goes into either hash silently invalidates users' stored state, so treat the payloads as a compatibility surface.
 
 **Viewer-independence is the point of the content fingerprint, not an optimization.** "Address until changed" has to mean "until somebody else changes it". Reviewing a PR moves `pr.updated_at`, appends a timeline item, clears the viewer's own review request, sets `review_decision` and opens review threads, so hashing any of those made every addressed item reappear at the next build — the editor's own reply was read as a change. `pr.updated_at` is therefore not hashed at all (it cannot be attributed to anyone); the public state it stood proxy for is hashed field by field instead. Two consequences are deliberate: a renewed review request with no other change does not resurface an addressed PR, and only the *newest* non-viewer comment is fingerprinted, because a viewer comment on a PR with more than `2 * timeline_each_end` comments shifts the sampling window and would move a list-based hash. What is still unattributable — labels, the PR body, the head commit — stays in the hash, so the viewer editing a description or adding a label does bring the PR back.
+
+**`mergeable` is not hashed, because it is not a property of the PR at query time.** GitHub computes mergeability lazily: a cold query returns `UNKNOWN` and only schedules the real answer. Compared against one deployed build, 258 of 277 open PRs reported a different `mergeable` value minutes later on identical `updatedAt` and head commits — the build had read `UNKNOWN` for 259 of them — so hashing it returned nearly every addressed PR at the next build. The same lazy answer makes `ready_bounded`, which requires `mergeable == "MERGEABLE"`, undercount badly at build time; fixing that needs a second pass that re-queries the `UNKNOWN` PRs, not a change to the fingerprint.
 
 ### Browser-local state
 

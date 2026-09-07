@@ -164,6 +164,22 @@ class AnalysisTests(unittest.TestCase):
         analysis = analyze_pull_request(threaded, self.config, now=NOW)
         self.assertNotEqual(original.content_fingerprint, analysis.content_fingerprint)
 
+    def test_address_fingerprint_ignores_lazily_computed_mergeability(self) -> None:
+        """Regression: `mergeable` is not a property of the PR at query time.
+
+        GitHub computes it lazily, so a cold build reads UNKNOWN and a later one
+        reads the real value with nothing about the PR having changed. Hashing it
+        returned nearly every addressed PR at the next build.
+        """
+        original = self.by_number[13001]
+        fingerprints = {
+            analyze_pull_request(
+                replace(original.pr, mergeable=value), self.config, now=NOW
+            ).content_fingerprint
+            for value in ("MERGEABLE", "CONFLICTING", "UNKNOWN", None)
+        }
+        self.assertEqual(len(fingerprints), 1)
+
     def test_attention_fingerprint_ignores_updates_that_are_not_new_signals(self) -> None:
         original = self.by_number[13001]
         self.assertIn("review-requested", {reason.code for reason in original.reasons})

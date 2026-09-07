@@ -96,7 +96,9 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
                 "along with the review request GitHub clears when they review, so that reviewing a PR does not "
                 "undo 'address until changed'. A renewed review request with no other change therefore does not "
                 "return the PR on its own, and only the newest comment or review by somebody else is "
-                "fingerprinted, so an edit to an older one is not detected."
+                "fingerprinted, so an edit to an older one is not detected. Mergeability is excluded "
+                "too: GitHub computes it lazily and answers UNKNOWN to a cold query, so it changes "
+                "between builds without the pull request changing."
             ),
             "The configured current editor list is applied to the full sampled history; historical editor-membership changes are not reconstructed.",
             (

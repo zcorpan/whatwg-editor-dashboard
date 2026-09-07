@@ -665,7 +665,15 @@ def analyze_pull_request(
         "assignees": [login for login in pr.assignees if login != viewer],
         "review_requests": [login for login in pr.review_requests if login != viewer],
         "status_state": pr.status_state,
-        "mergeable": pr.mergeable,
+        # mergeable is deliberately absent. GitHub computes mergeability lazily: a
+        # cold query returns UNKNOWN and only schedules the real answer, so a build
+        # reads UNKNOWN for most PRs and something else for the rest, with nothing
+        # about the PR having changed. Measured against one deployed build, 258 of
+        # 277 open PRs reported a different value minutes later on identical
+        # updatedAt and head commits, which brought back nearly every addressed
+        # item on the next build. A conflict appearing is also not something the
+        # PR's author did; the head commit and the base branch cover real changes,
+        # and the merge-conflict blocker chip still shows the current state.
         "latest_activity": (
             [
                 latest_external.id,
