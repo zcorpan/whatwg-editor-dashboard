@@ -502,7 +502,6 @@ main {
   margin-top: .7rem;
 }
 .chart-wide { max-width: 660px; }
-.impact-section .chart-panel { max-width: 720px; }
 @media (prefers-color-scheme: dark) {
   .chart {
     --series-1: #3987e5;
