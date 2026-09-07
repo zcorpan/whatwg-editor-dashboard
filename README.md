@@ -41,17 +41,18 @@ The generated site never fetches GitHub notification inbox data. “Unseen” me
 
 ### Project-health metrics
 
-The public health view includes:
+The health view answers two questions and stops: is the review load getting better or worse, and how much of the work was yours. Every figure on it comes from the same twelve-week window.
 
-- Current open, draft, active-now, waiting-on-editor, over-target, direct-attention, stale-direct, re-review, and ready/bounded counts.
-- Contributor-wait distribution and deterministic waiting-reason breakdown.
-- PRs opened, closed, merged, and net backlog change over 7, 28, and 90 days.
-- Median and p90 sampled first-editor-response time.
-- Description-checklist distribution.
-- Public `@zcorpan` indicators such as reviews submitted, first editor responses, unique PR authors engaged with, PRs merged after a review, and sampled contributor-wait days ended.
-- Sampling coverage, so incomplete history is visible rather than silently treated as complete.
+- Three trend cards — open pull requests, contributors waiting more than `initial_editor_response_days` for a first reply, and the share of contributor PRs answered inside that target. Each shows the current value, the change across the window, a line chart, and which direction is the good one.
+- A verdict line naming whichever indicators are off target or moving the wrong way. “Off target” for the response rate means below `response_targets.first_response_within_target_percent`.
+- Your impact over the same window: the share of merged pull requests that had a review from you before they merged, the share of first editor replies that were yours, reviews submitted, distinct contributors replied to, and your own merged PRs.
+- The weekly numbers behind each chart, in a table behind a disclosure, and one line of sampling coverage.
 
-The wording intentionally describes event order, not causation. For example, “merged after review” does not mean the review caused the merge.
+Nothing is stored between builds. The weekly backlog is *reconstructed*: every open PR and every PR closed inside the history window is in the sample, so the number open at any past week in the window can be counted exactly.
+
+The newest week never counts toward the first-response rate. A PR opened three days ago has not missed a seven-day target yet, so counting it would report the calendar as a failure.
+
+Pull requests you authored are excluded from the review share, because an author cannot review their own. The wording intentionally describes event order, not causation: “merged after your review” does not mean the review caused the merge.
 
 ## Deploying
 

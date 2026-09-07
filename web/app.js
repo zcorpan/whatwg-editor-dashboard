@@ -582,116 +582,407 @@ function renderQueues() {
   );
 }
 
-function metricCard(label, value, note) {
-  return element("article", {className: "metric-card"}, [
-    element("span", {className: "metric-label", text: label}),
-    element("strong", {className: "metric-value", text: numberFormat(value)}),
-    element("span", {className: "metric-note", text: note}),
+const SVG_NS = "http://www.w3.org/2000/svg";
+// Charts are drawn at their display size so the label text is not scaled by the
+// viewBox: a card chart stays small, the wide one gets more room per column.
+const CARD_CHART = {width: 320, height: 132};
+const WIDE_CHART = {width: 660, height: 200};
+const CHART_MARGIN = {top: 12, right: 14, bottom: 22, left: 40};
+const NICE_STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+
+function svgElement(tag, attrs = {}, children = []) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attrs)) {
+    if (value === undefined || value === null || value === false) continue;
+    node.setAttribute(name, String(value));
+  }
+  for (const child of Array.isArray(children) ? children : [children]) {
+    if (child === null || child === undefined || child === false) continue;
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+function niceStep(span) {
+  for (const step of NICE_STEPS) {
+    if (step >= span) return step;
+  }
+  return NICE_STEPS[NICE_STEPS.length - 1];
+}
+
+// Three round gridline values covering the data. Counts get a focused range rather than
+// a zero baseline: a backlog moving between 257 and 283 is a flat line against zero,
+// which is exactly the reading the trend is supposed to correct. The tick labels always
+// state where the axis starts, and the columns chart, where length encodes the value,
+// keeps its zero baseline.
+function niceScale(values, {zeroBaseline = false} = {}) {
+  const numbers = values.filter(value => value !== null);
+  const high = Math.max(1, ...numbers);
+  const low = zeroBaseline ? 0 : Math.min(...numbers, high);
+  let step = niceStep(Math.max((high - low) / 2, high / 40, 0.5));
+  let min = zeroBaseline ? 0 : Math.max(0, Math.floor(low / step) * step);
+  while (min + step * 2 < high) {
+    step = niceStep(step + 0.5);
+    min = zeroBaseline ? 0 : Math.max(0, Math.floor(low / step) * step);
+  }
+  return {min, max: min + step * 2, step};
+}
+
+function weekLabel(value) {
+  return new Intl.DateTimeFormat(undefined, {month: "short", day: "numeric"}).format(new Date(value));
+}
+
+function chartFrame(scale, formatTick, size) {
+  const plot = {
+    left: CHART_MARGIN.left,
+    right: size.width - CHART_MARGIN.right,
+    top: CHART_MARGIN.top,
+    bottom: size.height - CHART_MARGIN.bottom,
+  };
+  const nodes = [];
+  for (const fraction of [0, 0.5, 1]) {
+    const value = scale.min + (scale.max - scale.min) * fraction;
+    const y = plot.bottom - (plot.bottom - plot.top) * fraction;
+    nodes.push(svgElement("line", {
+      class: fraction === 0 ? "chart-axis" : "chart-grid",
+      x1: plot.left, x2: plot.right, y1: y, y2: y,
+    }));
+    nodes.push(svgElement("text", {class: "chart-tick", x: plot.left - 6, y: y + 4, "text-anchor": "end"}, formatTick(value)));
+  }
+  const position = value => plot.bottom - (plot.bottom - plot.top) * ((value - scale.min) / (scale.max - scale.min));
+  return {plot, nodes, position};
+}
+
+function positions(plot, count) {
+  if (count <= 1) return [(plot.left + plot.right) / 2];
+  const step = (plot.right - plot.left) / (count - 1);
+  return Array.from({length: count}, (unused, index) => plot.left + step * index);
+}
+
+// A single-series line chart: no legend needed, and the trend is the whole message.
+function lineChart(values, {labels, scale, formatValue, formatTick, description}) {
+  const size = CARD_CHART;
+  const {plot, nodes, position: y} = chartFrame(scale ?? niceScale(values), formatTick, size);
+  const x = positions(plot, values.length);
+
+  let segment = [];
+  const segments = [];
+  values.forEach((value, index) => {
+    if (value === null) {
+      if (segment.length) segments.push(segment);
+      segment = [];
+      return;
+    }
+    segment.push(`${x[index]},${y(value)}`);
+  });
+  if (segment.length) segments.push(segment);
+
+  for (const points of segments) {
+    if (points.length === 1) {
+      const [pointX, pointY] = points[0].split(",");
+      nodes.push(svgElement("circle", {class: "chart-dot", cx: pointX, cy: pointY, r: 3}));
+    } else {
+      nodes.push(svgElement("polyline", {class: "chart-line", points: points.join(" ")}));
+    }
+  }
+
+  const lastIndex = values.reduce((found, value, index) => (value === null ? found : index), -1);
+  if (lastIndex >= 0) {
+    nodes.push(svgElement("circle", {class: "chart-end-dot", cx: x[lastIndex], cy: y(values[lastIndex]), r: 4}));
+  }
+
+  values.forEach((value, index) => {
+    if (value === null) return;
+    nodes.push(svgElement("circle", {class: "chart-hit", cx: x[index], cy: y(value), r: 9}, [
+      svgElement("title", {}, `${labels[index]}: ${formatValue(value)}`),
+    ]));
+  });
+
+  nodes.push(svgElement("text", {class: "chart-label", x: plot.left, y: size.height - 6}, labels[0]));
+  nodes.push(svgElement("text", {class: "chart-label", x: plot.right, y: size.height - 6, "text-anchor": "end"}, labels[labels.length - 1]));
+
+  return svgElement("svg", {
+    class: "chart",
+    viewBox: `0 0 ${size.width} ${size.height}`,
+    role: "img",
+    "aria-label": description,
+  }, nodes);
+}
+
+function roundedTopBar(x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height);
+  return `M${x} ${y + height} L${x} ${y + r} Q${x} ${y} ${x + r} ${y} L${x + width - r} ${y} Q${x + width} ${y} ${x + width} ${y + r} L${x + width} ${y + height} Z`;
+}
+
+// Stacked columns: the emphasized part sits on the baseline so it stays comparable.
+function stackedColumnChart(rows, {formatTick, description}) {
+  const size = WIDE_CHART;
+  const totals = rows.map(row => row.total);
+  const {plot, nodes, position} = chartFrame(niceScale(totals, {zeroBaseline: true}), formatTick, size);
+  const slot = (plot.right - plot.left) / rows.length;
+  const width = Math.min(24, slot - 6);
+  const scale = value => plot.bottom - position(value);
+
+  rows.forEach((row, index) => {
+    const x = plot.left + slot * index + (slot - width) / 2;
+    const highlight = scale(row.highlight);
+    const rest = scale(row.total - row.highlight);
+    const title = svgElement("title", {}, `${row.label}: ${numberFormat(row.highlight)} of ${numberFormat(row.total)} merged after your review`);
+    if (rest > 0) {
+      // A 2px surface gap, not a stroke, separates the two segments.
+      nodes.push(svgElement("path", {
+        class: "chart-column-rest",
+        d: roundedTopBar(x, plot.bottom - highlight - rest, width, Math.max(0, rest - (highlight > 0 ? 2 : 0)), 4),
+      }, [title.cloneNode(true)]));
+    }
+    if (highlight > 0) {
+      nodes.push(svgElement("path", {
+        class: "chart-column-highlight",
+        d: rest > 0
+          ? `M${x} ${plot.bottom} h${width} v${-highlight} h${-width} Z`
+          : roundedTopBar(x, plot.bottom - highlight, width, highlight, 4),
+      }, [title.cloneNode(true)]));
+    }
+    if (row.total === 0) {
+      nodes.push(svgElement("rect", {class: "chart-hit", x, y: plot.bottom - 8, width, height: 8}, [title.cloneNode(true)]));
+    }
+  });
+
+  const last = rows[rows.length - 1];
+  if (last && last.total > 0) {
+    nodes.push(svgElement("text", {
+      class: "chart-value",
+      x: plot.left + slot * (rows.length - 1) + slot / 2,
+      y: plot.bottom - scale(last.total) - 6,
+      "text-anchor": "middle",
+    }, numberFormat(last.total)));
+  }
+
+  nodes.push(svgElement("text", {class: "chart-label", x: plot.left, y: size.height - 6}, rows[0]?.label || ""));
+  nodes.push(svgElement("text", {class: "chart-label", x: plot.right, y: size.height - 6, "text-anchor": "end"}, last?.label || ""));
+
+  return svgElement("svg", {
+    class: "chart chart-wide",
+    viewBox: `0 0 ${size.width} ${size.height}`,
+    role: "img",
+    "aria-label": description,
+  }, nodes);
+}
+
+function legend(entries) {
+  return element("ul", {className: "chart-legend"}, entries.map(entry => element("li", {}, [
+    element("span", {className: `legend-swatch ${entry.className}`, attrs: {"aria-hidden": "true"}}),
+    entry.label,
+  ])));
+}
+
+function changePhrase(change, {unit = "", period}) {
+  if (change === 0) return `unchanged ${period}`;
+  const direction = change < 0 ? "down" : "up";
+  return `${direction} ${numberFormat(Math.round(Math.abs(change)))}${unit} ${period}`;
+}
+
+function deltaChip(change, {lowerIsBetter, unit = "", period}) {
+  if (change === null || change === undefined) {
+    return element("span", {className: "trend-delta", dataset: {tone: "flat"}, text: "no comparison yet"});
+  }
+  const improving = lowerIsBetter ? change < 0 : change > 0;
+  const tone = change === 0 ? "flat" : improving ? "good" : "bad";
+  return element("span", {className: "trend-delta", dataset: {tone}}, [
+    element("span", {className: "trend-arrow", text: change === 0 ? "→" : change < 0 ? "▼" : "▲", attrs: {"aria-hidden": "true"}}),
+    changePhrase(change, {unit, period}),
   ]);
 }
 
-function renderBarChart(selector, entries) {
-  const container = document.querySelector(selector);
-  const max = Math.max(1, ...entries.map(entry => entry.count));
-  const rows = entries.map(entry => {
-    const track = element("div", {className: "bar-track"});
-    const value = element("div", {className: "bar-value"});
-    value.style.width = `${Math.round((entry.count / max) * 100)}%`;
-    track.append(value);
-    return element("div", {className: "bar-row"}, [
-      element("span", {className: "bar-label", text: entry.label}),
-      track,
-      element("span", {className: "bar-count", text: numberFormat(entry.count)}),
-    ]);
-  });
-  container.replaceChildren(...rows);
+function trendCard({title, value, chart, delta, hint, status}) {
+  return element("article", {className: "trend-card", dataset: {status}}, [
+    element("h2", {className: "trend-title", text: title}),
+    element("div", {className: "trend-headline"}, [
+      element("strong", {className: "trend-value", text: value}),
+      delta,
+    ]),
+    chart,
+    element("p", {className: "trend-hint", text: hint}),
+  ]);
 }
 
-function createTableCell(tag, value, className) {
-  return element(tag, {text: value, className: className || ""});
+function percentText(value) {
+  return value === null || value === undefined ? "—" : `${Math.round(value)}%`;
+}
+
+function statCard(value, label, note) {
+  return element("article", {className: "stat-card"}, [
+    element("strong", {className: "stat-value", text: value}),
+    element("span", {className: "stat-label", text: label}),
+    element("span", {className: "stat-note", text: note}),
+  ]);
+}
+
+function tableRow(cells) {
+  return element("tr", {}, cells.map((value, index) => element(index === 0 ? "th" : "td", {
+    text: value,
+    attrs: index === 0 ? {scope: "row"} : {},
+  })));
 }
 
 function renderHealth() {
   const metrics = dashboard.metrics;
-  const current = metrics.repository.current;
+  const health = metrics.health;
+  const trends = metrics.trends;
+  const points = trends.points;
+  const buckets = trends.buckets;
+  const weeks = Math.round(trends.window_days / 7);
+  const period = `in ${weeks} weeks`;
+  const targetDays = dashboard.response_targets.initial_editor_response_days;
   document.querySelector("#health-date").textContent = `Generated ${localDate(metrics.generated_at)}`;
 
-  document.querySelector("#motivation-list").replaceChildren(
-    ...metrics.motivation.map(value => element("li", {text: value}))
+  const pointLabels = points.map(point => weekLabel(point.at));
+  const backlog = health.indicators.backlog;
+  const overdue = health.indicators.overdue_first_response;
+  const rate = health.indicators.first_response_rate;
+
+  const matureBuckets = buckets.filter(bucket => bucket.first_response_mature);
+  const rateValues = matureBuckets.map(bucket => (
+    bucket.first_response_eligible
+      ? (bucket.first_response_within_target / bucket.first_response_eligible) * 100
+      : null
+  ));
+  const rateLabels = matureBuckets.map(bucket => weekLabel(bucket.start));
+
+  document.querySelector("#trend-cards").replaceChildren(
+    trendCard({
+      title: backlog.label,
+      status: backlog.status,
+      value: numberFormat(backlog.value),
+      delta: deltaChip(backlog.change, {lowerIsBetter: true, period}),
+      hint: "Open pull requests at the end of each week. Fewer is better.",
+      chart: lineChart(points.map(point => point.open_prs), {
+        labels: pointLabels,
+        formatValue: numberFormat,
+        formatTick: value => numberFormat(Math.round(value)),
+        description: `Open pull requests each week for ${weeks} weeks, ending at ${numberFormat(backlog.value)}.`,
+      }),
+    }),
+    trendCard({
+      title: overdue.label,
+      status: overdue.status,
+      value: numberFormat(overdue.value),
+      delta: deltaChip(overdue.change, {lowerIsBetter: true, period}),
+      hint: `Open contributor PRs with no editor reply after ${targetDays} days. Fewer is better.`,
+      chart: lineChart(points.map(point => point.overdue_first_response), {
+        labels: pointLabels,
+        formatValue: numberFormat,
+        formatTick: value => numberFormat(Math.round(value)),
+        description: `Contributor pull requests waiting more than ${targetDays} days for a first editor reply, each week for ${weeks} weeks, ending at ${numberFormat(overdue.value)}.`,
+      }),
+    }),
+    trendCard({
+      title: rate.label,
+      status: rate.status,
+      value: percentText(rate.percent),
+      delta: deltaChip(rate.change, {lowerIsBetter: false, unit: " points", period: "vs the earlier weeks"}),
+      hint: `Share of contributor PRs answered inside ${targetDays} days. Target ${rate.target_percent}%. Higher is better.`,
+      chart: lineChart(rateValues, {
+        labels: rateLabels,
+        scale: {min: 0, max: 100, step: 50},
+        formatValue: percentText,
+        formatTick: value => `${Math.round(value)}%`,
+        description: `Share of contributor pull requests answered within ${targetDays} days, by week opened; ${percentText(rate.percent)} across the window.`,
+      }),
+    }),
   );
 
-  document.querySelector("#current-metrics").replaceChildren(
-    metricCard("Open pull requests", current.open_prs, `${current.ready_for_review_prs} ready for review · ${current.draft_prs} drafts`),
-    metricCard("Waiting on editor", current.waiting_on_editor, `${current.over_response_target} over the 7-day response target`),
-    metricCard("Direct or re-review attention", current.direct_requests + current.rereview_owed, `${current.direct_requests} direct · ${current.rereview_owed} changed since review`),
-    metricCard("Ready and bounded", current.ready_and_bounded, "Deterministic quick-win candidates, not merge recommendations")
-  );
+  const problems = [
+    backlog.status === "on_track" ? null : `the backlog is ${changePhrase(backlog.change, {period})}`,
+    overdue.status === "on_track" ? null : `contributors waiting over ${targetDays} days are ${changePhrase(overdue.change, {period})}`,
+    rate.status === "on_track" || rate.percent === null
+      ? null
+      : `${percentText(rate.percent)} of contributor PRs get a first reply within ${targetDays} days, below the ${rate.target_percent}% target`,
+  ].filter(Boolean);
+  const verdict = document.querySelector("#health-verdict");
+  verdict.dataset.status = health.overall_status;
+  verdict.textContent = problems.length
+    ? `Needs attention: ${problems.join("; ")}.`
+    : `On target: the backlog is ${changePhrase(backlog.change, {period})}, and ${percentText(rate.percent)} of contributor PRs get a first reply within ${targetDays} days.`;
 
-  renderBarChart("#wait-chart", metrics.repository.wait_distribution);
-  renderBarChart("#reason-chart", metrics.repository.waiting_reasons);
-
-  const flowBody = document.querySelector("#flow-table tbody");
-  const flowRows = [7, 28, 90].map(days => {
-    const windowMetrics = metrics.repository.windows[String(days)];
-    const response = windowMetrics.first_editor_response;
-    const netClass = windowMetrics.net_backlog_change < 0 ? "positive-number" : windowMetrics.net_backlog_change > 0 ? "negative-number" : "";
-    const netText = windowMetrics.net_backlog_change > 0 ? `+${windowMetrics.net_backlog_change}` : String(windowMetrics.net_backlog_change);
-    return element("tr", {}, [
-      createTableCell("th", `${days} days`),
-      createTableCell("td", numberFormat(windowMetrics.opened)),
-      createTableCell("td", numberFormat(windowMetrics.closed)),
-      createTableCell("td", numberFormat(windowMetrics.merged)),
-      createTableCell("td", netText, netClass),
-      createTableCell("td", duration(response.median_hours)),
-      createTableCell("td", duration(response.p90_hours)),
-      createTableCell("td", response.responded ? `${response.within_target}/${response.responded}` : "—"),
+  document.querySelector("#trend-table tbody").replaceChildren(...buckets.map((bucket, index) => {
+    const point = points[index + 1];
+    return tableRow([
+      weekLabel(bucket.start),
+      numberFormat(point.open_prs),
+      numberFormat(point.awaiting_first_response),
+      numberFormat(point.overdue_first_response),
+      numberFormat(bucket.opened),
+      numberFormat(bucket.merged),
+      bucket.first_response_eligible
+        ? `${bucket.first_response_within_target}/${bucket.first_response_eligible}${bucket.first_response_mature ? "" : " (partial week)"}`
+        : "—",
     ]);
-  });
-  flowBody.replaceChildren(...flowRows);
+  }));
 
-  const viewerWindows = metrics.viewer.windows;
-  const impactRows = [
-    ["Reviews submitted", "reviews_submitted", numberFormat],
-    ["PRs merged after review", "prs_merged_after_review", numberFormat],
-    ["First editor responses", "first_editor_responses", numberFormat],
-    ["Unique PR authors engaged with", "unique_pr_authors_engaged_with", numberFormat],
-    ["PRs with author activity after review", "prs_with_author_activity_after_review", numberFormat],
-    ["Long sampled waits addressed", "long_waits_addressed", numberFormat],
-    ["Sampled contributor-wait days ended", "sampled_contributor_waiting_days_ended", numberFormat],
-    ["Median sampled response", "median_sampled_response_hours", duration],
-    ["Authored PRs merged", "authored_prs_merged", numberFormat],
-  ].map(([label, key, formatter]) => element("tr", {}, [
-    createTableCell("th", label),
-    createTableCell("td", formatter(viewerWindows["7"][key])),
-    createTableCell("td", formatter(viewerWindows["28"][key])),
-    createTableCell("td", formatter(viewerWindows["90"][key])),
-  ]));
-  document.querySelector("#impact-table tbody").replaceChildren(...impactRows);
-
-  const checklist = metrics.repository.checklist;
-  document.querySelector("#checklist-metrics").replaceChildren(
-    compactStat(checklist.complete, "complete"),
-    compactStat(checklist.partial, "partly checked"),
-    compactStat(checklist.none_checked, "none checked"),
-    compactStat(checklist.without_checklist, "no task list"),
-    compactStat(checklist.average_percent === null ? "—" : `${checklist.average_percent}%`, "average completion"),
-  );
+  renderImpact(weeks);
 
   const coverage = metrics.coverage;
-  document.querySelector("#coverage-metrics").replaceChildren(
-    compactStat(`${coverage.open_timeline_complete}/${coverage.open_timeline_total}`, "complete open timelines"),
-    compactStat(`${coverage.closed_timeline_complete}/${coverage.closed_timeline_total}`, "complete closed timelines"),
-    compactStat(`${coverage.open_review_threads_complete}/${coverage.open_review_threads_total}`, "complete review-thread samples"),
-    compactStat(coverage.viewer_review_connections_truncated, `truncated @${dashboard.viewer.login} review histories`),
-    compactStat(`${coverage.history_days}d`, "historical window"),
+  document.querySelector("#health-coverage").textContent = (
+    `Sampling: ${coverage.open_timeline_complete} of ${coverage.open_timeline_total} open pull requests have a complete sampled comment timeline, and ` +
+    `${coverage.first_response_unknown_due_to_sampling} are left out of the first-response figures because theirs is not. ` +
+    `Closed pull requests cover the last ${coverage.history_days} days.`
   );
 }
 
-function compactStat(value, label) {
-  return element("div", {className: "compact-stat"}, [
-    element("strong", {text: value}),
-    element("span", {text: label}),
-  ]);
+function renderImpact(weeks) {
+  const metrics = dashboard.metrics;
+  const viewer = metrics.viewer;
+  const overall = viewer.window;
+  const recent = viewer.recent;
+  const buckets = metrics.trends.buckets;
+  const recentWeeks = Math.round(recent.days / 7);
+
+  document.querySelector("#impact-window").textContent = `Public @${viewer.login} activity over the last ${weeks} weeks.`;
+  document.querySelector("#impact-hero-value").textContent = percentText(overall.merged_with_viewer_review_percent);
+  document.querySelector("#impact-hero-caption").textContent = (
+    `of the ${numberFormat(overall.merged_by_others)} pull requests merged in the last ${weeks} weeks that you did not author ` +
+    `had a review from you before they merged. Last ${recentWeeks} weeks: ${percentText(recent.merged_with_viewer_review_percent)} ` +
+    `(${numberFormat(recent.merged_with_viewer_review)} of ${numberFormat(recent.merged_by_others)}).`
+  );
+
+  const rows = buckets.map(bucket => ({
+    label: weekLabel(bucket.start),
+    total: bucket.merged_by_others,
+    highlight: bucket.merged_with_viewer_review,
+  }));
+  document.querySelector("#merge-chart").replaceChildren(
+    stackedColumnChart(rows, {
+      formatTick: value => numberFormat(Math.round(value)),
+      description: `Pull requests merged each week for ${weeks} weeks, with the share that had a review from you before merging.`,
+    }),
+    legend([
+      {className: "legend-highlight", label: "Merged after your review"},
+      {className: "legend-rest", label: "Merged without a review from you"},
+    ]),
+  );
+
+  document.querySelector("#merge-table tbody").replaceChildren(...rows.map(row => tableRow([
+    row.label,
+    numberFormat(row.total),
+    numberFormat(row.highlight),
+  ])));
+
+  document.querySelector("#impact-stats").replaceChildren(
+    statCard(
+      numberFormat(overall.first_responses_by_viewer),
+      "First replies you gave",
+      `${percentText(overall.first_responses_by_viewer_percent)} of the ${numberFormat(overall.first_responses_total)} first editor replies in the window`,
+    ),
+    statCard(numberFormat(overall.reviews_submitted), "Reviews you submitted", `${numberFormat(recent.reviews_submitted)} in the last ${recentWeeks} weeks`),
+    statCard(numberFormat(overall.contributors_engaged), "Contributors you replied to", "Distinct pull-request authors, excluding bots"),
+    statCard(numberFormat(overall.authored_prs_merged), "Your own PRs merged", `Authored by @${viewer.login}`),
+  );
+
+  document.querySelector("#impact-note").textContent = (
+    "These figures describe the order of public events. “Merged after your review” does not assert that the review caused the merge. " +
+    "Pull requests you authored are excluded from the review share, since an author cannot review their own."
+  );
 }
 
 function renderMethodology() {
@@ -741,11 +1032,6 @@ function updateBuildIndicator() {
   const indicator = document.querySelector("#build-indicator");
   indicator.textContent = `Updated ${relativeTime(dashboard.generated_at)}`;
   indicator.title = `Generated ${localDate(dashboard.generated_at)} · source: ${dashboard.build.source}`;
-}
-
-function renderBuildMetadata() {
-  updateBuildIndicator();
-  document.querySelector("#impact-caption").textContent = `Public @${dashboard.viewer.login} activity in rolling windows`;
 }
 
 function showView() {
@@ -865,7 +1151,7 @@ function applyDashboard(payload, {preserveScroll = false} = {}) {
   const scrollY = window.scrollY;
   dashboard = payload;
   itemsByKey = new Map(dashboard.items.map(item => [item.key, item]));
-  renderBuildMetadata();
+  updateBuildIndicator();
   renderQueues();
   renderHealth();
   renderMethodology();

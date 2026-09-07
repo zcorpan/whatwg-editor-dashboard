@@ -47,24 +47,57 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(coverage["open_timeline_complete"], 11)
         self.assertEqual(coverage["open_timeline_total"], 12)
 
-        week = self.metrics["repository"]["windows"]["7"]["first_editor_response"]
-        self.assertEqual(week["known_no_response"], 2)
-        self.assertEqual(week["unknown_due_to_sampling"], 0)
-        self.assertEqual(week["first_time_contributors"]["eligible_prs"], 2)
+        rate = self.metrics["health"]["indicators"]["first_response_rate"]
+        self.assertEqual(rate["eligible"], 11)
+        self.assertEqual(rate["within_target"], 5)
 
-    def test_flow_windows(self) -> None:
-        week = self.metrics["repository"]["windows"]["7"]
-        self.assertEqual(week["opened"], 4)
-        self.assertEqual(week["closed"], 2)
-        self.assertEqual(week["merged"], 1)
-        self.assertEqual(week["net_backlog_change"], 2)
+    def test_backlog_trend_reconstructs_the_open_queue_week_by_week(self) -> None:
+        points = self.metrics["trends"]["points"]
+        self.assertEqual(len(points), 13)
+        self.assertEqual(points[-1]["at"], "2026-08-03T12:00:00Z")
+        # The final point is the queue as it stands, so it has to agree with the counts.
+        self.assertEqual(points[-1]["open_prs"], self.metrics["repository"]["current"]["open_prs"])
+        self.assertEqual(points[0]["open_prs"], 4)
+        self.assertGreaterEqual(points[-1]["awaiting_first_response"], points[-1]["overdue_first_response"])
+
+        backlog = self.metrics["health"]["indicators"]["backlog"]
+        self.assertEqual(backlog["change"], points[-1]["open_prs"] - points[0]["open_prs"])
+        self.assertTrue(backlog["lower_is_better"])
+        self.assertEqual(backlog["status"], "off_track")
+
+    def test_the_current_week_cannot_report_a_first_response_rate_yet(self) -> None:
+        """A PR opened three days ago has not missed a seven-day target yet.
+
+        Counting the newest week would report every unanswered new PR as a failure
+        and drag the trend down on nothing but the calendar.
+        """
+        buckets = self.metrics["trends"]["buckets"]
+        self.assertEqual(len(buckets), 12)
+        self.assertFalse(buckets[-1]["first_response_mature"])
+        self.assertTrue(all(bucket["first_response_mature"] for bucket in buckets[:-1]))
+
+        rate = self.metrics["health"]["indicators"]["first_response_rate"]
+        self.assertEqual(
+            rate["eligible"],
+            sum(bucket["first_response_eligible"] for bucket in buckets[:-1]),
+        )
 
     def test_public_viewer_impact_uses_non_causal_wording_fields(self) -> None:
-        week = self.metrics["viewer"]["windows"]["7"]
-        self.assertEqual(week["reviews_submitted"], 2)
-        self.assertEqual(week["prs_merged_after_review"], 1)
-        self.assertEqual(week["authored_prs_merged"], 0)
-        self.assertGreater(week["sampled_contributor_waiting_days_ended"], 0)
+        window = self.metrics["viewer"]["window"]
+        self.assertEqual(window["days"], 84)
+        self.assertEqual(window["merged_with_viewer_review"], 4)
+        self.assertEqual(window["merged_with_viewer_review_percent"], 80.0)
+        self.assertEqual(window["reviews_submitted"], 5)
+        self.assertEqual(self.metrics["viewer"]["recent"]["days"], 28)
+
+    def test_merge_share_excludes_prs_the_viewer_authored(self) -> None:
+        """An author cannot review their own PR, so counting one is a guaranteed miss."""
+        window = self.metrics["viewer"]["window"]
+        self.assertEqual(window["authored_prs_merged"], 1)
+        self.assertEqual(window["merged_by_others"], 5)
+        buckets = self.metrics["trends"]["buckets"]
+        authored = sum(bucket["merged"] - bucket["merged_by_others"] for bucket in buckets)
+        self.assertEqual(authored, window["authored_prs_merged"])
 
 
 if __name__ == "__main__":

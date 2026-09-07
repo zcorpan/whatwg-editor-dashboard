@@ -76,85 +76,72 @@
         <div class="health-date" id="health-date">Generated —</div>
       </div>
 
-      <section class="motivation-panel" aria-labelledby="motivation-heading">
-        <h2 id="motivation-heading">Last 7 days</h2>
-        <ul id="motivation-list"></ul>
-      </section>
+      <p class="verdict" id="health-verdict"></p>
 
-      <section class="metrics-section" aria-labelledby="current-health-heading">
-        <div class="section-heading">
-          <h2 id="current-health-heading">Repository attention</h2>
-        </div>
-        <div class="metric-grid" id="current-metrics"></div>
-      </section>
+      <div class="trend-cards" id="trend-cards"></div>
 
-      <section class="metrics-section split-grid" aria-label="Current wait breakdowns">
-        <article class="panel chart-panel">
-          <h2>Contributor wait</h2>
-          <div id="wait-chart" class="bar-chart"></div>
-        </article>
-        <article class="panel chart-panel">
-          <h2>Waiting reasons</h2>
-          <div id="reason-chart" class="bar-chart"></div>
-        </article>
-      </section>
-
-      <section class="metrics-section" aria-labelledby="flow-heading">
-        <div class="section-heading">
-          <h2 id="flow-heading">Repository flow</h2>
-        </div>
+      <details class="chart-data">
+        <summary>Weekly numbers behind these charts</summary>
         <div class="table-wrap">
-          <table id="flow-table">
-            <caption>Pull-request flow and sampled first editor response times</caption>
+          <table id="trend-table">
+            <caption>Weekly reconstruction of the open backlog and the first-response rate. The backlog columns are counted at the end of each week.</caption>
             <thead>
               <tr>
-                <th scope="col">Window</th>
+                <th scope="col">Week of</th>
+                <th scope="col">Open PRs</th>
+                <th scope="col">Awaiting a first reply</th>
+                <th scope="col">Waiting over target</th>
                 <th scope="col">Opened</th>
-                <th scope="col">Closed</th>
                 <th scope="col">Merged</th>
-                <th scope="col">Net backlog</th>
-                <th scope="col">Median first response</th>
-                <th scope="col">P90 first response</th>
-                <th scope="col">Within 7 days</th>
+                <th scope="col">First reply within target</th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
         </div>
-      </section>
+      </details>
 
-      <section class="metrics-section" aria-labelledby="impact-heading">
+      <section class="impact-section" aria-labelledby="impact-heading">
         <div class="section-heading">
-          <h2 id="impact-heading">Editor impact indicators</h2>
+          <h2 id="impact-heading">Your impact</h2>
+          <p class="section-note" id="impact-window"></p>
         </div>
-        <p class="section-note">“Merged after review” and similar measures describe event order; they do not assert that one event caused another. Comment/review-derived indicators use the bounded samples reported below.</p>
-        <div class="table-wrap">
-          <table id="impact-table">
-            <caption id="impact-caption">Public editor activity in rolling windows</caption>
-            <thead>
-              <tr>
-                <th scope="col">Indicator</th>
-                <th scope="col">7 days</th>
-                <th scope="col">28 days</th>
-                <th scope="col">90 days</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+
+        <div class="hero-figure">
+          <strong id="impact-hero-value">—</strong>
+          <p id="impact-hero-caption"></p>
         </div>
+
+        <article class="panel chart-panel">
+          <div class="chart-heading">
+            <h3 id="merge-chart-title">Merged pull requests by week</h3>
+            <p class="chart-hint">A taller blue share means more of what merged had passed your review.</p>
+          </div>
+          <div class="chart-figure" id="merge-chart"></div>
+          <details class="chart-data">
+            <summary>Show the numbers</summary>
+            <div class="table-wrap">
+              <table id="merge-table">
+                <caption>Pull requests merged each week and how many had a review from you beforehand</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Week of</th>
+                    <th scope="col">Merged</th>
+                    <th scope="col">Merged after your review</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </details>
+        </article>
+
+        <div class="stat-row" id="impact-stats"></div>
+
+        <p class="fine-print" id="impact-note"></p>
       </section>
 
-      <section class="metrics-section split-grid" aria-label="Checklist and data coverage">
-        <article class="panel chart-panel">
-          <h2>Description checklist completion</h2>
-          <div id="checklist-metrics" class="compact-stats"></div>
-          <p class="fine-print">This does not assess actual test coverage, implementer interest, or whether a PR is ready to merge.</p>
-        </article>
-        <article class="panel chart-panel">
-          <h2>Sampling coverage</h2>
-          <div id="coverage-metrics" class="compact-stats"></div>
-        </article>
-      </section>
+      <p class="fine-print" id="health-coverage"></p>
     </section>
 
     <section class="view" id="methodology-view" data-view="methodology" hidden>

@@ -51,13 +51,15 @@ The pipeline is a strict one-way chain; keep the layer boundaries intact when ex
 2. [github.py](editor_dashboard/github.py) — `GraphQLClient` (urllib, no HTTP library) plus `fetch_repository_data`, which paginates two queries from [graphql/](graphql/): open PRs via the repository connection, recently closed PRs via `search`. `load_fixture` produces the same `RepositoryData` from JSON, which is how every test and the demo build run.
 3. [models.py](editor_dashboard/models.py) — `PullRequestSnapshot.from_graphql` / `Activity.from_graphql` normalize raw GraphQL nodes: logins lowercased, timestamps parsed to UTC, the `timelineFirst`/`timelineLast` aliases merged and deduplicated. Snapshots are frozen and carry their own sampling-completeness flags.
 4. [analysis.py](editor_dashboard/analysis.py) — the heart. `analyze_pull_request` produces one `PRAnalysis` per PR: lane membership, `Reason` evidence chips, blockers, and the two fingerprints. `build_lanes` produces the per-lane ordering as lists of `owner/repo#number` keys.
-5. [metrics.py](editor_dashboard/metrics.py) — aggregates `PRAnalysis` values into repository-health, flow-window (7/28/90 day), viewer-impact, and sampling-coverage numbers.
+5. [metrics.py](editor_dashboard/metrics.py) — aggregates `PRAnalysis` values into the health view's payload: a twelve-week weekly trend (`trends.points` backlog moments, `trends.buckets` flow), three judged `health.indicators`, the viewer's share of merges and first replies, and sampling coverage.
 6. [build.py](editor_dashboard/build.py) — assembles the `data.json` payload (`schema_version`, lanes, items, metrics, methodology, build metadata), copies `web/*` into the output, writes `.nojekyll`.
 7. [web/app.js](web/app.js) — fetches `data.json`, resolves lane key lists against `items`, and layers browser-local state on top. `checkForFreshData` re-fetches and re-renders in place when a long-lived tab's `generated_at` is older than the 24 h build interval, gated on tab visibility and a throttle; keep the whole render path re-runnable from `applyDashboard`.
 
 [checklist.py](editor_dashboard/checklist.py) sits outside the chain as a leaf called from `analysis.py`: it parses GitHub task-list items out of a PR description while skipping fenced code blocks. PR bodies stay on the in-memory snapshot; `analysis.py` reduces each one to a mention match, a sha256 for the content fingerprint, and a `Checklist`, and only the checklist's counts plus its short labels cross into `data.json`.
 
 Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `new`, `oldest_wait`, `ready_bounded`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four.
+
+Health indicator statuses (`on_track`, `watch`, `off_track`, `unknown`) are decided in `metrics.py` `_status` and only styled in the browser; the page never re-judges a number it was handed.
 
 Two smaller vocabularies cross the Python/browser boundary the same way. Sort orders (`queue`, `checklist`, `unchecked`, `wait`, `updated`, `created`) must agree between `web/app.js` `SORT_ORDERS` and the `<option value>` list in [web/index.html](web/index.html); `test_build.py` pins two of them. A `Reason`'s `tone` becomes a `chip <tone>` class, so it has to be one of the `.chip.*` rules in [web/style.css](web/style.css) (`urgent`, `attention`, `positive`, `warning`, `muted`) — `neutral` is the JS default and is deliberately unstyled.
 
@@ -119,7 +121,13 @@ Consequences to preserve:
 
 **No LLM.** If advisory summaries are ever added, they must stay advisory: they may never decide whether an item disappears, becomes "ready", or outranks a direct request, and they must be cached by content fingerprint.
 
-**Wording is a requirement, not style.** Impact metrics describe event order, never causation — "PRs merged after your review", never "PRs you caused to merge" (`test_metrics.py` guards this). Likewise the task list is a *description checklist* and never "requirements complete": it says the author ticked boxes, nothing about test sufficiency, implementer interest, or merge readiness.
+**The health view is a trend, not a scoreboard.** It replaced a page of counts, distributions and 7/28/90-day tables that could not answer "is this good, and is it improving". What it publishes now is deliberately small: three indicators, each with a direction that is good, a change across the window, and a line chart; then the viewer's share of the work. Adding a number back means answering what decision it changes.
+
+Two properties hold it up. The weekly backlog is *reconstructed* from the current sample rather than stored between builds — every open PR plus every PR closed inside `history_days` is present, so "how many were open at time t" is exact for any t in the twelve-week window; the window stops short of `history_days` for exactly that reason. And the newest weekly bucket never counts toward the first-response rate (`first_response_mature`), because a PR opened three days ago cannot yet have missed a seven-day target, and counting it would report the calendar as a failure.
+
+Count line charts use a focused y-range rather than a zero baseline: a backlog moving 257 → 283 is a flat line against zero, which is the reading the view exists to correct. The tick labels always state where the axis starts. The columns chart, where length encodes the value, keeps its zero baseline.
+
+**Wording is a requirement, not style.** Impact metrics describe event order, never causation — "PRs merged after your review", never "PRs you caused to merge" (`test_metrics.py` guards this). Merged PRs the viewer authored are excluded from the review share rather than counted as misses, since an author cannot review their own PR. Likewise the task list is a *description checklist* and never "requirements complete": it says the author ticked boxes, nothing about test sufficiency, implementer interest, or merge readiness.
 
 **All GitHub-derived text is untrusted.** PR titles, bodies, logins, and comments can contain deliberate HTML or script-like content; they reach the page only as text nodes.
 

@@ -15,6 +15,9 @@ editors:
 response_targets:
   initial_editor_response_days: 7
   highlight_new_hours: 48
+  # Health target: the share of contributor PRs that get a first editor response
+  # inside initial_editor_response_days.
+  first_response_within_target_percent: 80
 
 attention:
   # How recently a PR must have changed to count as "active now", and how long a

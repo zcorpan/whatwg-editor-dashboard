@@ -22,6 +22,9 @@ class RepositoryConfig:
 class ResponseTargets:
     initial_editor_response_days: int = 7
     highlight_new_hours: int = 48
+    # The share of contributor PRs that should get their first editor response inside
+    # the target. The health view reads a rate below this as off target.
+    first_response_within_target_percent: int = 80
 
 
 @dataclass(frozen=True)
@@ -114,6 +117,11 @@ def load_config(path: str | Path) -> DashboardConfig:
         highlight_new_hours=_positive_int(
             targets_raw.get("highlight_new_hours", 48),
             "response_targets.highlight_new_hours",
+        ),
+        first_response_within_target_percent=_positive_int(
+            targets_raw.get("first_response_within_target_percent", 80),
+            "response_targets.first_response_within_target_percent",
+            maximum=100,
         ),
     )
 

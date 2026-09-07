@@ -72,7 +72,11 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
             "review_threads": (
                 f"The first {config.sampling.review_threads} review threads are sampled for unresolved-thread detection."
             ),
-            "history": f"Flow and impact metrics use the latest {config.sampling.history_days} days of closed PRs.",
+            "history": (
+                f"Closed PRs are fetched for the latest {config.sampling.history_days} days. The health "
+                "view reconstructs its weekly trend from a twelve-week window inside that, where every "
+                "close is known and the backlog at each week can be counted exactly."
+            ),
         },
         "known_limitations": [
             "GitHub notification unread state is not fetched; the browser shows locally unseen public attention signals instead.",
@@ -95,6 +99,11 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
                 "fingerprinted, so an edit to an older one is not detected."
             ),
             "The configured current editor list is applied to the full sampled history; historical editor-membership changes are not reconstructed.",
+            (
+                "The weekly trend replays today's PR data at past moments. Draft state, authorship and "
+                "editor membership are taken as they are now, so a PR that left draft during the window "
+                "counts across the whole of it."
+            ),
             "A PR description edit is attributed to the PR author because the sampled API data does not identify who edited the description.",
             "First-response clocks use PR creation time for non-draft PRs; this MVP does not reconstruct when a formerly draft PR became ready for review.",
             "A ready-and-bounded result is a prioritization hint, not a merge recommendation.",
