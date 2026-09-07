@@ -1,0 +1,19 @@
+# GitHub computes mergeability lazily: the first query for a pull request answers
+# UNKNOWN and only schedules the real value. This re-asks for the pull requests that
+# answered UNKNOWN, by node id, once GitHub has had time to compute them.
+query PullRequestMergeability($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on PullRequest {
+      id
+      number
+      mergeable
+      mergeStateStatus
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}

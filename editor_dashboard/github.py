@@ -304,12 +304,90 @@ def _read_query(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+# GitHub computes mergeability lazily: the first query for a pull request answers UNKNOWN
+# and only schedules the real value. A cold build read UNKNOWN for 259 of its 277 open PRs,
+# which left `ready_bounded` — it requires MERGEABLE — reporting 15 candidates where 133
+# were actually mergeable; the next build 55 minutes later, reading GitHub's now-warm
+# answers, saw only one still unknown. The closed-PR search runs between the first read and
+# these retries, so GitHub has already had several seconds to compute by the first one.
+_MERGEABILITY_BATCH_SIZE = 100
+# Asking is what schedules the computation, so the rounds get further apart: after a cold
+# build queued a few hundred of them, a later query an hour on had every answer. A daily
+# build can afford the worst case of just under a minute of waiting; whatever is still
+# unknown after that is reported rather than waited on.
+_MERGEABILITY_RETRY_DELAYS = (0.0, 3.0, 8.0, 15.0, 30.0)
+
+
+def _resolve_unknown_mergeability(
+    graphql: GraphQLClient,
+    nodes: list[dict[str, Any]],
+    metadata: FetchMetadata,
+    *,
+    sleep: Callable[[float], None],
+) -> None:
+    """Re-ask for the pull requests whose mergeability GitHub has not computed yet.
+
+    Nodes are patched in place. A pull request that stays UNKNOWN keeps its
+    'Mergeability unknown' blocker and is reported in ``metadata.warnings`` rather
+    than being guessed at.
+    """
+    by_id = {
+        node["id"]: node
+        for node in nodes
+        if node.get("id") and (node.get("mergeable") or "UNKNOWN") == "UNKNOWN"
+    }
+    if not by_id:
+        return
+
+    query = _read_query("pull_request_mergeability.graphql")
+    pending = list(by_id)
+    unknown_at_first_read = len(pending)
+    for delay in _MERGEABILITY_RETRY_DELAYS:
+        if not pending:
+            break
+        if delay:
+            sleep(delay)
+        still_unknown: list[str] = []
+        for start in range(0, len(pending), _MERGEABILITY_BATCH_SIZE):
+            batch = pending[start : start + _MERGEABILITY_BATCH_SIZE]
+            data = graphql.execute(query, {"ids": batch})
+            metadata.record_rate_limit(data.get("rateLimit"))
+            answers = {
+                value["id"]: value
+                for value in (data.get("nodes") or [])
+                if value and value.get("id")
+            }
+            for identifier in batch:
+                value = answers.get(identifier)
+                if value is None:
+                    still_unknown.append(identifier)
+                    continue
+                node = by_id[identifier]
+                node["mergeable"] = value.get("mergeable")
+                node["mergeStateStatus"] = value.get("mergeStateStatus")
+                if (node.get("mergeable") or "UNKNOWN") == "UNKNOWN":
+                    still_unknown.append(identifier)
+        pending = still_unknown
+
+    LOGGER.info(
+        "Resolved mergeability for %d of %d pull requests GitHub first answered UNKNOWN for",
+        unknown_at_first_read - len(pending),
+        unknown_at_first_read,
+    )
+    if pending:
+        metadata.warnings.append(
+            f"GitHub still answered UNKNOWN for the mergeability of {len(pending)} pull request"
+            f"{'s' if len(pending) != 1 else ''} after retrying; they cannot enter the ready lane."
+        )
+
+
 def fetch_repository_data(
     config: DashboardConfig,
     token: str,
     *,
     now: datetime | None = None,
     client: GraphQLClient | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> RepositoryData:
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     graphql = client or GraphQLClient(token)
@@ -409,6 +487,15 @@ def fetch_repository_data(
             f"PRs changed from open to closed during the build; using the later closed snapshot: {joined}."
         )
         open_nodes = [node for node in open_nodes if int(node["number"]) not in closed_numbers]
+
+    # Last, so that the closed-PR search has already given GitHub time to compute, and so
+    # that PRs which closed during the build are no longer in the list.
+    try:
+        _resolve_unknown_mergeability(graphql, open_nodes, metadata, sleep=sleep)
+    except GitHubAPIError as error:
+        # Mergeability is a refinement of an otherwise complete build; a failure here
+        # leaves the affected PRs marked unknown instead of discarding everything.
+        metadata.warnings.append(f"Could not re-check unknown mergeability: {error}")
 
     metadata.request_attempts = int(getattr(graphql, "request_attempts", metadata.query_count))
     metadata.retry_count = int(getattr(graphql, "retry_count", 0))

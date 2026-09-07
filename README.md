@@ -139,6 +139,8 @@ The Python builder uses GitHub's GraphQL API and paginates open PRs and recently
 
 Only derived public data is written to `site/data.json`; raw PR bodies and comment/review bodies are not published by the dashboard build.
 
+GitHub computes mergeability lazily, answering `UNKNOWN` to a cold query and only scheduling the real value, so a build that trusts the first answer reports almost nothing as mergeable. After the closed-PR search — which gives GitHub several seconds of computing time — the builder re-asks for the PRs that answered `UNKNOWN`, by node id, in rounds that back off up to just under a minute in total. Anything still unknown keeps its “Mergeability unknown” marker and is counted in the build warnings rather than guessed at.
+
 The outer GraphQL page defaults to 10 PRs because every PR includes several nested connections. GitHub documents HTTP 502 and 504 responses from the GraphQL endpoint as request timeouts. When either occurs, the client retries with exponential backoff, halves the outer page size, and retains that smaller size for the rest of the build. Other transient 5xx and network failures are retried without changing the page size.
 
 The build logs successful GraphQL query count, total request attempts, retries, query cost, remaining quota, and the effective outer page size. Sampling limits are configurable, but increasing the outer page or nested connection sizes increases server work and makes timeouts more likely.

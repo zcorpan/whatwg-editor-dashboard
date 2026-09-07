@@ -9,7 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from editor_dashboard.config import load_config
-from editor_dashboard.github import GraphQLClient, GitHubAPIError, fetch_repository_data
+from editor_dashboard.github import (
+    _MERGEABILITY_RETRY_DELAYS,
+    GraphQLClient,
+    GitHubAPIError,
+    fetch_repository_data,
+)
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -17,9 +22,15 @@ NOW = datetime(2026, 8, 3, 12, tzinfo=timezone.utc)
 
 
 class FakeClient:
-    def __init__(self, open_responses: list[dict[str, Any]], closed_responses: list[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        open_responses: list[dict[str, Any]],
+        closed_responses: list[dict[str, Any]],
+        mergeability_responses: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.open_responses = iter(open_responses)
         self.closed_responses = iter(closed_responses)
+        self.mergeability_responses = iter(mergeability_responses or [])
         self.calls: list[dict[str, Any]] = []
 
     def execute(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
@@ -28,6 +39,8 @@ class FakeClient:
             return next(self.open_responses)
         if "query RecentClosedPullRequests" in query:
             return next(self.closed_responses)
+        if "query PullRequestMergeability" in query:
+            return next(self.mergeability_responses)
         raise AssertionError("Unexpected GraphQL query")
 
 
@@ -190,6 +203,79 @@ class GitHubFetchTests(unittest.TestCase):
         self.assertTrue(all(call["pageSize"] == 10 for call in client.calls))
         self.assertTrue(any("Deduplicated open" in warning for warning in data.metadata.warnings))
         self.assertTrue(any("changed from open to closed" in warning for warning in data.metadata.warnings))
+
+
+    def _open_page(self, nodes: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            "repository": {
+                "pullRequests": {
+                    "totalCount": len(nodes),
+                    "nodes": nodes,
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            },
+            "rateLimit": rate_limit(10),
+        }
+
+    def _empty_closed_page(self) -> dict[str, Any]:
+        return {
+            "search": {
+                "issueCount": 0,
+                "nodes": [],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            },
+            "rateLimit": rate_limit(1),
+        }
+
+    def test_unknown_mergeability_is_re_asked_rather_than_published(self) -> None:
+        """Regression: GitHub answers UNKNOWN to a cold mergeability query.
+
+        A build that trusts the first answer reports almost every PR as unmergeable,
+        which empties the ready lane.
+        """
+        unknown = {**self.fixture["open_pull_requests"][0], "id": "PR_1", "mergeable": "UNKNOWN"}
+        settled = {**self.fixture["open_pull_requests"][1], "id": "PR_2", "mergeable": "CONFLICTING"}
+        delays: list[float] = []
+
+        client = FakeClient(
+            open_responses=[self._open_page([unknown, settled])],
+            closed_responses=[self._empty_closed_page()],
+            mergeability_responses=[
+                {
+                    "nodes": [{"id": "PR_1", "number": unknown["number"], "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}],
+                    "rateLimit": rate_limit(1),
+                }
+            ],
+        )
+
+        data = fetch_repository_data(self.config, "unused", now=NOW, client=client, sleep=delays.append)
+
+        by_number = {pr.number: pr for pr in data.open_pull_requests}
+        self.assertEqual(by_number[int(unknown["number"])].mergeable, "MERGEABLE")
+        # Only the unknown one is re-asked, and no retry delay is needed once it answers.
+        self.assertEqual([call.get("ids") for call in client.calls if "ids" in call], [["PR_1"]])
+        self.assertEqual(delays, [])
+        self.assertEqual(data.metadata.warnings, [])
+
+    def test_mergeability_that_stays_unknown_is_reported_not_guessed(self) -> None:
+        unknown = {**self.fixture["open_pull_requests"][0], "id": "PR_1", "mergeable": "UNKNOWN"}
+        delays: list[float] = []
+        answer = {
+            "nodes": [{"id": "PR_1", "number": unknown["number"], "mergeable": "UNKNOWN", "mergeStateStatus": "UNKNOWN"}],
+            "rateLimit": rate_limit(1),
+        }
+
+        client = FakeClient(
+            open_responses=[self._open_page([unknown])],
+            closed_responses=[self._empty_closed_page()],
+            mergeability_responses=[answer] * len(_MERGEABILITY_RETRY_DELAYS),
+        )
+
+        data = fetch_repository_data(self.config, "unused", now=NOW, client=client, sleep=delays.append)
+
+        self.assertEqual(data.open_pull_requests[0].mergeable, "UNKNOWN")
+        self.assertEqual(delays, [delay for delay in _MERGEABILITY_RETRY_DELAYS if delay])
+        self.assertTrue(any("still answered UNKNOWN" in warning for warning in data.metadata.warnings))
 
 
 if __name__ == "__main__":

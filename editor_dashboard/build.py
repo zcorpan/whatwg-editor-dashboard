@@ -69,6 +69,11 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
             "viewer_reviews": (
                 f"The latest {config.sampling.viewer_reviews} reviews by @{config.viewer} are sampled per PR."
             ),
+            "mergeability": (
+                "GitHub computes mergeability lazily and answers UNKNOWN to a cold query, so the "
+                "build re-asks for those pull requests once GitHub has had time to compute. Any "
+                "that stay unknown are shown as unknown rather than guessed at."
+            ),
             "review_threads": (
                 f"The first {config.sampling.review_threads} review threads are sampled for unresolved-thread detection."
             ),
