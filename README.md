@@ -16,13 +16,16 @@ The review dashboard contains these explainable lanes:
 2. **Direct requests** — current review requests and assignments, plus sampled public `@zcorpan` mentions inside the activity window.
 3. **Stale mentions** — mentions older than the activity window, kept findable without leading the queue.
 4. **Re-review owed** — a head commit, PR description, or sampled author activity changed after the latest sampled `@zcorpan` review.
-5. **First response** — non-draft contributor PRs that have never received a sampled editor response, oldest first, escalating once past the seven-day target.
-6. **Longest waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
-7. **Ready** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
+5. **Reply window open** — non-draft contributor PRs that have never received a sampled editor response and are still inside the seven-day target, closest to the deadline first. The only PRs where a first reply can still meet the target.
+6. **First reply overdue** — the same population past the target, oldest first. A PR that misses the target moves here rather than leaving the pair.
+7. **Longest waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
+8. **Ready** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
 
-“Suggested next” shows the whole **Active now** lane first, then interleaves re-review, awaiting-first-response, oldest-wait, ready/bounded, and stale-direct candidates. The cycle is configurable in `dashboard.yml`. The current lane can also be sorted by checklist completion, unchecked-box count, contributor wait, update time, or age.
+“Suggested next” shows up to three **Reply window open** PRs, then the whole **Active now** lane, then interleaves re-review, overdue-first-reply, oldest-wait, ready/bounded, and stale-direct candidates. Overdue PRs are not in the lead because a missed target cannot be un-missed: replying still matters to the contributor, but it can no longer change the first-response rate. Both the lead size and the cycle are configurable in `dashboard.yml`. The current lane can also be sorted by checklist completion, unchecked-box count, contributor wait, update time, or age.
 
 The queue leads with recent activity rather than with the oldest claim on the editor's attention. On a backlog where most PRs have not moved in years, age is a poor proxy for actionability: sorting direct requests oldest-first put a mention from 2016 at the top of the list and pushed the week's live reviews to the bottom. A review request or assignment keeps claiming attention until GitHub clears it on review, but a mention expires out of the direct lane once it leaves the activity window.
+
+The reply-window lead is the deliberate exception. It is not an age ordering but a deadline ordering, and it is bounded — three by default, zero to disable — precisely so it cannot recreate the problem that putting recent activity first solved.
 
 Every card exposes the evidence and detected limitations behind its classification. No LLM is used.
 
@@ -123,7 +126,7 @@ A persistent failure at page size 1 is more likely to be a wider GitHub API inci
 - ready/bounded diff and checklist thresholds (the HTML MVP defaults to all boxes checked);
 - labels treated as blockers;
 - the outer GraphQL page size, nested sampling sizes, and historical window;
-- suggested-next interleaving order.
+- suggested-next lead size and interleaving order.
 
 The current editor list is deliberately explicit. Update it when the HTML editor group changes, because it affects response-time and waiting-on-editor metrics.
 

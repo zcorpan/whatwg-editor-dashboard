@@ -141,6 +141,13 @@ def _hours_between(start: datetime, end: datetime) -> float:
     return max(0.0, (end - start).total_seconds() / 3600)
 
 
+def _response_target_hours(config: DashboardConfig) -> float:
+    # One source for the boundary that splits `reply_window` from `overdue` and
+    # picks between the `new-untriaged` and `first-response-overdue` chips. The two
+    # must never disagree about which side of the target a PR is on.
+    return config.response_targets.initial_editor_response_days * 24
+
+
 def _max_datetime(values: Iterable[datetime | None]) -> datetime | None:
     present = [value for value in values if value is not None]
     return max(present) if present else None
@@ -534,18 +541,23 @@ def analyze_pull_request(
 
     ready_bounded, positive_reasons, blockers = _ready_and_blockers(pr, checklist, config)
     age_hours = _hours_between(pr.created_at, now)
-    target_hours = config.response_targets.initial_editor_response_days * 24
+    target_hours = _response_target_hours(config)
 
-    # "Never received a first editor response" — deliberately unbounded by age. The
-    # previous seven-day cap removed a PR from this lane on the very day it missed
-    # the response target, so the lane could only ever show successes in progress.
-    is_new = bool(
+    # "Never received a first editor response", split on the response target into two
+    # lanes with opposite meanings: inside the target a reply can still meet it, past
+    # it the outcome is already fixed. The pair is deliberately unbounded by age — an
+    # earlier seven-day cap dropped a PR on the very day it missed the target, so the
+    # lane could only ever show successes in progress. Now it moves rather than
+    # disappears.
+    never_answered = bool(
         not pr.is_draft
         and pr.author not in config.editors
         and not is_bot(pr.author)
         and first_editor is None
         and first_response_known
     )
+    in_reply_window = never_answered and age_hours <= target_hours
+    first_response_overdue = never_answered and age_hours > target_hours
     oldest_wait = bool(waiting_on_editor and not pr.is_draft)
 
     # Recency is the primary axis: the top of the queue answers "which reviews am I
@@ -563,8 +575,10 @@ def analyze_pull_request(
         lanes.append("stale_direct")
     if rereview_reasons:
         lanes.append("rereview")
-    if is_new:
-        lanes.append("new")
+    if in_reply_window:
+        lanes.append("reply_window")
+    if first_response_overdue:
+        lanes.append("overdue")
     if oldest_wait:
         lanes.append("oldest_wait")
     if ready_bounded:
@@ -582,28 +596,28 @@ def analyze_pull_request(
             )
         )
     reasons.extend((*direct_reasons, *expired_direct_reasons, *rereview_reasons))
-    if is_new:
-        if age_hours > target_hours:
-            reasons.append(
-                Reason(
-                    "first-response-overdue",
-                    "First editor response overdue",
-                    detail=f"{age_hours / 24:.1f} days open",
-                    timestamp=pr.created_at,
-                    tone="urgent",
-                )
+    if first_response_overdue:
+        reasons.append(
+            Reason(
+                "first-response-overdue",
+                "First editor response overdue",
+                detail=f"{age_hours / 24:.1f} days open",
+                timestamp=pr.created_at,
+                tone="urgent",
             )
-        else:
-            tone = "positive" if age_hours <= config.response_targets.highlight_new_hours else "attention"
-            reasons.append(
-                Reason(
-                    "new-untriaged",
-                    "Awaiting a first editor response",
-                    detail=f"target {config.response_targets.initial_editor_response_days} days",
-                    timestamp=pr.created_at,
-                    tone=tone,
-                )
+        )
+    elif in_reply_window:
+        tone = "positive" if age_hours <= config.response_targets.highlight_new_hours else "attention"
+        reasons.append(
+            Reason(
+                "new-untriaged",
+                "Awaiting a first editor response",
+                detail=f"{(target_hours - age_hours) / 24:.1f} days left of the "
+                f"{config.response_targets.initial_editor_response_days}-day target",
+                timestamp=pr.created_at,
+                tone=tone,
             )
+        )
     if oldest_wait and current_wait_hours is not None:
         days = current_wait_hours / 24
         reasons.append(
@@ -752,8 +766,10 @@ def build_lanes(analyses: Iterable[PRAnalysis], repository_slug: str) -> dict[st
         return f"{repository_slug}#{analysis.pr.number}"
 
     # Newest first for the attention lanes: on a decade-old backlog, age is a poor
-    # proxy for actionability. `oldest_wait` and `new` keep oldest-first ordering
-    # because fairness to waiting contributors is exactly what they measure.
+    # proxy for actionability. `oldest_wait`, `reply_window` and `overdue` keep
+    # oldest-first ordering because fairness to waiting contributors is exactly what
+    # they measure. For `reply_window` that ordering is deadline proximity, which
+    # coincides with oldest-first only because every member shares one target.
     active = sorted(
         (analysis for analysis in values if "active" in analysis.lanes),
         key=lambda analysis: (analysis.pr.updated_at, analysis.pr.number),
@@ -774,8 +790,12 @@ def build_lanes(analyses: Iterable[PRAnalysis], repository_slug: str) -> dict[st
         key=lambda analysis: (analysis.rereview_trigger_at or analysis.pr.updated_at, analysis.pr.number),
         reverse=True,
     )
-    new = sorted(
-        (analysis for analysis in values if "new" in analysis.lanes),
+    reply_window = sorted(
+        (analysis for analysis in values if "reply_window" in analysis.lanes),
+        key=lambda analysis: (analysis.pr.created_at, analysis.pr.number),
+    )
+    overdue = sorted(
+        (analysis for analysis in values if "overdue" in analysis.lanes),
         key=lambda analysis: (analysis.pr.created_at, analysis.pr.number),
     )
     oldest_wait = sorted(
@@ -793,7 +813,8 @@ def build_lanes(analyses: Iterable[PRAnalysis], repository_slug: str) -> dict[st
         "direct": [key(value) for value in direct],
         "stale_direct": [key(value) for value in stale_direct],
         "rereview": [key(value) for value in rereview],
-        "new": [key(value) for value in new],
+        "reply_window": [key(value) for value in reply_window],
+        "overdue": [key(value) for value in overdue],
         "oldest_wait": [key(value) for value in oldest_wait],
         "ready_bounded": [key(value) for value in ready],
         "all": [key(value) for value in all_items],

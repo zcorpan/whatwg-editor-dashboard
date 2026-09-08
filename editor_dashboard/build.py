@@ -30,9 +30,13 @@ LANE_DESCRIPTIONS = {
         "title": "Re-review owed",
         "description": "The PR changed or the author replied after the editor's latest sampled review.",
     },
-    "new": {
-        "title": "First response",
-        "description": "Non-draft contributor PRs that have never received a sampled editor response, oldest first.",
+    "reply_window": {
+        "title": "Reply window open",
+        "description": "Non-draft contributor PRs that have never received a sampled editor response and are still inside the response target, closest to the deadline first. The only ones where a first reply can still meet the target.",
+    },
+    "overdue": {
+        "title": "First reply overdue",
+        "description": "Non-draft contributor PRs that have never received a sampled editor response and are past the response target, oldest first.",
     },
     "oldest_wait": {
         "title": "Longest waits",
@@ -49,14 +53,26 @@ LANE_DESCRIPTIONS = {
 }
 
 
+def _queue_order_principle(config: DashboardConfig) -> str:
+    lead = config.suggested_next.first_response_lead
+    recency = (
+        "The queue leads with recent activity on PRs the editor is already involved in. "
+        f"'Recent' means the latest {config.attention.activity_window_days} days."
+    )
+    if not lead:
+        return recency
+    return (
+        f"Up to {lead} contributor PRs that have never had an editor reply and are still inside the "
+        f"{config.response_targets.initial_editor_response_days}-day target come first, closest to the "
+        "deadline first, because those are the only ones where a reply can still meet it. " + recency
+    )
+
+
 def _methodology(config: DashboardConfig) -> dict[str, Any]:
     return {
         "principles": [
             "No LLM is used. Every classification is produced by deterministic, inspectable rules.",
-            (
-                "The queue leads with recent activity on PRs the editor is already involved in. "
-                f"'Recent' means the latest {config.attention.activity_window_days} days."
-            ),
+            _queue_order_principle(config),
             "The generated site contains public GitHub data only.",
             "Seen, addressed, pinned, snoozed, and opened state is stored only in the browser.",
             "Description checklist completion is descriptive and is not an assessment of test sufficiency or specification readiness.",
@@ -168,6 +184,7 @@ def build_site(
         "suggested_next": {
             "active": "all",
             "cycle": list(config.suggested_next.cycle),
+            "first_response_lead": config.suggested_next.first_response_lead,
         },
         "lane_descriptions": LANE_DESCRIPTIONS,
         "lanes": lanes,

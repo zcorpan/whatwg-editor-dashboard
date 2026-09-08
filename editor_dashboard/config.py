@@ -6,7 +6,10 @@ from typing import Any
 
 import yaml
 
-_ALLOWED_SUGGESTED_LANES = {"rereview", "new", "oldest_wait", "ready_bounded", "stale_direct"}
+# `active`, `direct`, `reply_window` and `all` are deliberately absent: each has a
+# fixed position in the suggested queue, so letting the cycle claim one too would
+# give a single concept two competing mechanisms.
+_ALLOWED_SUGGESTED_LANES = {"rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct"}
 
 @dataclass(frozen=True)
 class RepositoryConfig:
@@ -55,7 +58,12 @@ class SamplingConfig:
 
 @dataclass(frozen=True)
 class SuggestedNextConfig:
-    cycle: tuple[str, ...] = ("rereview", "new", "oldest_wait", "ready_bounded")
+    cycle: tuple[str, ...] = ("rereview", "overdue", "oldest_wait", "ready_bounded")
+    # How many `reply_window` PRs lead the queue, ahead of the active lane. These are
+    # the only PRs where a first reply can still land inside the response target, so
+    # they get the top slots; the bound keeps incoming work from burying live reviews.
+    # Zero disables the lead without hiding the lane.
+    first_response_lead: int = 3
 
 
 @dataclass(frozen=True)
@@ -81,6 +89,15 @@ def _positive_int(value: Any, name: str, *, maximum: int | None = None) -> int:
     result = int(value)
     if result <= 0:
         raise ValueError(f"{name} must be positive")
+    if maximum is not None and result > maximum:
+        raise ValueError(f"{name} must be at most {maximum}")
+    return result
+
+
+def _non_negative_int(value: Any, name: str, *, maximum: int | None = None) -> int:
+    result = int(value)
+    if result < 0:
+        raise ValueError(f"{name} must not be negative")
     if maximum is not None and result > maximum:
         raise ValueError(f"{name} must be at most {maximum}")
     return result
@@ -178,7 +195,7 @@ def load_config(path: str | Path) -> DashboardConfig:
     )
 
     suggested_raw = _mapping(raw.get("suggested_next", {}), "suggested_next")
-    cycle_raw = suggested_raw.get("cycle", ["rereview", "new", "oldest_wait", "ready_bounded"])
+    cycle_raw = suggested_raw.get("cycle", ["rereview", "overdue", "oldest_wait", "ready_bounded"])
     if not isinstance(cycle_raw, list) or not cycle_raw:
         raise ValueError("suggested_next.cycle must be a non-empty list")
     cycle = tuple(str(value).strip() for value in cycle_raw)
@@ -187,6 +204,11 @@ def load_config(path: str | Path) -> DashboardConfig:
         raise ValueError(f"suggested_next.cycle contains unknown lanes: {', '.join(unknown_lanes)}")
     if len(cycle) != len(set(cycle)):
         raise ValueError("suggested_next.cycle must not contain duplicate lanes")
+    first_response_lead = _non_negative_int(
+        suggested_raw.get("first_response_lead", 3),
+        "suggested_next.first_response_lead",
+        maximum=10,
+    )
 
     blocking_labels_raw = raw.get("blocking_labels", [])
     if not isinstance(blocking_labels_raw, list):
@@ -201,5 +223,5 @@ def load_config(path: str | Path) -> DashboardConfig:
         ready_bounded=bounded,
         blocking_labels=frozenset(str(value).strip().lower() for value in blocking_labels_raw if str(value).strip()),
         sampling=sampling,
-        suggested_next=SuggestedNextConfig(cycle),
+        suggested_next=SuggestedNextConfig(cycle, first_response_lead),
     )

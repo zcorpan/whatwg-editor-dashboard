@@ -45,6 +45,32 @@ class BuildTests(unittest.TestCase):
             self.assertNotIn("comments", set(all_keys(payload)))
             self.assertEqual(loaded["viewer"]["login"], "zcorpan")
 
+    def test_publishes_the_queue_lead_and_both_first_response_lanes(self) -> None:
+        config = load_config(ROOT / "dashboard.yml")
+        repository_data = load_fixture(ROOT / "fixtures" / "sample_api_data.json")
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            payload = build_site(config, repository_data, output_dir=output, now=NOW)
+
+        self.assertEqual(
+            payload["suggested_next"],
+            {
+                "active": "all",
+                "cycle": ["rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct"],
+                "first_response_lead": 3,
+            },
+        )
+        self.assertIn("reply_window", payload["lane_descriptions"])
+        self.assertIn("overdue", payload["lane_descriptions"])
+
+        # The browser resolves the lead against `items`, so every key has to be there.
+        item_keys = {item["key"] for item in payload["items"]}
+        self.assertEqual(payload["lanes"]["reply_window"], ["whatwg/html#13001", "whatwg/html#13003"])
+        self.assertTrue(set(payload["lanes"]["reply_window"]) <= item_keys)
+
+        principles = " ".join(payload["methodology"]["principles"])
+        self.assertIn("still inside the 7-day target", principles)
+
     def test_frontend_avoids_dynamic_inner_html(self) -> None:
         javascript = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
         self.assertNotIn("innerHTML", javascript)

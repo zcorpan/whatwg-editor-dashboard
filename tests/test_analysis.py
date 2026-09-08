@@ -29,7 +29,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertIn("direct", self.by_number[13001].lanes)
         self.assertIn("direct", self.by_number[13008].lanes)
         self.assertIn("rereview", self.by_number[13002].lanes)
-        self.assertIn("new", self.by_number[13003].lanes)
+        self.assertIn("reply_window", self.by_number[13003].lanes)
         self.assertIn("oldest_wait", self.by_number[12900].lanes)
         self.assertIn("ready_bounded", self.by_number[13004].lanes)
         self.assertNotIn("ready_bounded", self.by_number[13006].lanes)
@@ -76,13 +76,74 @@ class AnalysisTests(unittest.TestCase):
         # The freshest signal represents the PR, not the 2026-01-10 mention.
         self.assertEqual(analysis.direct_request_at, requested.updated_at)
 
-    def test_new_lane_keeps_prs_that_missed_the_response_target(self) -> None:
+    def test_missing_the_response_target_moves_a_pr_rather_than_dropping_it(self) -> None:
         # #12900 opened 2026-03-01, far beyond the seven-day target, and no editor
-        # has ever responded. The old seven-day cap dropped exactly these.
+        # has ever responded. An old seven-day cap dropped exactly these; now they
+        # leave `reply_window` for `overdue` instead of leaving the pair entirely.
         analysis = self.by_number[12900]
-        self.assertIn("new", analysis.lanes)
+        self.assertIn("overdue", analysis.lanes)
+        self.assertNotIn("reply_window", analysis.lanes)
         self.assertGreater(analysis.age_hours, self.config.response_targets.initial_editor_response_days * 24)
         self.assertIn("first-response-overdue", {reason.code for reason in analysis.reasons})
+
+    def test_reply_window_holds_the_savable_prs_closest_to_the_deadline_first(self) -> None:
+        # The only PRs where a first reply can still land inside the target, so these
+        # lead the suggested queue. #13001 (5.1 days) is nearer its deadline than
+        # #13003 (1.2 days), and is deliberately also in `active`.
+        lanes = build_lanes(self.analyses, self.config.repository.slug)
+        self.assertEqual(lanes["reply_window"], ["whatwg/html#13001", "whatwg/html#13003"])
+        self.assertEqual(
+            lanes["overdue"],
+            [
+                "whatwg/html#13011",
+                "whatwg/html#12900",
+                "whatwg/html#13006",
+                "whatwg/html#13008",
+            ],
+        )
+        self.assertIn("whatwg/html#13001", lanes["active"])
+
+    def test_reply_window_and_overdue_partition_the_unanswered_prs(self) -> None:
+        lanes = build_lanes(self.analyses, self.config.repository.slug)
+        self.assertEqual(set(lanes["reply_window"]) & set(lanes["overdue"]), set())
+        unanswered = {
+            f"{self.config.repository.slug}#{analysis.pr.number}"
+            for analysis in self.analyses
+            if not analysis.pr.is_draft
+            and analysis.pr.author not in self.config.editors
+            and analysis.first_editor_response is None
+            and analysis.first_editor_response_known
+        }
+        self.assertEqual(set(lanes["reply_window"]) | set(lanes["overdue"]), unanswered)
+
+    def test_the_lane_split_and_the_overdue_chip_agree_on_the_boundary(self) -> None:
+        # Both read _response_target_hours; this pins them to the same instant so a
+        # PR can never sit in `reply_window` while showing the overdue chip.
+        target = timedelta(days=self.config.response_targets.initial_editor_response_days)
+
+        at_target = analyze_pull_request(
+            replace(self.by_number[13003].pr, created_at=NOW - target),
+            self.config,
+            now=NOW,
+        )
+        self.assertIn("reply_window", at_target.lanes)
+        self.assertIn("new-untriaged", {reason.code for reason in at_target.reasons})
+
+        past_target = analyze_pull_request(
+            replace(self.by_number[13003].pr, created_at=NOW - target - timedelta(hours=1)),
+            self.config,
+            now=NOW,
+        )
+        self.assertIn("overdue", past_target.lanes)
+        self.assertIn("first-response-overdue", {reason.code for reason in past_target.reasons})
+
+    def test_recent_drafts_are_in_neither_first_response_lane(self) -> None:
+        # #13005 is four days old with no editor response, but a draft is not yet
+        # asking for one, so it must not take a lead slot.
+        analysis = self.by_number[13005]
+        self.assertTrue(analysis.pr.is_draft)
+        self.assertNotIn("reply_window", analysis.lanes)
+        self.assertNotIn("overdue", analysis.lanes)
 
     def test_first_time_contributor_detected_without_association(self) -> None:
         self.assertTrue(self.by_number[13011].first_time_contributor)
@@ -98,7 +159,8 @@ class AnalysisTests(unittest.TestCase):
         analysis = self.by_number[13010]
         self.assertFalse(analysis.first_editor_response_known)
         self.assertIsNone(analysis.first_editor_response)
-        self.assertNotIn("new", analysis.lanes)
+        self.assertNotIn("reply_window", analysis.lanes)
+        self.assertNotIn("overdue", analysis.lanes)
 
     def test_ready_bounded_requires_a_description_checklist(self) -> None:
         original = self.by_number[13004]

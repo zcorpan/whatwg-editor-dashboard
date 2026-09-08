@@ -47,11 +47,16 @@ sampling:
   history_days: 90
 
 suggested_next:
-  # Everything in the "active now" lane is shown first, newest activity first.
+  # Contributor PRs that have never had an editor reply and are still inside
+  # response_targets.initial_editor_response_days lead the queue, closest to the
+  # deadline first: they are the only ones where a reply can still meet the target.
+  # 0 disables the lead; the lane stays browsable either way.
+  first_response_lead: 3
+  # Then everything in the "active now" lane, newest activity first.
   # Remaining lanes are interleaved so the backlog cannot be starved by new work.
   cycle:
     - rereview
-    - new
+    - overdue
     - oldest_wait
     - ready_bounded
     - stale_direct

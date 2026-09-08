@@ -57,7 +57,7 @@ The pipeline is a strict one-way chain; keep the layer boundaries intact when ex
 
 [checklist.py](editor_dashboard/checklist.py) sits outside the chain as a leaf called from `analysis.py`: it parses GitHub task-list items out of a PR description while skipping fenced code blocks. PR bodies stay on the in-memory snapshot; `analysis.py` reduces each one to a mention match, a sha256 for the content fingerprint, and a `Checklist`, and only the checklist's counts plus its short labels cross into `data.json`.
 
-Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `new`, `oldest_wait`, `ready_bounded`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four.
+Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `reply_window`, `overdue`, `oldest_wait`, `ready_bounded`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four.
 
 Health indicator statuses (`on_track`, `watch`, `off_track`, `unknown`) are decided in `metrics.py` `_status` and only styled in the browser; the page never re-judges a number it was handed.
 
@@ -100,24 +100,26 @@ GitHub returns HTTP 502/504 for GraphQL request timeouts, and this query is nest
 
 This codebase is milestones 1–2 of a longer plan, and several apparent gaps are decisions rather than omissions. Don't "fix" these without a deliberate change of direction.
 
-**Lanes, not a score.** A single numeric ranking across all open PRs was considered and rejected: buckets plus visible `Reason` chips are the product. Any scoring may only order items *within* a lane, and the reasons must always be shown. The `active` lane outranks everything else.
+**Lanes, not a score.** A single numeric ranking across all open PRs was considered and rejected: buckets plus visible `Reason` chips are the product. Any scoring may only order items *within* a lane, and the reasons must always be shown. The `active` lane outranks everything else except the bounded `reply_window` lead.
 
-**Recency is the primary axis for "what needs me now".** The top of the queue answers "which reviews am I currently in the middle of", not "which claim on my attention is oldest". The `active` lane holds PRs with public activity inside `activity_window_days` (30) where the editor is involved — a direct signal, a re-review owed, or a review previously submitted. It sorts newest activity first, and `suggested_next` emits all of it before the cycle.
+**Recency is the primary axis for "what needs me now".** The top of the queue answers "which reviews am I currently in the middle of", not "which claim on my attention is oldest". The `active` lane holds PRs with public activity inside `activity_window_days` (30) where the editor is involved — a direct signal, a re-review owed, or a review previously submitted. It sorts newest activity first, and `suggested_next` emits all of it before the cycle — behind only the bounded `reply_window` lead.
 
 This inverts the original design, which put every direct request first, oldest first. On real `whatwg/html` data that buried the live work: of 283 open PRs only 39 had any activity within 30 days, yet 35 direct requests preceded the cycle, led by a mention from 2016 on a PR untouched for 953 days. Age is a poor proxy for actionability on a decade-old backlog.
 
 Consequences to preserve:
 
-- Newest-first is the default for the attention lanes (`active`, `direct`, `rereview`). `oldest_wait` is the **only** lane sorted oldest-first, because fairness to waiting contributors is exactly what it exists to measure.
+- Newest-first is the default for the attention lanes (`active`, `direct`, `rereview`). `oldest_wait`, `reply_window` and `overdue` sort oldest-first, because fairness to waiting contributors is exactly what they exist to measure. For `reply_window` that is deadline proximity, which coincides with oldest-first only because every member shares one target.
 - When a PR carries several direct signals, the **freshest** one represents it. Taking the oldest meant one stale mention outranked a review request filed the same week.
 
 **Direct signals expire; current state does not.** A review request or assignment is current API state — GitHub clears it when the editor reviews — so it persists as a direct request indefinitely. A mention is a past *event* with no clearing mechanism; once `@zcorpan` appeared in a 2016 comment, that PR claimed a direct request forever. Mentions therefore count only inside the activity window. Expired ones move to a separate stale lane rather than being discarded, so an old mention stays findable without leading the queue.
 
 **`oldest_wait` measures the current wait, not PR age.** It is time since the latest non-editor human activity that no editor answered. A five-year-old PR whose author replied yesterday has a one-day wait; a three-week-old PR with no editor response has a three-week wait. Bot activity must never reset this clock — hence `is_bot()` filtering throughout [analysis.py](editor_dashboard/analysis.py).
 
-**The `suggested_next` interleave resolves a specific tension.** Active work first, then a cycle, so that incoming work cannot permanently starve long-waiting contributors while new PRs still get a fast turnaround. Changing the cycle changes that balance. The cycle is what keeps the backlog from being abandoned now that the top of the queue is recency-driven.
+**The `suggested_next` interleave resolves a specific tension.** A bounded `reply_window` lead, then active work, then a cycle, so that incoming work cannot permanently starve long-waiting contributors while new PRs still get a fast turnaround. Changing the lead size or the cycle changes that balance. The cycle is what keeps the backlog from being abandoned now that the top of the queue is recency-driven. Three alternatives were considered and rejected: emitting the whole unanswered-PR population first, making it the first cycle lane, and including overdue PRs in the lead.
 
-**`new` means "never got a first response", with no age cap.** It previously required `age <= initial_editor_response_days`, so a PR left the lane on the very day it missed the target — the lane could only show successes in progress, never failures. It is now unbounded and sorted oldest-first, and past target the reason chip escalates to `first-response-overdue`. It stays distinct from `oldest_wait`, which covers stalled conversations an editor *did* join at some point.
+**`reply_window` and `overdue` split "never got a first response" on the target.** A single `new` lane once required `age <= initial_editor_response_days`, so a PR left it on the very day it missed the target — it could only show successes in progress, never failures. The pair is unbounded instead: missing the target *moves* a PR from `reply_window` to `overdue`, and the reason chip escalates from `new-untriaged` to `first-response-overdue` on the same boundary (both read `_response_target_hours`, and a test pins them to one instant). Both stay distinct from `oldest_wait`, which covers stalled conversations an editor *did* join at some point.
+
+Why the split earns two lanes: `metrics.py` `_bucket_metrics` marks the newest weekly bucket `first_response_mature: False`, so `reply_window` is exactly the set of PRs the first-response rate has not yet judged and will judge next week. Replying converts a scheduled failure into a success. A PR in `overdue` already sits in a mature bucket and its verdict is fixed, so hoisting it up the queue cannot move the indicator. That is the whole justification for `suggested_next.first_response_lead` drawing from one lane and not the other — and for the lead being the one documented exception to "the `active` lane outranks everything else".
 
 **No GitHub notification / unread state, on purpose.** The REST notifications endpoint requires a *classic* PAT (fine-grained PATs and GitHub App tokens are unsupported), and putting such a token in a workflow that publishes public output is an unacceptable leakage risk. "Unseen" therefore means "this browser has not opened this public attention signal". Proper unread sync is deferred to a future OAuth-backed service, not to a secret in this workflow.
 
@@ -146,7 +148,7 @@ Count line charts use a focused y-range rather than a zero baseline: a backlog m
 
 ## Configuration notes
 
-`dashboard.yml` is the only knob surface. The `editors` list is applied retroactively to the whole 90-day sample, so editing it changes historical response-time and waiting-on-editor metrics. `suggested_next.cycle` may only contain the four non-`direct`, non-`all` lanes, with no duplicates; direct requests are always shown first.
+`dashboard.yml` is the only knob surface. The `editors` list is applied retroactively to the whole 90-day sample, so editing it changes historical response-time and waiting-on-editor metrics. `suggested_next.cycle` may only contain the five lanes in `_ALLOWED_SUGGESTED_LANES`, with no duplicates; `active`, `direct`, `reply_window` and `all` are excluded because each already has a fixed position in the queue. `suggested_next.first_response_lead` is how many `reply_window` PRs lead the queue: non-negative, capped at 10, and 0 disables the lead while leaving the lane browsable.
 
 ## CI
 

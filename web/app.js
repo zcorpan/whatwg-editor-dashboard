@@ -1,7 +1,7 @@
 const STATE_VERSION = 1;
 const STATE_NAMESPACE = location.pathname.replace(/\/+$/, "") || "/";
 const STATE_KEY = `whatwg-editor-dashboard:v${STATE_VERSION}:${STATE_NAMESPACE}`;
-const LANE_ORDER = ["active", "direct", "rereview", "new", "oldest_wait", "ready_bounded", "stale_direct", "all"];
+const LANE_ORDER = ["reply_window", "active", "direct", "rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct", "all"];
 const SUGGESTED_LIMIT_AFTER_ACTIVE = 12;
 const SORT_ORDERS = new Set(["queue", "checklist", "unchecked", "wait", "updated", "created"]);
 
@@ -497,6 +497,13 @@ function suggestedItems() {
     result.push(item);
     return true;
   };
+
+  // Ahead of even the active lane: these are the only PRs where a first reply can
+  // still land inside the response target. Past it the outcome is already fixed, so
+  // those stay in the cycle. Bounded so incoming work cannot bury live reviews, and
+  // the limit is applied after filtering so addressing one promotes the next.
+  const leadLimit = dashboard.suggested_next.first_response_lead || 0;
+  for (const item of orderedVisibleItems(dashboard.lanes.reply_window || []).slice(0, leadLimit)) add(item);
 
   for (const item of orderedVisibleItems(dashboard.lanes.active || [])) add(item);
 
