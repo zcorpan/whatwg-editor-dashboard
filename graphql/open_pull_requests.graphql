@@ -3,9 +3,8 @@ query OpenPullRequests(
   $name: String!
   $cursor: String
   $pageSize: Int!
-  $viewer: String!
   $timelineEachEnd: Int!
-  $viewerReviewCount: Int!
+  $reviewCount: Int!
   $threadCount: Int!
 ) {
   repository(owner: $owner, name: $name) {
@@ -96,7 +95,7 @@ fragment PullRequestDashboardFields on PullRequest {
   ) {
     ...TimelineConnectionFields
   }
-  viewerReviews: reviews(last: $viewerReviewCount, author: $viewer) {
+  reviews(last: $reviewCount) {
     totalCount
     nodes {
       id

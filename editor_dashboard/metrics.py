@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable
+from typing import Any, Collection, Iterable
 
 from .analysis import PRAnalysis, is_bot
 from .config import DashboardConfig
@@ -43,11 +43,43 @@ def _open_at(pr: PullRequestSnapshot, moment: datetime) -> bool:
     return pr.created_at <= moment and (pr.closed_at is None or pr.closed_at > moment)
 
 
-def _viewer_reviewed_by(pr: PullRequestSnapshot, moment: datetime) -> bool:
+def _reviewed_before(
+    pr: PullRequestSnapshot,
+    moment: datetime,
+    logins: Collection[str],
+) -> bool:
+    """Whether anybody in ``logins`` had submitted a review by ``moment``."""
     return any(
-        review.state != "PENDING" and review.created_at <= moment
-        for review in pr.viewer_reviews
+        review.author in logins and review.state != "PENDING" and review.created_at <= moment
+        for review in pr.reviews
     )
+
+
+def _reviewers_of_others(config: DashboardConfig, author: str | None) -> frozenset[str]:
+    """The editors who could have reviewed a PR: everyone but its author."""
+    return frozenset(login for login in config.editors if login != author)
+
+
+def _first_editor_reviewer(
+    pr: PullRequestSnapshot,
+    config: DashboardConfig,
+    moment: datetime,
+) -> str | None:
+    """The editor a merge is credited to: the first one other than the author to review.
+
+    Several editors can review the same PR, but the weekly columns have to add up
+    to the number of merges, so exactly one editor is credited. The other reviews
+    still count in that editor's own review total.
+    """
+    reviewers = _reviewers_of_others(config, pr.author)
+    submitted = [
+        review
+        for review in pr.reviews
+        if review.author in reviewers and review.state != "PENDING" and review.created_at <= moment
+    ]
+    if not submitted:
+        return None
+    return min(submitted, key=lambda review: (review.created_at, review.id)).author
 
 
 def _buckets(now: datetime) -> list[Bucket]:
@@ -108,7 +140,6 @@ def _bucket_metrics(
     now: datetime,
 ) -> list[dict[str, Any]]:
     target_hours = config.response_targets.initial_editor_response_days * 24
-    viewer = config.viewer
     results: list[dict[str, Any]] = []
     for bucket in _buckets(now):
         merged = [
@@ -116,7 +147,6 @@ def _bucket_metrics(
             for analysis in analyses
             if analysis.pr.merged_at and bucket.start < analysis.pr.merged_at <= bucket.end
         ]
-        merged_by_others = [analysis for analysis in merged if analysis.pr.author != viewer]
         opened = [
             analysis
             for analysis in analyses
@@ -132,17 +162,20 @@ def _bucket_metrics(
             and analysis.first_editor_response_hours <= target_hours
             for analysis in eligible
         )
+        credited: dict[str, int] = {}
+        for analysis in merged:
+            reviewer = _first_editor_reviewer(analysis.pr, config, analysis.pr.merged_at)
+            if reviewer:
+                credited[reviewer] = credited.get(reviewer, 0) + 1
+
         results.append(
             {
                 "start": isoformat(bucket.start),
                 "end": isoformat(bucket.end),
                 "opened": len(opened),
                 "merged": len(merged),
-                "merged_by_others": len(merged_by_others),
-                "merged_with_viewer_review": sum(
-                    _viewer_reviewed_by(analysis.pr, analysis.pr.merged_at)
-                    for analysis in merged_by_others
-                ),
+                "merged_with_editor_review": sum(credited.values()),
+                "merged_by_first_reviewer": dict(sorted(credited.items())),
                 "first_response_eligible": len(eligible),
                 "first_response_within_target": within_target,
                 # A bucket whose PRs are not all older than the target cannot report a
@@ -241,43 +274,42 @@ def _health(
     return {"overall_status": overall, "indicators": indicators}
 
 
-def _viewer_window(
+def _editor_window(
     analyses: list[PRAnalysis],
-    config: DashboardConfig,
+    login: str,
     now: datetime,
     days: int,
 ) -> dict[str, Any]:
-    """Public, order-describing counts of the viewer's participation in one window.
+    """Public, order-describing counts of one editor's participation in a window.
 
     Nothing here asserts causation: "merged after a review" is an ordering of two
-    public events. Merged PRs the viewer authored are excluded from the review share,
-    because an author cannot review their own PR, and reported on their own.
+    public events. Merged PRs the editor authored are excluded from their review
+    share, because an author cannot review their own PR, and reported on their own.
     """
-    viewer = config.viewer
     cutoff = now - timedelta(days=days)
+    self_only = frozenset({login})
 
     merged_by_others = 0
-    merged_with_viewer_review = 0
+    merged_with_review = 0
     authored_merged = 0
     reviews_submitted = 0
     first_responses_total = 0
-    first_responses_by_viewer = 0
+    first_responses = 0
     contributors: set[str] = set()
 
     for analysis in analyses:
         pr = analysis.pr
         reviews_submitted += sum(
-            review.state != "PENDING" and review.created_at >= cutoff
-            for review in pr.viewer_reviews
+            review.created_at >= cutoff for review in pr.submitted_reviews_by(login)
         )
 
         if pr.merged_at and pr.merged_at >= cutoff:
-            if pr.author == viewer:
+            if pr.author == login:
                 authored_merged += 1
             else:
                 merged_by_others += 1
-                if _viewer_reviewed_by(pr, pr.merged_at):
-                    merged_with_viewer_review += 1
+                if _reviewed_before(pr, pr.merged_at, self_only):
+                    merged_with_review += 1
 
         response = analysis.first_editor_response
         if (
@@ -286,16 +318,88 @@ def _viewer_window(
             and response.created_at >= cutoff
         ):
             first_responses_total += 1
-            if response.author == viewer:
-                first_responses_by_viewer += 1
+            if response.author == login:
+                first_responses += 1
 
-        if pr.author and pr.author != viewer and not is_bot(pr.author):
+        if pr.author and pr.author != login and not is_bot(pr.author):
             engaged = any(
-                activity.author == viewer and activity.created_at >= cutoff
+                activity.author == login and activity.created_at >= cutoff
                 for activity in pr.timeline
             ) or any(
-                review.state != "PENDING" and review.created_at >= cutoff
-                for review in pr.viewer_reviews
+                review.created_at >= cutoff for review in pr.submitted_reviews_by(login)
+            )
+            if engaged:
+                contributors.add(pr.author)
+
+    return {
+        "login": login,
+        "days": days,
+        "since": isoformat(cutoff),
+        "merged_by_others": merged_by_others,
+        "merged_with_review": merged_with_review,
+        "merged_with_review_percent": _percent(merged_with_review, merged_by_others),
+        "first_responses_total": first_responses_total,
+        "first_responses": first_responses,
+        "first_responses_percent": _percent(first_responses, first_responses_total),
+        "reviews_submitted": reviews_submitted,
+        "contributors_engaged": len(contributors),
+        "authored_prs_merged": authored_merged,
+    }
+
+
+def _team_window(
+    analyses: list[PRAnalysis],
+    config: DashboardConfig,
+    now: datetime,
+    days: int,
+) -> dict[str, Any]:
+    """The same counts for the editors as a group, with nobody singled out.
+
+    The merge share asks whether *some* editor other than the author reviewed
+    before the merge, so an editor's own PR still counts once a colleague reviews
+    it, and no PR is excluded from the denominator.
+    """
+    cutoff = now - timedelta(days=days)
+    editors = config.editors
+
+    merged = 0
+    merged_with_review = 0
+    authored_merged = 0
+    reviews_submitted = 0
+    first_responses_total = 0
+    contributors: set[str] = set()
+
+    for analysis in analyses:
+        pr = analysis.pr
+        reviews_submitted += sum(
+            review.author in editors and review.state != "PENDING" and review.created_at >= cutoff
+            for review in pr.reviews
+        )
+
+        if pr.merged_at and pr.merged_at >= cutoff:
+            merged += 1
+            if pr.author in editors:
+                authored_merged += 1
+            if _reviewed_before(pr, pr.merged_at, _reviewers_of_others(config, pr.author)):
+                merged_with_review += 1
+
+        response = analysis.first_editor_response
+        if (
+            response is not None
+            and analysis.first_editor_response_known
+            and response.created_at >= cutoff
+        ):
+            first_responses_total += 1
+
+        if pr.author and pr.author not in editors and not is_bot(pr.author):
+            engaged = any(
+                activity.author in editors and activity.created_at >= cutoff
+                for activity in pr.timeline
+            ) or any(
+                review.author in editors
+                and review.state != "PENDING"
+                and review.created_at >= cutoff
+                for review in pr.reviews
             )
             if engaged:
                 contributors.add(pr.author)
@@ -303,15 +407,39 @@ def _viewer_window(
     return {
         "days": days,
         "since": isoformat(cutoff),
-        "merged_by_others": merged_by_others,
-        "merged_with_viewer_review": merged_with_viewer_review,
-        "merged_with_viewer_review_percent": _percent(merged_with_viewer_review, merged_by_others),
+        "merged": merged,
+        "merged_with_review": merged_with_review,
+        "merged_with_review_percent": _percent(merged_with_review, merged),
         "first_responses_total": first_responses_total,
-        "first_responses_by_viewer": first_responses_by_viewer,
-        "first_responses_by_viewer_percent": _percent(first_responses_by_viewer, first_responses_total),
         "reviews_submitted": reviews_submitted,
         "contributors_engaged": len(contributors),
         "authored_prs_merged": authored_merged,
+    }
+
+
+def _editor_impact(
+    analyses: list[PRAnalysis],
+    config: DashboardConfig,
+    now: datetime,
+) -> dict[str, Any]:
+    """Impact figures for the whole editor group and for each editor in turn.
+
+    Members are ordered by login so the section reads as a report on the editors
+    rather than a ranking, and the viewer is one row among them.
+    """
+    return {
+        "team": {
+            "window": _team_window(analyses, config, now, TREND_WINDOW_DAYS),
+            "recent": _team_window(analyses, config, now, RECENT_WINDOW_DAYS),
+        },
+        "members": [
+            {
+                "login": login,
+                "window": _editor_window(analyses, login, now, TREND_WINDOW_DAYS),
+                "recent": _editor_window(analyses, login, now, RECENT_WINDOW_DAYS),
+            }
+            for login in sorted(config.editors)
+        ],
     }
 
 
@@ -371,18 +499,14 @@ def build_metrics(
             "buckets": buckets,
         },
         "health": _health(points, buckets, config, now),
-        "viewer": {
-            "login": config.viewer,
-            "window": _viewer_window(all_values, config, now, TREND_WINDOW_DAYS),
-            "recent": _viewer_window(all_values, config, now, RECENT_WINDOW_DAYS),
-        },
+        "editors": _editor_impact(all_values, config, now),
         "coverage": {
             "open_timeline_complete": sum(analysis.pr.timeline_sample_complete for analysis in open_values),
             "open_timeline_total": len(open_values),
             "closed_timeline_complete": sum(analysis.pr.timeline_sample_complete for analysis in closed_values),
             "closed_timeline_total": len(closed_values),
-            "viewer_review_connections_truncated": sum(
-                analysis.pr.viewer_reviews_total_count > len(analysis.pr.viewer_reviews)
+            "review_connections_truncated": sum(
+                analysis.pr.reviews_total_count > len(analysis.pr.reviews)
                 for analysis in all_values
             ),
             "first_response_unknown_due_to_sampling": unknown_first_response,

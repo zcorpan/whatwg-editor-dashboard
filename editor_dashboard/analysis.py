@@ -84,7 +84,7 @@ class PRAnalysis:
             "review_threads_sample_complete": pr.review_threads_sample_complete,
             "timeline_sampled_count": pr.timeline_sampled_count,
             "timeline_sample_complete": pr.timeline_sample_complete,
-            "viewer_reviews_total_count": pr.viewer_reviews_total_count,
+            "reviews_total_count": pr.reviews_total_count,
             "checklist": self.checklist.to_public_dict(),
             "lanes": list(self.lanes),
             "reasons": [reason.to_public_dict() for reason in self.reasons],
@@ -158,8 +158,8 @@ def _hash_payload(payload: Any) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:24]
 
 
-def _latest_viewer_review(pr: PullRequestSnapshot) -> Activity | None:
-    submitted = [review for review in pr.viewer_reviews if review.state != "PENDING"]
+def _latest_viewer_review(pr: PullRequestSnapshot, viewer: str) -> Activity | None:
+    submitted = pr.submitted_reviews_by(viewer)
     return max(submitted, key=lambda review: (review.created_at, review.id)) if submitted else None
 
 
@@ -517,7 +517,7 @@ def analyze_pull_request(
     viewer = config.viewer
     checklist = parse_checklist(pr.body)
     direct_reasons, expired_direct_reasons = _direct_reasons(pr, config, now=now)
-    latest_review = _latest_viewer_review(pr)
+    latest_review = _latest_viewer_review(pr, viewer)
     rereview_reasons = _rereview_reasons(pr, latest_review)
 
     contributor_times = _contributor_activity_times(pr, config.editors)

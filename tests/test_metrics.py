@@ -82,22 +82,68 @@ class MetricsTests(unittest.TestCase):
             sum(bucket["first_response_eligible"] for bucket in buckets[:-1]),
         )
 
-    def test_public_viewer_impact_uses_non_causal_wording_fields(self) -> None:
-        window = self.metrics["viewer"]["window"]
-        self.assertEqual(window["days"], 84)
-        self.assertEqual(window["merged_with_viewer_review"], 4)
-        self.assertEqual(window["merged_with_viewer_review_percent"], 80.0)
-        self.assertEqual(window["reviews_submitted"], 5)
-        self.assertEqual(self.metrics["viewer"]["recent"]["days"], 28)
+    def test_editor_impact_uses_non_causal_wording_fields(self) -> None:
+        team = self.metrics["editors"]["team"]["window"]
+        self.assertEqual(team["days"], 84)
+        self.assertEqual(team["merged"], 6)
+        self.assertEqual(team["merged_with_review"], 5)
+        self.assertEqual(team["merged_with_review_percent"], 83.3)
+        self.assertEqual(team["reviews_submitted"], 10)
+        self.assertEqual(self.metrics["editors"]["team"]["recent"]["days"], 28)
 
-    def test_merge_share_excludes_prs_the_viewer_authored(self) -> None:
-        """An author cannot review their own PR, so counting one is a guaranteed miss."""
-        window = self.metrics["viewer"]["window"]
-        self.assertEqual(window["authored_prs_merged"], 1)
-        self.assertEqual(window["merged_by_others"], 5)
+    def test_every_editor_is_reported_in_a_fixed_alphabetical_order(self) -> None:
+        """The section reports on the editors; the viewer is one row among them."""
+        members = self.metrics["editors"]["members"]
+        self.assertEqual(
+            [member["login"] for member in members],
+            ["annevk", "domenic", "domfarolino", "foolip", "zcorpan"],
+        )
+        by_login = {member["login"]: member["window"] for member in members}
+        self.assertEqual(by_login["zcorpan"]["merged_with_review"], 4)
+        self.assertEqual(by_login["zcorpan"]["merged_with_review_percent"], 80.0)
+        self.assertEqual(by_login["zcorpan"]["reviews_submitted"], 5)
+        self.assertEqual(by_login["annevk"]["reviews_submitted"], 2)
+        self.assertEqual(by_login["domfarolino"]["first_responses"], 0)
+        # One shared denominator, so the first-reply shares are comparable.
+        self.assertEqual(
+            {window["first_responses_total"] for window in by_login.values()},
+            {11},
+        )
+        self.assertEqual(
+            sum(window["first_responses"] for window in by_login.values()),
+            by_login["zcorpan"]["first_responses_total"],
+        )
+
+    def test_a_merge_is_credited_to_one_editor_so_the_columns_add_up(self) -> None:
+        """#12890 and #12870 each carry two editor reviews; the first one gets the credit."""
         buckets = self.metrics["trends"]["buckets"]
-        authored = sum(bucket["merged"] - bucket["merged_by_others"] for bucket in buckets)
-        self.assertEqual(authored, window["authored_prs_merged"])
+        credited = {}
+        for bucket in buckets:
+            self.assertEqual(
+                sum(bucket["merged_by_first_reviewer"].values()),
+                bucket["merged_with_editor_review"],
+            )
+            self.assertLessEqual(bucket["merged_with_editor_review"], bucket["merged"])
+            for login, count in bucket["merged_by_first_reviewer"].items():
+                credited[login] = credited.get(login, 0) + count
+        self.assertEqual(credited, {"annevk": 1, "zcorpan": 4})
+
+    def test_merge_share_excludes_prs_the_editor_authored(self) -> None:
+        """An author cannot review their own PR, so counting one is a guaranteed miss."""
+        team = self.metrics["editors"]["team"]["window"]
+        by_login = {member["login"]: member["window"] for member in self.metrics["editors"]["members"]}
+        self.assertEqual(by_login["zcorpan"]["authored_prs_merged"], 1)
+        self.assertEqual(by_login["zcorpan"]["merged_by_others"], team["merged"] - 1)
+        self.assertEqual(team["authored_prs_merged"], 1)
+        # The group figure keeps that PR in the denominator, because a colleague
+        # reviewed it: only the author is barred from reviewing it.
+        self.assertEqual(team["merged"], 6)
+        buckets = self.metrics["trends"]["buckets"]
+        self.assertEqual(sum(bucket["merged"] for bucket in buckets), team["merged"])
+        self.assertEqual(
+            sum(bucket["merged_with_editor_review"] for bucket in buckets),
+            team["merged_with_review"],
+        )
 
 
 if __name__ == "__main__":

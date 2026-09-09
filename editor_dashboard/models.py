@@ -134,8 +134,8 @@ class PullRequestSnapshot:
     timeline_sampled_count: int
     timeline_total_count: int
     timeline_sample_complete: bool
-    viewer_reviews: tuple[Activity, ...]
-    viewer_reviews_total_count: int
+    reviews: tuple[Activity, ...]
+    reviews_total_count: int
     review_threads: tuple[ReviewThread, ...]
     unresolved_review_threads: int
     review_threads_total_count: int
@@ -148,6 +148,14 @@ class PullRequestSnapshot:
     @property
     def changed_lines(self) -> int:
         return self.additions + self.deletions
+
+    def submitted_reviews_by(self, login: str) -> tuple[Activity, ...]:
+        """Submitted (non-pending) reviews written by ``login``, oldest first."""
+        return tuple(
+            review
+            for review in self.reviews
+            if review.author == login and review.state != "PENDING"
+        )
 
     def review_threads_started_by_others(self, login: str) -> tuple[int, int]:
         """Return (open, sampled) review-thread counts excluding ``login``'s own threads.
@@ -186,8 +194,8 @@ class PullRequestSnapshot:
 
         timeline_sample_complete = _timeline_sample_complete(node, window_ids)
 
-        reviews_connection = node.get("viewerReviews") or {}
-        viewer_reviews = tuple(
+        reviews_connection = node.get("reviews") or {}
+        reviews = tuple(
             sorted(
                 (activity for value in (reviews_connection.get("nodes") or []) if value and (activity := Activity.from_graphql(value)) is not None),
                 key=lambda activity: (activity.created_at, activity.id),
@@ -266,8 +274,8 @@ class PullRequestSnapshot:
             timeline_sampled_count=len(timeline),
             timeline_total_count=timeline_total,
             timeline_sample_complete=timeline_sample_complete,
-            viewer_reviews=viewer_reviews,
-            viewer_reviews_total_count=int(reviews_connection.get("totalCount") or 0),
+            reviews=reviews,
+            reviews_total_count=int(reviews_connection.get("totalCount") or 0),
             review_threads=thread_nodes,
             unresolved_review_threads=unresolved,
             review_threads_total_count=thread_total,

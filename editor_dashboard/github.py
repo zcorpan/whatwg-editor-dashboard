@@ -396,10 +396,9 @@ def fetch_repository_data(
     common_variables = {
         "owner": config.repository.owner,
         "name": config.repository.name,
-        "viewer": config.viewer,
         "pageSize": config.sampling.graphql_page_size,
         "timelineEachEnd": config.sampling.timeline_each_end,
-        "viewerReviewCount": config.sampling.viewer_reviews,
+        "reviewCount": config.sampling.reviews_per_pr,
         "threadCount": config.sampling.review_threads,
     }
 
@@ -448,9 +447,8 @@ def fetch_repository_data(
             "query": search_query,
             "cursor": cursor,
             "pageSize": config.sampling.graphql_page_size,
-            "viewer": config.viewer,
             "timelineEachEnd": config.sampling.timeline_each_end,
-            "viewerReviewCount": config.sampling.viewer_reviews,
+            "reviewCount": config.sampling.reviews_per_pr,
         }
         data = graphql.execute(closed_query, variables)
         metadata.record_rate_limit(data.get("rateLimit"))
