@@ -92,17 +92,6 @@ button, input, select { font: inherit; }
 a { color: var(--accent-strong); }
 button, summary, a { -webkit-tap-highlight-color: transparent; }
 
-.skip-link {
-  position: fixed;
-  z-index: 100;
-  left: 1rem;
-  top: -5rem;
-  padding: .7rem 1rem;
-  border-radius: .5rem;
-  background: var(--text);
-  color: var(--surface);
-}
-.skip-link:focus { top: 1rem; }
 .visually-hidden {
   position: absolute !important;
   width: 1px !important;
