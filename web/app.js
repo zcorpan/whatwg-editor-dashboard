@@ -666,7 +666,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // Charts are drawn at their display size so the label text is not scaled by the
 // viewBox: a card chart stays small, the wide one gets more room per column.
 const CARD_CHART = {width: 320, height: 132};
-const WIDE_CHART = {width: 660, height: 200};
+const WIDE_CHART = {width: 660, height: 300};
 const CHART_MARGIN = {top: 12, right: 14, bottom: 22, left: 40};
 const NICE_STEPS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
 
@@ -695,32 +695,34 @@ function niceStep(span) {
 // which is exactly the reading the trend is supposed to correct. The tick labels always
 // state where the axis starts, and the columns chart, where length encodes the value,
 // keeps its zero baseline.
-function niceScale(values, {zeroBaseline = false} = {}) {
+function niceScale(values, {zeroBaseline = false, steps = 2} = {}) {
   const numbers = values.filter(value => value !== null);
   const high = Math.max(1, ...numbers);
   const low = zeroBaseline ? 0 : Math.min(...numbers, high);
-  let step = niceStep(Math.max((high - low) / 2, high / 40, 0.5));
+  let step = niceStep(Math.max((high - low) / steps, high / (steps * 20), 0.5));
   let min = zeroBaseline ? 0 : Math.max(0, Math.floor(low / step) * step);
-  while (min + step * 2 < high) {
+  while (min + step * steps < high) {
     step = niceStep(step + 0.5);
     min = zeroBaseline ? 0 : Math.max(0, Math.floor(low / step) * step);
   }
-  return {min, max: min + step * 2, step};
+  return {min, max: min + step * steps, step};
 }
 
 function weekLabel(value) {
   return new Intl.DateTimeFormat(undefined, {month: "short", day: "numeric"}).format(new Date(value));
 }
 
-function chartFrame(scale, formatTick, size) {
+function chartFrame(scale, formatTick, size, margin = CHART_MARGIN) {
   const plot = {
-    left: CHART_MARGIN.left,
-    right: size.width - CHART_MARGIN.right,
-    top: CHART_MARGIN.top,
-    bottom: size.height - CHART_MARGIN.bottom,
+    left: margin.left,
+    right: size.width - margin.right,
+    top: margin.top,
+    bottom: size.height - margin.bottom,
   };
   const nodes = [];
-  for (const fraction of [0, 0.5, 1]) {
+  const lines = Math.max(1, Math.round((scale.max - scale.min) / scale.step));
+  for (let index = 0; index <= lines; index += 1) {
+    const fraction = index / lines;
     const value = scale.min + (scale.max - scale.min) * fraction;
     const y = plot.bottom - (plot.bottom - plot.top) * fraction;
     nodes.push(svgElement("line", {
@@ -799,7 +801,13 @@ function roundedTopBar(x, y, width, height, radius) {
 function stackedColumnChart(rows, {formatTick, description}) {
   const size = WIDE_CHART;
   const totals = rows.map(row => row.total);
-  const {plot, nodes, position} = chartFrame(niceScale(totals, {zeroBaseline: true}), formatTick, size);
+  // Room above the plot for a value that sits on a column reaching the axis maximum.
+  const {plot, nodes, position} = chartFrame(
+    niceScale(totals, {zeroBaseline: true, steps: 5}),
+    formatTick,
+    size,
+    {...CHART_MARGIN, top: 24},
+  );
   const slot = (plot.right - plot.left) / rows.length;
   const width = Math.min(24, slot - 6);
   const scale = value => plot.bottom - position(value);
@@ -829,18 +837,21 @@ function stackedColumnChart(rows, {formatTick, description}) {
     }
   });
 
-  const last = rows[rows.length - 1];
-  if (last && last.total > 0) {
+  rows.forEach((row, index) => {
+    const middle = plot.left + slot * index + slot / 2;
     nodes.push(svgElement("text", {
       class: "chart-value",
-      x: plot.left + slot * (rows.length - 1) + slot / 2,
-      y: plot.bottom - scale(last.total) - 6,
+      x: middle,
+      y: plot.bottom - scale(row.total) - 6,
       "text-anchor": "middle",
-    }, numberFormat(last.total)));
-  }
-
-  nodes.push(svgElement("text", {class: "chart-label", x: plot.left, y: size.height - 6}, rows[0]?.label || ""));
-  nodes.push(svgElement("text", {class: "chart-label", x: plot.right, y: size.height - 6, "text-anchor": "end"}, last?.label || ""));
+    }, numberFormat(row.total)));
+    nodes.push(svgElement("text", {
+      class: "chart-label",
+      x: middle,
+      y: size.height - 6,
+      "text-anchor": "middle",
+    }, row.label));
+  });
 
   return svgElement("svg", {
     class: "chart chart-wide",
