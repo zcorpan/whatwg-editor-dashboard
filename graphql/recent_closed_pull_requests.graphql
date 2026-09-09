@@ -2,9 +2,8 @@ query RecentClosedPullRequests(
   $query: String!
   $cursor: String
   $pageSize: Int!
-  $viewer: String!
   $timelineEachEnd: Int!
-  $viewerReviewCount: Int!
+  $reviewCount: Int!
 ) {
   search(query: $query, type: ISSUE, first: $pageSize, after: $cursor) {
     issueCount
@@ -35,7 +34,7 @@ query RecentClosedPullRequests(
         ) {
           ...TimelineConnectionFields
         }
-        viewerReviews: reviews(last: $viewerReviewCount, author: $viewer) {
+        reviews(last: $reviewCount) {
           totalCount
           nodes {
             id

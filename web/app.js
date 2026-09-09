@@ -721,7 +721,8 @@ function roundedTopBar(x, y, width, height, radius) {
   return `M${x} ${y + height} L${x} ${y + r} Q${x} ${y} ${x + r} ${y} L${x + width - r} ${y} Q${x + width} ${y} ${x + width} ${y + r} L${x + width} ${y + height} Z`;
 }
 
-// Stacked columns: the emphasized part sits on the baseline so it stays comparable.
+// Stacked columns. Segments are drawn bottom-up in the order given, so the series
+// order has to be stable across renders: it is what makes the colours comparable.
 function stackedColumnChart(rows, {formatTick, description}) {
   const size = WIDE_CHART;
   const totals = rows.map(row => row.total);
@@ -732,26 +733,26 @@ function stackedColumnChart(rows, {formatTick, description}) {
 
   rows.forEach((row, index) => {
     const x = plot.left + slot * index + (slot - width) / 2;
-    const highlight = scale(row.highlight);
-    const rest = scale(row.total - row.highlight);
-    const title = svgElement("title", {}, `${row.label}: ${numberFormat(row.highlight)} of ${numberFormat(row.total)} merged after your review`);
-    if (rest > 0) {
-      // A 2px surface gap, not a stroke, separates the two segments.
+    const drawn = row.segments.filter(segment => segment.value > 0);
+    let bottom = plot.bottom;
+    drawn.forEach((segment, depth) => {
+      const full = scale(segment.value);
+      const covered = depth < drawn.length - 1;
+      // A 2px surface gap, not a stroke, separates one segment from the next.
+      const height = Math.max(0, full - (covered ? 2 : 0));
+      const top = bottom - height;
       nodes.push(svgElement("path", {
-        class: "chart-column-rest",
-        d: roundedTopBar(x, plot.bottom - highlight - rest, width, Math.max(0, rest - (highlight > 0 ? 2 : 0)), 4),
-      }, [title.cloneNode(true)]));
-    }
-    if (highlight > 0) {
-      nodes.push(svgElement("path", {
-        class: "chart-column-highlight",
-        d: rest > 0
-          ? `M${x} ${plot.bottom} h${width} v${-highlight} h${-width} Z`
-          : roundedTopBar(x, plot.bottom - highlight, width, highlight, 4),
-      }, [title.cloneNode(true)]));
-    }
+        class: segment.className,
+        d: covered
+          ? `M${x} ${bottom} h${width} v${-height} h${-width} Z`
+          : roundedTopBar(x, top, width, height, 4),
+      }, [svgElement("title", {}, `${row.label}: ${numberFormat(segment.value)} of ${numberFormat(row.total)} ${segment.title}`)]));
+      bottom -= full;
+    });
     if (row.total === 0) {
-      nodes.push(svgElement("rect", {class: "chart-hit", x, y: plot.bottom - 8, width, height: 8}, [title.cloneNode(true)]));
+      nodes.push(svgElement("rect", {class: "chart-hit", x, y: plot.bottom - 8, width, height: 8}, [
+        svgElement("title", {}, `${row.label}: ${row.emptyTitle}`),
+      ]));
     }
   });
 
@@ -773,6 +774,37 @@ function stackedColumnChart(rows, {formatTick, description}) {
     viewBox: `0 0 ${size.width} ${size.height}`,
     role: "img",
     "aria-label": description,
+  }, nodes);
+}
+
+const ATTRIBUTION_BAR = {width: 240, height: 8, gap: 2};
+
+// One stat card's number split by editor, in the colours the columns above use.
+function attributionBar(parts, {description}) {
+  const drawn = parts.filter(part => part.value > 0);
+  const total = drawn.reduce((sum, part) => sum + part.value, 0);
+  if (!total) return null;
+  const span = ATTRIBUTION_BAR.width - ATTRIBUTION_BAR.gap * (drawn.length - 1);
+  let x = 0;
+  const nodes = drawn.map(part => {
+    const width = span * part.value / total;
+    const node = svgElement("rect", {
+      class: part.className,
+      x,
+      y: 0,
+      width,
+      height: ATTRIBUTION_BAR.height,
+      rx: 3,
+    }, [svgElement("title", {}, `${part.label}: ${numberFormat(part.value)}`)]);
+    x += width + ATTRIBUTION_BAR.gap;
+    return node;
+  });
+  return svgElement("svg", {
+    class: "attribution-bar",
+    viewBox: `0 0 ${ATTRIBUTION_BAR.width} ${ATTRIBUTION_BAR.height}`,
+    preserveAspectRatio: "none",
+    role: "img",
+    "aria-label": `${description}: ${drawn.map(part => `${part.label} ${numberFormat(part.value)}`).join(", ")}`,
   }, nodes);
 }
 
@@ -817,10 +849,11 @@ function percentText(value) {
   return value === null || value === undefined ? "—" : `${Math.round(value)}%`;
 }
 
-function statCard(value, label, note) {
+function statCard(value, label, note, bar) {
   return element("article", {className: "stat-card"}, [
     element("strong", {className: "stat-value", text: value}),
     element("span", {className: "stat-label", text: label}),
+    bar,
     element("span", {className: "stat-note", text: note}),
   ]);
 }
@@ -937,58 +970,146 @@ function renderHealth() {
   );
 }
 
+// Editors get a colour by their position in the payload's fixed alphabetical list,
+// so a colour means the same person in every chart on the page. The palette in
+// style.css is validated for exactly these five slots on every pair of colours;
+// a sixth editor folds into one "other editors" series rather than taking an
+// unvalidated hue, and every editor still has their own row in the tables.
+const SERIES_SLOTS = 5;
+
+function editorSeries(members) {
+  const series = members.slice(0, SERIES_SLOTS).map((member, index) => ({
+    logins: [member.login],
+    label: `@${member.login}`,
+    className: `series-${index + 1}`,
+  }));
+  const folded = members.slice(SERIES_SLOTS);
+  if (folded.length) {
+    series.push({
+      logins: folded.map(member => member.login),
+      label: `${numberFormat(folded.length)} other editors`,
+      className: "series-other",
+    });
+  }
+  return series;
+}
+
 function renderImpact(weeks) {
   const metrics = dashboard.metrics;
-  const viewer = metrics.viewer;
-  const overall = viewer.window;
-  const recent = viewer.recent;
+  const impact = metrics.editors;
+  const overall = impact.team.window;
+  const recent = impact.team.recent;
   const buckets = metrics.trends.buckets;
   const recentWeeks = Math.round(recent.days / 7);
+  const series = editorSeries(impact.members);
+  const byLogin = new Map(impact.members.map(member => [member.login, member.window]));
+  const sumOver = (logins, field) => logins.reduce((total, login) => total + (byLogin.get(login)?.[field] || 0), 0);
 
-  document.querySelector("#impact-window").textContent = `Public @${viewer.login} activity over the last ${weeks} weeks.`;
-  document.querySelector("#impact-hero-value").textContent = percentText(overall.merged_with_viewer_review_percent);
+  document.querySelector("#impact-window").textContent = (
+    `Public activity by the ${numberFormat(impact.members.length)} configured editors over the last ${weeks} weeks.`
+  );
+  document.querySelector("#impact-hero-value").textContent = percentText(overall.merged_with_review_percent);
   document.querySelector("#impact-hero-caption").textContent = (
-    `of the ${numberFormat(overall.merged_by_others)} pull requests merged in the last ${weeks} weeks that you did not author ` +
-    `had a review from you before they merged. Last ${recentWeeks} weeks: ${percentText(recent.merged_with_viewer_review_percent)} ` +
-    `(${numberFormat(recent.merged_with_viewer_review)} of ${numberFormat(recent.merged_by_others)}).`
+    `of the ${numberFormat(overall.merged)} pull requests merged in the last ${weeks} weeks had a review from an editor ` +
+    `other than the author before they merged. Last ${recentWeeks} weeks: ${percentText(recent.merged_with_review_percent)} ` +
+    `(${numberFormat(recent.merged_with_review)} of ${numberFormat(recent.merged)}).`
   );
 
-  const rows = buckets.map(bucket => ({
-    label: weekLabel(bucket.start),
-    total: bucket.merged_by_others,
-    highlight: bucket.merged_with_viewer_review,
-  }));
+  const rows = buckets.map(bucket => {
+    const credited = bucket.merged_by_first_reviewer || {};
+    const segments = series.map(entry => ({
+      className: entry.className,
+      value: entry.logins.reduce((total, login) => total + (credited[login] || 0), 0),
+      title: `merged after a review by ${entry.label}`,
+    }));
+    segments.push({
+      className: "series-rest",
+      value: bucket.merged - bucket.merged_with_editor_review,
+      title: "merged without an editor review",
+    });
+    return {
+      label: weekLabel(bucket.start),
+      total: bucket.merged,
+      segments,
+      emptyTitle: "nothing merged",
+    };
+  });
+
   document.querySelector("#merge-chart").replaceChildren(
     stackedColumnChart(rows, {
       formatTick: value => numberFormat(Math.round(value)),
-      description: `Pull requests merged each week for ${weeks} weeks, with the share that had a review from you before merging.`,
+      description: (
+        `Pull requests merged each week for ${weeks} weeks, split by the editor credited with reviewing them first. ` +
+        `${numberFormat(overall.merged_with_review)} of ${numberFormat(overall.merged)} had an editor review; ` +
+        "the week-by-week figures are in the table below the chart."
+      ),
     }),
     legend([
-      {className: "legend-highlight", label: "Merged after your review"},
-      {className: "legend-rest", label: "Merged without a review from you"},
+      ...series.map(entry => ({className: entry.className, label: entry.label})),
+      {className: "series-rest", label: "No editor review"},
     ]),
   );
 
+  document.querySelector("#merge-table thead tr").replaceChildren(
+    element("th", {text: "Week of", attrs: {scope: "col"}}),
+    element("th", {text: "Merged", attrs: {scope: "col"}}),
+    ...series.map(entry => element("th", {text: entry.label, attrs: {scope: "col"}})),
+    element("th", {text: "No editor review", attrs: {scope: "col"}}),
+  );
   document.querySelector("#merge-table tbody").replaceChildren(...rows.map(row => tableRow([
     row.label,
     numberFormat(row.total),
-    numberFormat(row.highlight),
+    ...row.segments.map(segment => numberFormat(segment.value)),
   ])));
+
+  const bar = (field, description) => attributionBar(
+    series.map(entry => ({
+      className: entry.className,
+      label: entry.label,
+      value: sumOver(entry.logins, field),
+    })),
+    {description},
+  );
 
   document.querySelector("#impact-stats").replaceChildren(
     statCard(
-      numberFormat(overall.first_responses_by_viewer),
-      "First replies you gave",
-      `${percentText(overall.first_responses_by_viewer_percent)} of the ${numberFormat(overall.first_responses_total)} first editor replies in the window`,
+      numberFormat(overall.first_responses_total),
+      "First replies by editors",
+      `Pull requests whose first editor reply landed in the last ${weeks} weeks`,
+      bar("first_responses", "First replies by editor"),
     ),
-    statCard(numberFormat(overall.reviews_submitted), "Reviews you submitted", `${numberFormat(recent.reviews_submitted)} in the last ${recentWeeks} weeks`),
-    statCard(numberFormat(overall.contributors_engaged), "Contributors you replied to", "Distinct pull-request authors, excluding bots"),
-    statCard(numberFormat(overall.authored_prs_merged), "Your own PRs merged", `Authored by @${viewer.login}`),
+    statCard(
+      numberFormat(overall.reviews_submitted),
+      "Reviews submitted",
+      `${numberFormat(recent.reviews_submitted)} in the last ${recentWeeks} weeks`,
+      bar("reviews_submitted", "Reviews submitted by editor"),
+    ),
+    statCard(
+      numberFormat(overall.contributors_engaged),
+      "Contributors replied to",
+      "Distinct pull-request authors, excluding bots and editors. An author two editors replied to counts for each of them.",
+      bar("contributors_engaged", "Contributors replied to by editor"),
+    ),
+    statCard(
+      numberFormat(overall.authored_prs_merged),
+      "Editors' own PRs merged",
+      "Merged pull requests an editor authored",
+      bar("authored_prs_merged", "Merged pull requests by author"),
+    ),
   );
 
+  document.querySelector("#editor-table tbody").replaceChildren(...impact.members.map(member => tableRow([
+    `@${member.login}`,
+    numberFormat(member.window.first_responses),
+    numberFormat(member.window.reviews_submitted),
+    numberFormat(member.window.contributors_engaged),
+    numberFormat(member.window.authored_prs_merged),
+  ])));
+
   document.querySelector("#impact-note").textContent = (
-    "These figures describe the order of public events. “Merged after your review” does not assert that the review caused the merge. " +
-    "Pull requests you authored are excluded from the review share, since an author cannot review their own."
+    "These figures describe the order of public events. “Merged after a review” does not assert that the review caused the merge. " +
+    "A merge several editors reviewed is credited to whoever reviewed it first, so the weekly columns add up to the merges; every " +
+    "review still counts in its own editor's total."
   );
 }
 

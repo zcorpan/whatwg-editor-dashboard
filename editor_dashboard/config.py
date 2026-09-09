@@ -51,7 +51,7 @@ class SamplingConfig:
     # GitHub terminates GraphQL requests that take too long, usually as HTTP 502/504.
     graphql_page_size: int = 10
     timeline_each_end: int = 25
-    viewer_reviews: int = 25
+    reviews_per_pr: int = 25
     review_threads: int = 50
     history_days: int = 90
 
@@ -178,9 +178,9 @@ def load_config(path: str | Path) -> DashboardConfig:
             "sampling.timeline_each_end",
             maximum=100,
         ),
-        viewer_reviews=_positive_int(
-            sampling_raw.get("viewer_reviews", 25),
-            "sampling.viewer_reviews",
+        reviews_per_pr=_positive_int(
+            sampling_raw.get("reviews_per_pr", 25),
+            "sampling.reviews_per_pr",
             maximum=100,
         ),
         review_threads=_positive_int(

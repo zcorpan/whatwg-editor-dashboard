@@ -76,7 +76,7 @@
         },
         "nodes": []
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -208,7 +208,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 1,
         "nodes": [
           {
@@ -298,7 +298,7 @@
         },
         "nodes": []
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -396,7 +396,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -518,7 +518,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -590,7 +590,7 @@
         },
         "nodes": []
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -692,7 +692,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -790,7 +790,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -888,7 +888,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -1010,7 +1010,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -1698,7 +1698,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -1796,7 +1796,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -1857,7 +1857,7 @@
         ]
       },
       "timelineFirst": {
-        "totalCount": 2,
+        "totalCount": 3,
         "pageInfo": {
           "hasNextPage": false
         },
@@ -1886,6 +1886,23 @@
             "submittedAt": "2026-08-01T12:00:00Z",
             "updatedAt": "2026-08-01T12:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12890",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12890"
+            }
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12890-domenic",
+            "author": {
+              "login": "domenic"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "Second approval; ready to merge.",
+            "createdAt": "2026-08-02T09:00:00Z",
+            "submittedAt": "2026-08-02T09:00:00Z",
+            "updatedAt": "2026-08-02T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12890-domenic",
             "state": "APPROVED",
             "commit": {
               "oid": "sha-12890"
@@ -1894,7 +1911,7 @@
         ]
       },
       "timelineLast": {
-        "totalCount": 2,
+        "totalCount": 3,
         "pageInfo": {
           "hasNextPage": false
         },
@@ -1927,11 +1944,28 @@
             "commit": {
               "oid": "sha-12890"
             }
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12890-domenic",
+            "author": {
+              "login": "domenic"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "Second approval; ready to merge.",
+            "createdAt": "2026-08-02T09:00:00Z",
+            "submittedAt": "2026-08-02T09:00:00Z",
+            "updatedAt": "2026-08-02T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12890-domenic",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12890"
+            }
           }
         ]
       },
-      "viewerReviews": {
-        "totalCount": 1,
+      "reviews": {
+        "totalCount": 2,
         "nodes": [
           {
             "__typename": "PullRequestReview",
@@ -1945,6 +1979,23 @@
             "submittedAt": "2026-08-01T12:00:00Z",
             "updatedAt": "2026-08-01T12:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12890",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12890"
+            }
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12890-domenic",
+            "author": {
+              "login": "domenic"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "Second approval; ready to merge.",
+            "createdAt": "2026-08-02T09:00:00Z",
+            "submittedAt": "2026-08-02T09:00:00Z",
+            "updatedAt": "2026-08-02T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12890-domenic",
             "state": "APPROVED",
             "commit": {
               "oid": "sha-12890"
@@ -2046,7 +2097,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -2105,7 +2156,7 @@
         ]
       },
       "timelineFirst": {
-        "totalCount": 2,
+        "totalCount": 3,
         "pageInfo": {
           "hasNextPage": false
         },
@@ -2135,6 +2186,23 @@
             "updatedAt": "2026-07-14T10:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12870",
             "state": "COMMENTED",
+            "commit": {
+              "oid": "sha-12870"
+            }
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12870-annevk",
+            "author": {
+              "login": "annevk"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-15T09:00:00Z",
+            "submittedAt": "2026-07-15T09:00:00Z",
+            "updatedAt": "2026-07-15T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12870-annevk",
+            "state": "APPROVED",
             "commit": {
               "oid": "sha-12870"
             }
@@ -2142,7 +2210,7 @@
         ]
       },
       "timelineLast": {
-        "totalCount": 2,
+        "totalCount": 3,
         "pageInfo": {
           "hasNextPage": false
         },
@@ -2175,11 +2243,28 @@
             "commit": {
               "oid": "sha-12870"
             }
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12870-annevk",
+            "author": {
+              "login": "annevk"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-15T09:00:00Z",
+            "submittedAt": "2026-07-15T09:00:00Z",
+            "updatedAt": "2026-07-15T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12870-annevk",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12870"
+            }
           }
         ]
       },
-      "viewerReviews": {
-        "totalCount": 1,
+      "reviews": {
+        "totalCount": 2,
         "nodes": [
           {
             "__typename": "PullRequestReview",
@@ -2194,6 +2279,23 @@
             "updatedAt": "2026-07-14T10:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12870",
             "state": "COMMENTED",
+            "commit": {
+              "oid": "sha-12870"
+            }
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12870-annevk",
+            "author": {
+              "login": "annevk"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-15T09:00:00Z",
+            "submittedAt": "2026-07-15T09:00:00Z",
+            "updatedAt": "2026-07-15T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12870-annevk",
+            "state": "APPROVED",
             "commit": {
               "oid": "sha-12870"
             }
@@ -2255,22 +2357,76 @@
         ]
       },
       "timelineFirst": {
-        "totalCount": 0,
+        "totalCount": 1,
         "pageInfo": {
           "hasNextPage": false
         },
-        "nodes": []
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12860-annevk",
+            "author": {
+              "login": "annevk"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-23T09:00:00Z",
+            "submittedAt": "2026-07-23T09:00:00Z",
+            "updatedAt": "2026-07-23T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12860-annevk",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12860"
+            }
+          }
+        ]
       },
       "timelineLast": {
-        "totalCount": 0,
+        "totalCount": 1,
         "pageInfo": {
           "hasNextPage": false
         },
-        "nodes": []
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12860-annevk",
+            "author": {
+              "login": "annevk"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-23T09:00:00Z",
+            "submittedAt": "2026-07-23T09:00:00Z",
+            "updatedAt": "2026-07-23T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12860-annevk",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12860"
+            }
+          }
+        ]
       },
-      "viewerReviews": {
-        "totalCount": 0,
-        "nodes": []
+      "reviews": {
+        "totalCount": 1,
+        "nodes": [
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12860-annevk",
+            "author": {
+              "login": "annevk"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-23T09:00:00Z",
+            "submittedAt": "2026-07-23T09:00:00Z",
+            "updatedAt": "2026-07-23T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12860-annevk",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12860"
+            }
+          }
+        ]
       },
       "reviewThreads": {
         "totalCount": 0,
@@ -2390,7 +2546,7 @@
           }
         ]
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -2449,7 +2605,7 @@
         ]
       },
       "timelineFirst": {
-        "totalCount": 2,
+        "totalCount": 3,
         "pageInfo": {
           "hasNextPage": false
         },
@@ -2482,11 +2638,28 @@
             "createdAt": "2026-06-10T12:00:00Z",
             "updatedAt": "2026-06-10T12:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12840"
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12840-foolip",
+            "author": {
+              "login": "foolip"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-06-11T09:00:00Z",
+            "submittedAt": "2026-06-11T09:00:00Z",
+            "updatedAt": "2026-06-11T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12840-foolip",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12840"
+            }
           }
         ]
       },
       "timelineLast": {
-        "totalCount": 2,
+        "totalCount": 3,
         "pageInfo": {
           "hasNextPage": false
         },
@@ -2519,11 +2692,28 @@
             "createdAt": "2026-06-10T12:00:00Z",
             "updatedAt": "2026-06-10T12:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12840"
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12840-foolip",
+            "author": {
+              "login": "foolip"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-06-11T09:00:00Z",
+            "submittedAt": "2026-06-11T09:00:00Z",
+            "updatedAt": "2026-06-11T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12840-foolip",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12840"
+            }
           }
         ]
       },
-      "viewerReviews": {
-        "totalCount": 1,
+      "reviews": {
+        "totalCount": 2,
         "nodes": [
           {
             "__typename": "PullRequestReview",
@@ -2537,6 +2727,23 @@
             "submittedAt": "2026-06-10T10:00:00Z",
             "updatedAt": "2026-06-10T10:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12840",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12840"
+            }
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12840-foolip",
+            "author": {
+              "login": "foolip"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-06-11T09:00:00Z",
+            "submittedAt": "2026-06-11T09:00:00Z",
+            "updatedAt": "2026-06-11T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12840-foolip",
             "state": "APPROVED",
             "commit": {
               "oid": "sha-12840"
@@ -2612,7 +2819,7 @@
         },
         "nodes": []
       },
-      "viewerReviews": {
+      "reviews": {
         "totalCount": 0,
         "nodes": []
       },
@@ -2671,7 +2878,7 @@
         ]
       },
       "timelineFirst": {
-        "totalCount": 2,
+        "totalCount": 3,
         "pageInfo": {
           "hasNextPage": false
         },
@@ -2704,11 +2911,28 @@
             "createdAt": "2026-07-05T12:00:00Z",
             "updatedAt": "2026-07-05T12:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12820"
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12820-domfarolino",
+            "author": {
+              "login": "domfarolino"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-06T09:00:00Z",
+            "submittedAt": "2026-07-06T09:00:00Z",
+            "updatedAt": "2026-07-06T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12820-domfarolino",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12820"
+            }
           }
         ]
       },
       "timelineLast": {
-        "totalCount": 2,
+        "totalCount": 3,
         "pageInfo": {
           "hasNextPage": false
         },
@@ -2741,11 +2965,28 @@
             "createdAt": "2026-07-05T12:00:00Z",
             "updatedAt": "2026-07-05T12:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-12820"
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12820-domfarolino",
+            "author": {
+              "login": "domfarolino"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-06T09:00:00Z",
+            "submittedAt": "2026-07-06T09:00:00Z",
+            "updatedAt": "2026-07-06T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12820-domfarolino",
+            "state": "APPROVED",
+            "commit": {
+              "oid": "sha-12820"
+            }
           }
         ]
       },
-      "viewerReviews": {
-        "totalCount": 1,
+      "reviews": {
+        "totalCount": 2,
         "nodes": [
           {
             "__typename": "PullRequestReview",
@@ -2760,6 +3001,23 @@
             "updatedAt": "2026-07-05T10:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12820",
             "state": "COMMENTED",
+            "commit": {
+              "oid": "sha-12820"
+            }
+          },
+          {
+            "__typename": "PullRequestReview",
+            "id": "r-12820-domfarolino",
+            "author": {
+              "login": "domfarolino"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "",
+            "createdAt": "2026-07-06T09:00:00Z",
+            "submittedAt": "2026-07-06T09:00:00Z",
+            "updatedAt": "2026-07-06T09:00:00Z",
+            "url": "https://github.com/whatwg/html/pull/0#pullrequestreview-r-12820-domfarolino",
+            "state": "APPROVED",
             "commit": {
               "oid": "sha-12820"
             }

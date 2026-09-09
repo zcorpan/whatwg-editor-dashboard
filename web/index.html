@@ -103,7 +103,7 @@
 
       <section class="impact-section" aria-labelledby="impact-heading">
         <div class="section-heading">
-          <h2 id="impact-heading">Your impact</h2>
+          <h2 id="impact-heading">Editor impact</h2>
           <p class="section-note" id="impact-window"></p>
         </div>
 
@@ -115,19 +115,18 @@
         <article class="panel chart-panel">
           <div class="chart-heading">
             <h3 id="merge-chart-title">Merged pull requests by week</h3>
-            <p class="chart-hint">A taller blue share means more of what merged had passed your review.</p>
+            <p class="chart-hint">One colour per editor: each merge is credited to the first editor other than the author who reviewed it. Grey merged with no editor review.</p>
           </div>
           <div class="chart-figure" id="merge-chart"></div>
           <details class="chart-data">
             <summary>Show the numbers</summary>
             <div class="table-wrap">
               <table id="merge-table">
-                <caption>Pull requests merged each week and how many had a review from you beforehand</caption>
+                <caption>Pull requests merged each week, by the editor credited with reviewing them first</caption>
                 <thead>
                   <tr>
                     <th scope="col">Week of</th>
                     <th scope="col">Merged</th>
-                    <th scope="col">Merged after your review</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -137,6 +136,25 @@
         </article>
 
         <div class="stat-row" id="impact-stats"></div>
+
+        <details class="chart-data">
+          <summary>Show the numbers behind the bars</summary>
+          <div class="table-wrap">
+            <table id="editor-table">
+              <caption>Each editor's share of the four figures above, over the same window</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Editor</th>
+                  <th scope="col">First replies</th>
+                  <th scope="col">Reviews submitted</th>
+                  <th scope="col">Contributors replied to</th>
+                  <th scope="col">Own PRs merged</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </details>
 
         <p class="fine-print" id="impact-note"></p>
       </section>

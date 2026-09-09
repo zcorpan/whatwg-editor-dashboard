@@ -21,6 +21,22 @@
   --danger-soft: #feeceb;
   --attention: #125c9b;
   --attention-soft: #e6f2ff;
+  /* Categorical series, one slot per editor. Validated with the dataviz palette
+     checker on every pair (not just neighbours), in both colour schemes, against
+     all three kinds of colour blindness: worst ΔE 8.5 protan/deutan and 12.3
+     tritan on white, 8.6 and 12.7 on the dark surface, worst normal-vision ΔE
+     15.7, every slot at or above 3:1 contrast on its own surface. Lightness does
+     as much of the work as hue, which is what keeps the pairs apart under
+     tritanopia. Re-run that check before touching a slot or adding a sixth. */
+  --series-1: #2c90d7;
+  --series-2: #7f5ba6;
+  --series-3: #c03710;
+  --series-4: #0b7643;
+  --series-5: #af8020;
+  --series-other: #5c6675;
+  --series-rest: #c9d1de;
+  --chart-grid: #e6e9f0;
+  --chart-axis: #b7beca;
   --shadow: 0 10px 30px rgba(34, 40, 55, 0.08);
   --radius: 14px;
   --max-width: 1240px;
@@ -49,6 +65,15 @@
     --danger-soft: #4b2424;
     --attention: #76bdf5;
     --attention-soft: #17364e;
+    --series-1: #3b9ce5;
+    --series-2: #8560ac;
+    --series-3: #c73e1a;
+    --series-4: #118659;
+    --series-5: #bb881e;
+    --series-other: #97a1b1;
+    --series-rest: #414a59;
+    --chart-grid: #2b313b;
+    --chart-axis: #4a5362;
     --shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
   }
 }
@@ -488,28 +513,17 @@ main {
   text-align: center;
 }
 
-/* Chart ink. The single series hue is a CVD-validated categorical blue, stepped
-   separately for the dark surface; the neutral is context, never a second series. */
+/* Chart ink. The series hues are data, not decoration, so they survive
+   forced-colours mode; the neutral grey is context, never a sixth editor. */
 .chart {
-  --series-1: #2a78d6;
-  --series-rest: #c9d1de;
-  --chart-grid: #e6e9f0;
-  --chart-axis: #b7beca;
   display: block;
   width: 100%;
   max-width: 460px;
   height: auto;
   margin-top: .7rem;
+  forced-color-adjust: none;
 }
 .chart-wide { max-width: 660px; }
-@media (prefers-color-scheme: dark) {
-  .chart {
-    --series-1: #3987e5;
-    --series-rest: #414a59;
-    --chart-grid: #2b313b;
-    --chart-axis: #4a5362;
-  }
-}
 .chart-line { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .chart-dot, .chart-end-dot { fill: var(--series-1); stroke: var(--surface); stroke-width: 2; }
 .chart-hit { fill: transparent; }
@@ -517,8 +531,23 @@ main {
 .chart-axis { stroke: var(--chart-axis); }
 .chart-tick, .chart-label { fill: var(--muted); font-size: 9px; }
 .chart-value { fill: var(--text); font-size: 10px; font-weight: 700; }
-.chart-column-highlight { fill: var(--series-1); }
-.chart-column-rest { fill: var(--series-rest); }
+.series-1 { fill: var(--series-1); }
+.series-2 { fill: var(--series-2); }
+.series-3 { fill: var(--series-3); }
+.series-4 { fill: var(--series-4); }
+.series-5 { fill: var(--series-5); }
+.series-other { fill: var(--series-other); }
+.series-rest { fill: var(--series-rest); }
+
+/* One stat card's number split by editor, in the colours of the columns above,
+   which carry the page's only legend. */
+.attribution-bar {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin-top: .55rem;
+  forced-color-adjust: none;
+}
 
 .chart-legend {
   display: flex;
@@ -531,13 +560,14 @@ main {
   font-size: .76rem;
 }
 .chart-legend li { display: flex; align-items: center; gap: .4rem; }
-.legend-swatch { width: .8rem; height: .8rem; border-radius: .25rem; }
-.legend-highlight { background: #2a78d6; }
-.legend-rest { background: #c9d1de; }
-@media (prefers-color-scheme: dark) {
-  .legend-highlight { background: #3987e5; }
-  .legend-rest { background: #414a59; }
-}
+.legend-swatch { width: .8rem; height: .8rem; border-radius: .25rem; forced-color-adjust: none; }
+.legend-swatch.series-1 { background: var(--series-1); }
+.legend-swatch.series-2 { background: var(--series-2); }
+.legend-swatch.series-3 { background: var(--series-3); }
+.legend-swatch.series-4 { background: var(--series-4); }
+.legend-swatch.series-5 { background: var(--series-5); }
+.legend-swatch.series-other { background: var(--series-other); }
+.legend-swatch.series-rest { background: var(--series-rest); }
 
 .verdict {
   margin: 0 0 1.3rem;
@@ -627,7 +657,7 @@ table { width: 100%; border-collapse: collapse; font-size: .82rem; }
 caption { padding: .8rem 1rem .2rem; color: var(--muted); text-align: left; font-size: .73rem; }
 th, td { padding: .8rem .9rem; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
 th:first-child, td:first-child { text-align: left; }
-thead th { color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+thead th { color: var(--muted); font-size: .72rem; letter-spacing: .05em; }
 tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
 tbody th { font-weight: 730; }
 .section-note, .fine-print { color: var(--muted); font-size: .79rem; }

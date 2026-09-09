@@ -44,18 +44,18 @@ The generated site never fetches GitHub notification inbox data. “Unseen” me
 
 ### Project-health metrics
 
-The health view answers two questions and stops: is the review load getting better or worse, and how much of the work was yours. Every figure on it comes from the same twelve-week window.
+The health view answers two questions and stops: is the review load getting better or worse, and how is the editing work distributed. Every figure on it comes from the same twelve-week window.
 
 - Three trend cards — open pull requests, contributors waiting more than `initial_editor_response_days` for a first reply, and the share of contributor PRs answered inside that target. Each shows the current value, the change across the window, a line chart, and which direction is the good one.
 - A verdict line naming whichever indicators are off target or moving the wrong way. “Off target” for the response rate means below `response_targets.first_response_within_target_percent`.
-- Your impact over the same window: the share of merged pull requests that had a review from you before they merged, the share of first editor replies that were yours, reviews submitted, distinct contributors replied to, and your own merged PRs.
+- Editor impact over the same window: the share of merged pull requests that had a review from an editor other than the author before they merged, first replies, reviews submitted, distinct contributors replied to, and PRs the editors authored. Each editor in `editors` gets one colour, fixed by alphabetical position and used everywhere: the weekly merge columns are split by editor, and each of the four figures carries a bar showing how it divides among them. One legend, above, covers both. The five hues are validated on every pair, in both light and dark, against protanopia, deuteranopia and tritanopia, and every chart also has a text alternative and a table of the same numbers, so nothing is carried by colour alone. A merge several editors reviewed is credited to whoever reviewed it first, so the columns still add up to the merges. The per-editor numbers are in tables behind the disclosures.
 - The weekly numbers behind each chart, in a table behind a disclosure, and one line of sampling coverage.
 
 Nothing is stored between builds. The weekly backlog is *reconstructed*: every open PR and every PR closed inside the history window is in the sample, so the number open at any past week in the window can be counted exactly.
 
 The newest week never counts toward the first-response rate. A PR opened three days ago has not missed a seven-day target yet, so counting it would report the calendar as a failure.
 
-Pull requests you authored are excluded from the review share, because an author cannot review their own. The wording intentionally describes event order, not causation: “merged after your review” does not mean the review caused the merge.
+An editor's own pull requests are excluded from their own review share, because an author cannot review their own; the group figure keeps them, counting a merge as reviewed once any editor other than the author reviewed it. The wording intentionally describes event order, not causation: “merged after a review” does not mean the review caused the merge.
 
 ## Deploying
 

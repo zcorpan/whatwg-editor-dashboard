@@ -42,7 +42,7 @@ sampling:
   # On a GitHub 502/504 timeout, the client halves this automatically for the rest of the build.
   graphql_page_size: 10
   timeline_each_end: 25
-  viewer_reviews: 25
+  reviews_per_pr: 25
   review_threads: 50
   history_days: 90
 

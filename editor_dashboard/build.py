@@ -82,8 +82,9 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
                 f"The first and last {config.sampling.timeline_each_end} issue comments/reviews are sampled per PR. "
                 "Metrics that require complete middle history are omitted when the sample is incomplete."
             ),
-            "viewer_reviews": (
-                f"The latest {config.sampling.viewer_reviews} reviews by @{config.viewer} are sampled per PR."
+            "reviews": (
+                f"The latest {config.sampling.reviews_per_pr} reviews of any author are sampled per PR, "
+                "which is what the per-editor impact figures are counted from."
             ),
             "mergeability": (
                 "GitHub computes mergeability lazily and answers UNKNOWN to a cold query, so the "
