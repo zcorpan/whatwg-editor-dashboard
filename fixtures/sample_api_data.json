@@ -15,7 +15,7 @@
         "login": "alice"
       },
       "authorAssociation": "FIRST_TIME_CONTRIBUTOR",
-      "body": "## Checklist\n\n- [x] At least two implementers are interested\n- [ ] Tests have been added\n- [x] Implementation bugs are filed\n- [x] HTML AAM impact considered\n- [ ] MDN issue filed\n- [x] Commit message is clear\n",
+      "body": "## Checklist\n\n- [x] At least two implementers are interested (and none opposed)\n- [ ] [Tests](https://github.com/web-platform-tests/wpt) are written and can be reviewed and commented upon at:\n- [x] [Implementation bugs](https://github.com/whatwg/meta/blob/main/MAINTAINERS.md#handling-pull-requests) are filed: https://issues.chromium.org/issues/40000001\n- [x] Corresponding [HTML AAM](https://w3c.github.io/html-aam/) & [ARIA in HTML](https://w3c.github.io/html-aria/) issues & PRs: **Not needed**\n- [ ] [MDN issue](https://github.com/whatwg/meta/blob/main/MAINTAINERS.md#handling-pull-requests) is filed:\n- [x] The top of this comment includes a [clear commit message](https://github.com/whatwg/meta/blob/main/COMMITTING.md) to use. <!-- If you created this PR from a single commit, Github copied its message. -->\n",
       "createdAt": "2026-07-29T09:00:00Z",
       "updatedAt": "2026-08-03T10:00:00Z",
       "lastEditedAt": null,
@@ -959,7 +959,7 @@
               "login": "foolip"
             },
             "authorAssociation": "CONTRIBUTOR",
-            "body": "@annevk one thread remains \u2014 could you take a look?",
+            "body": "@annevk one thread remains — could you take a look?",
             "createdAt": "2026-07-25T09:00:00Z",
             "updatedAt": "2026-07-25T09:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13009"
@@ -991,7 +991,7 @@
               "login": "foolip"
             },
             "authorAssociation": "CONTRIBUTOR",
-            "body": "@annevk one thread remains \u2014 could you take a look?",
+            "body": "@annevk one thread remains — could you take a look?",
             "createdAt": "2026-07-25T09:00:00Z",
             "updatedAt": "2026-07-25T09:00:00Z",
             "url": "https://github.com/whatwg/html/pull/0#issuecomment-c-13009"
