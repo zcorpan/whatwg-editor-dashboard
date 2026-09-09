@@ -14,7 +14,8 @@ The static page stores these values in `localStorage`:
 - the public content fingerprint marked addressed;
 - pin and snooze state;
 - the last-opened timestamp;
-- queue display preferences.
+- queue display preferences, including which editor's perspective the queue is showing;
+- which editor is using this browser, if the reader has said. The build has no configured viewer, so this identity exists only here; it is what decides whose signals count as seen and whose own footprint is excluded from an addressed fingerprint. Until it is set, no seen or addressed state is recorded at all.
 
 No client-side code sends this state to GitHub or another server. Export and import are explicit local file operations.
 

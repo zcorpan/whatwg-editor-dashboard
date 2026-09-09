@@ -24,10 +24,12 @@ class MetricsTests(unittest.TestCase):
         cls.metrics = build_metrics(open_analyses, closed_analyses, config, now=NOW)
 
     def test_current_repository_metrics(self) -> None:
+        # The four attention lanes are per-editor, so these counts are the whole
+        # team's view: #13009 is here for @annevk's mention, not for the viewer's.
         current = self.metrics["repository"]["current"]
         self.assertEqual(current["open_prs"], 12)
-        self.assertEqual(current["active_now"], 3)
-        self.assertEqual(current["direct_requests"], 2)
+        self.assertEqual(current["active_now"], 4)
+        self.assertEqual(current["direct_requests"], 3)
         self.assertEqual(current["stale_direct_requests"], 1)
         self.assertEqual(current["rereview_owed"], 1)
         self.assertEqual(current["ready_and_bounded"], 5)

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Collection, Iterable
 
-from .analysis import PRAnalysis, is_bot
+from .analysis import ALL_EDITORS, PRAnalysis, is_bot
 from .config import DashboardConfig
 from .models import PullRequestSnapshot, isoformat
 
@@ -443,6 +443,11 @@ def _editor_impact(
     }
 
 
+def _lane_count(analyses: Iterable[PRAnalysis], lane: str) -> int:
+    """How many PRs are in one attention lane from the whole team's perspective."""
+    return sum(lane in analysis.perspectives[ALL_EDITORS].lanes for analysis in analyses)
+
+
 def build_metrics(
     open_analyses: Iterable[PRAnalysis],
     closed_analyses: Iterable[PRAnalysis],
@@ -477,19 +482,22 @@ def build_metrics(
                 "open_prs": len(open_values),
                 "draft_prs": sum(analysis.pr.is_draft for analysis in open_values),
                 "ready_for_review_prs": sum(not analysis.pr.is_draft for analysis in open_values),
-                "active_now": sum("active" in analysis.lanes for analysis in open_values),
-                "direct_requests": sum("direct" in analysis.lanes for analysis in open_values),
-                "stale_direct_requests": sum("stale_direct" in analysis.lanes for analysis in open_values),
-                "rereview_owed": sum("rereview" in analysis.lanes for analysis in open_values),
-                "waiting_on_editor": sum("oldest_wait" in analysis.lanes for analysis in open_values),
+                # The four attention lanes are per-editor, so a repository-wide count
+                # takes the whole team's view: how much of the backlog claims *some*
+                # editor's attention.
+                "active_now": _lane_count(open_values, "active"),
+                "direct_requests": _lane_count(open_values, "direct"),
+                "stale_direct_requests": _lane_count(open_values, "stale_direct"),
+                "rereview_owed": _lane_count(open_values, "rereview"),
+                "waiting_on_editor": sum("oldest_wait" in analysis.shared_lanes for analysis in open_values),
                 "known_without_editor_response": known_without_response,
                 "first_response_unknown_due_to_sampling": unknown_first_response,
                 "over_response_target": sum(
-                    "oldest_wait" in analysis.lanes
+                    "oldest_wait" in analysis.shared_lanes
                     and (analysis.current_wait_hours or 0) >= target_hours
                     for analysis in open_values
                 ),
-                "ready_and_bounded": sum("ready_bounded" in analysis.lanes for analysis in open_values),
+                "ready_and_bounded": sum("ready_bounded" in analysis.shared_lanes for analysis in open_values),
             },
         },
         "trends": {

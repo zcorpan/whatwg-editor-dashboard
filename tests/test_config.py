@@ -13,7 +13,8 @@ MINIMAL = """
 repository:
   owner: whatwg
   name: html
-viewer: zcorpan
+editors:
+  - zcorpan
 """
 
 
@@ -54,6 +55,16 @@ class SuggestedNextConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError) as caught:
             config_from("suggested_next:\n  cycle:\n    - overdue\n    - overdue\n")
         self.assertIn("duplicate", str(caught.exception))
+
+    def test_at_least_one_editor_is_required(self) -> None:
+        # There is no configured viewer to fall back on, so the editor list is the
+        # only thing naming who the queue can be read as.
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "dashboard.yml"
+            path.write_text("repository:\n  owner: whatwg\n  name: html\n", encoding="utf-8")
+            with self.assertRaises(ValueError) as caught:
+                load_config(path)
+        self.assertIn("editors", str(caught.exception))
 
     def test_the_shipped_configuration_parses(self) -> None:
         config = load_config(ROOT / "dashboard.yml")

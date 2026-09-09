@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .analysis import analyze_all, build_lanes
+from .analysis import ALL_EDITORS, analyze_all, build_lanes, build_perspective_lanes, perspective_keys
 from .config import DashboardConfig
 from .github import RepositoryData
 from .metrics import build_metrics
@@ -16,19 +16,19 @@ from .models import isoformat
 LANE_DESCRIPTIONS = {
     "active": {
         "title": "Active now",
-        "description": "Recently changed PRs the editor is already involved in, newest activity first.",
+        "description": "Recently changed PRs the selected editor is already involved in, newest activity first.",
     },
     "direct": {
         "title": "Direct requests",
-        "description": "Current review requests and assignments, plus public mentions inside the activity window.",
+        "description": "Review requests and assignments currently held by the selected editor, plus public mentions of them inside the activity window.",
     },
     "stale_direct": {
         "title": "Stale mentions",
-        "description": "Public mentions older than the activity window, kept findable but no longer claiming the queue.",
+        "description": "Mentions of the selected editor older than the activity window, kept findable but no longer claiming the queue.",
     },
     "rereview": {
         "title": "Re-review owed",
-        "description": "The PR changed or the author replied after the editor's latest sampled review.",
+        "description": "The PR changed or the author replied after the selected editor's latest sampled review.",
     },
     "reply_window": {
         "title": "Reply window open",
@@ -68,11 +68,27 @@ def _queue_order_principle(config: DashboardConfig) -> str:
     )
 
 
+def _perspective_options(config: DashboardConfig) -> list[dict[str, Any]]:
+    # `editor` marks the options that can also be an identity. The union is a way of
+    # reading the queue, not a person, so it carries no fingerprints and cannot own
+    # browser-local seen or addressed state.
+    return [
+        {
+            "key": key,
+            "label": "All editors" if key == ALL_EDITORS else f"@{key}",
+            "editor": key != ALL_EDITORS,
+        }
+        for key in perspective_keys(config)
+    ]
+
+
 def _methodology(config: DashboardConfig) -> dict[str, Any]:
     return {
         "principles": [
             "No LLM is used. Every classification is produced by deterministic, inspectable rules.",
             _queue_order_principle(config),
+            "The attention lanes are computed for every configured editor, so the queue can be read from any one editor's perspective or from all of them at once.",
+            "Which editor you are is chosen in the browser and stored only there; the build has no configured viewer and the published data names nobody as the reader.",
             "The generated site contains public GitHub data only.",
             "Seen, addressed, pinned, snoozed, and opened state is stored only in the browser.",
             "Description checklist completion is descriptive and is not an assessment of test sufficiency or specification readiness.",
@@ -114,13 +130,19 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
             "Inline review-thread replies are not inspected for mentions or response-time metrics in this MVP.",
             "Review-request and assignment connections expose current state, not a complete timestamped history; their displayed timestamp uses the PR update time and is excluded from the seen-signal fingerprint.",
             (
-                "The addressed-content fingerprint ignores the viewer's own comments, reviews and review threads, "
-                "along with the review request GitHub clears when they review, so that reviewing a PR does not "
-                "undo 'address until changed'. A renewed review request with no other change therefore does not "
-                "return the PR on its own, and only the newest comment or review by somebody else is "
-                "fingerprinted, so an edit to an older one is not detected. Mergeability is excluded "
+                "Each editor's addressed-content fingerprint ignores that editor's own comments, reviews and "
+                "review threads, along with the review request GitHub clears when they review, so that reviewing "
+                "a PR does not undo 'address until changed'. A renewed review request with no other change "
+                "therefore does not return the PR on its own, and only the newest comment or review by somebody "
+                "else is fingerprinted, so an edit to an older one is not detected. Mergeability is excluded "
                 "too: GitHub computes it lazily and answers UNKNOWN to a cold query, so it changes "
                 "between builds without the pull request changing."
+            ),
+            (
+                "The queue's editor selector changes which attention lanes and evidence chips are shown; the "
+                "separate identity setting decides whose signals count as seen and addressed. Until an identity "
+                "is chosen the browser tracks pins and snoozes only, because those two markers are the ones that "
+                "need to know whose footprint to leave out of a fingerprint."
             ),
             "The configured current editor list is applied to the full sampled history; historical editor-membership changes are not reconstructed.",
             (
@@ -150,6 +172,7 @@ def build_site(
     open_analyses = analyze_all(repository_data.open_pull_requests, config, now=now)
     closed_analyses = analyze_all(repository_data.recently_closed_pull_requests, config, now=now)
     lanes = build_lanes(open_analyses, config.repository.slug)
+    perspective_lanes = build_perspective_lanes(open_analyses, config)
     metrics = build_metrics(open_analyses, closed_analyses, config, now=now)
 
     items = [
@@ -158,7 +181,7 @@ def build_site(
     ]
 
     payload: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": isoformat(now),
         "repository": {
             "owner": config.repository.owner,
@@ -166,13 +189,9 @@ def build_site(
             "slug": config.repository.slug,
             "url": f"https://github.com/{config.repository.slug}/pulls",
         },
-        "viewer": {
-            "login": config.viewer,
-            "display": f"@{config.viewer}",
-        },
         "privacy": {
             "generated_data": "public-only",
-            "local_state": ["seen", "addressed", "pinned", "snoozed", "opened", "queue_preferences"],
+            "local_state": ["identity", "seen", "addressed", "pinned", "snoozed", "opened", "queue_preferences"],
             "github_notifications_fetched": False,
         },
         "response_targets": {
@@ -188,7 +207,14 @@ def build_site(
             "first_response_lead": config.suggested_next.first_response_lead,
         },
         "lane_descriptions": LANE_DESCRIPTIONS,
+        # Which editor's queue the browser is showing. The attention lanes and their
+        # evidence differ per perspective; `lanes` holds the four that do not.
+        "perspectives": {
+            "default": ALL_EDITORS,
+            "options": _perspective_options(config),
+        },
         "lanes": lanes,
+        "perspective_lanes": perspective_lanes,
         "items": items,
         "metrics": metrics,
         "methodology": _methodology(config),

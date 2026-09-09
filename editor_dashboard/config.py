@@ -69,7 +69,9 @@ class SuggestedNextConfig:
 @dataclass(frozen=True)
 class DashboardConfig:
     repository: RepositoryConfig
-    viewer: str
+    # The editors the queue can be read as. There is deliberately no configured
+    # "viewer": which of them is *you* is a property of the browser, not of the
+    # repository, and a public deployment has no business guessing it.
     editors: frozenset[str]
     response_targets: ResponseTargets = field(default_factory=ResponseTargets)
     attention: AttentionConfig = field(default_factory=AttentionConfig)
@@ -114,16 +116,12 @@ def load_config(path: str | Path) -> DashboardConfig:
     if not owner or not name:
         raise ValueError("repository.owner and repository.name are required")
 
-    viewer = str(raw.get("viewer", "")).strip().lstrip("@").lower()
-    if not viewer:
-        raise ValueError("viewer is required")
-
     editors_raw = raw.get("editors", [])
     if not isinstance(editors_raw, list):
         raise ValueError("editors must be a list")
     editors = frozenset(str(value).strip().lstrip("@").lower() for value in editors_raw if str(value).strip())
-    if viewer not in editors:
-        editors = frozenset((*editors, viewer))
+    if not editors:
+        raise ValueError("editors must list at least one login")
 
     targets_raw = _mapping(raw.get("response_targets", {}), "response_targets")
     targets = ResponseTargets(
@@ -216,7 +214,6 @@ def load_config(path: str | Path) -> DashboardConfig:
 
     return DashboardConfig(
         repository=RepositoryConfig(owner=owner, name=name),
-        viewer=viewer,
         editors=editors,
         response_targets=targets,
         attention=attention,

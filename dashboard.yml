@@ -2,9 +2,9 @@ repository:
   owner: whatwg
   name: html
 
-viewer: zcorpan
-
-# Current HTML editors. These are public identities used for response-time metrics.
+# Current HTML editors. These are public identities: they are the queue perspectives,
+# the rows of the editor-impact section, and the population of the response-time
+# metrics. Which one is *you* is chosen in the browser, not here.
 editors:
   - annevk
   - domenic

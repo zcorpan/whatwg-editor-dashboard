@@ -29,6 +29,10 @@
       <details class="panel queue-controls" id="queue-controls">
         <summary>Queue controls</summary>
         <div class="queue-controls-content">
+          <label class="sort-field">
+            <span>Editor</span>
+            <select id="editor-perspective"></select>
+          </label>
           <label class="search-field">
             <span class="visually-hidden">Search pull requests</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
@@ -53,12 +57,21 @@
             <input type="file" id="import-state-file" accept="application/json" hidden>
             <button type="button" id="reset-state" class="danger-button">Reset</button>
           </div>
-          <p class="muted" id="local-state-summary">Local state is loading.</p>
+          <!-- Who you are is what "seen" and "addressed" are measured against, so it
+               sits on the row with the local-state summary rather than with the
+               controls that only change what is displayed. -->
+          <div class="identity-row">
+            <label class="sort-field">
+              <span>You are</span>
+              <select id="editor-identity"></select>
+            </label>
+            <p class="muted" id="local-state-summary">Local state is loading.</p>
+          </div>
         </div>
       </details>
 
       <details class="queue-section" id="suggested-section" open>
-        <summary><h2 id="suggested-heading">Suggested next <span class="count-badge" id="suggested-count">0</span></h2></summary>
+        <summary><h2 id="suggested-heading">Suggested next <span class="count-badge" id="suggested-count">0</span> <span class="perspective-badge" id="suggested-perspective" hidden></span></h2></summary>
         <div id="suggested-list" class="card-list" aria-live="polite"></div>
       </details>
 

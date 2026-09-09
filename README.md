@@ -12,14 +12,18 @@ The dashboard is rebuilt by GitHub Actions once every 24 hours and deployed to G
 
 The review dashboard contains these explainable lanes:
 
-1. **Active now** — PRs changed within the activity window that `@zcorpan` is already involved in, through a direct request, an owed re-review, or a previously submitted review. Newest activity first.
-2. **Direct requests** — current review requests and assignments, plus sampled public `@zcorpan` mentions inside the activity window.
+1. **Active now** — PRs changed within the activity window that the selected editor is already involved in, through a direct request, an owed re-review, or a previously submitted review. Newest activity first.
+2. **Direct requests** — review requests and assignments the selected editor currently holds, plus sampled public mentions of them inside the activity window.
 3. **Stale mentions** — mentions older than the activity window, kept findable without leading the queue.
-4. **Re-review owed** — a head commit, PR description, or sampled author activity changed after the latest sampled `@zcorpan` review.
+4. **Re-review owed** — a head commit, PR description, or sampled author activity changed after the selected editor's latest sampled review.
 5. **Reply window open** — non-draft contributor PRs that have never received a sampled editor response and are still inside the seven-day target, closest to the deadline first. The only PRs where a first reply can still meet the target.
 6. **First reply overdue** — the same population past the target, oldest first. A PR that misses the target moves here rather than leaving the pair.
 7. **Longest waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
 8. **Ready** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
+
+The first four lanes are computed for every editor in `dashboard.yml`, and the **Editor** control in the queue controls picks whose queue is on screen. It defaults to **All editors** — the union, so a PR is in a lane if it is in that lane for anybody — and the other options are the individual editors. The remaining lanes are properties of the pull request rather than of any editor, so they read the same from every perspective. The choice is stored per browser, and somebody else’s login is repeated next to the “Suggested next” heading, because the controls panel starts collapsed.
+
+There is no configured viewer. A separate **You are** control names which editor is using this browser, which is what decides whose signals count as seen and whose own footprint is left out of an addressed fingerprint. It starts at **Just browsing**, since the deployed site is public and most readers are not editors; pins and snoozes work either way, and seen and addressed appear once you say who you are. The two controls are independent, so reading a colleague’s queue never touches your own state.
 
 “Suggested next” shows up to three **Reply window open** PRs, then the whole **Active now** lane, then interleaves re-review, overdue-first-reply, oldest-wait, ready/bounded, and stale-direct candidates. Overdue PRs are not in the lead because a missed target cannot be un-missed: replying still matters to the contributor, but it can no longer change the first-response rate. Both the lead size and the cycle are configurable in `dashboard.yml`. The current lane can also be sorted by checklist completion, unchecked-box count, contributor wait, update time, or age.
 
@@ -32,6 +36,7 @@ Every card exposes the evidence and detected limitations behind its classificati
 ### Browser-local workflow state
 
 - Opening a GitHub link marks the current public attention signal as seen in that browser.
+- Seen and addressed state is anchored to the **You are** identity, not to the **Editor** perspective. Switching the queue to another editor changes which lanes and evidence chips are shown, never which items this browser has already dealt with. Changing the identity does resurface addressed items, because they are measured against a fingerprint that leaves that editor's own footprint out; switching back restores them, since nothing is overwritten until you act.
 - **Address until changed** records the current public content fingerprint. The PR automatically returns when that fingerprint changes. The fingerprint deliberately excludes the editor's own footprint — their comments and reviews, the review threads they started, their cleared review request, the review decision, and the PR's `updatedAt` — so replying to a PR and then addressing it does not bring it straight back. It also excludes mergeability, which GitHub computes lazily and reports as `UNKNOWN` to a cold query, so it moves between builds without the PR changing.
 - Pin, snooze, lane-sort, and queue-controls preferences are local; the controls panel starts collapsed and stays as this browser left it.
 - State can be exported and imported manually as JSON.
@@ -60,7 +65,7 @@ An editor's own pull requests are excluded from their own review share, because 
 ## Deploying
 
 1. Create a GitHub repository and copy this project into it. A private repository is a good default when your plan supports private-repository Pages: the generated Pages site can still be public, and public repositories can have scheduled workflows disabled after 60 days without repository activity.
-2. Keep `dashboard.yml` as-is for `whatwg/html` and `@zcorpan`, or edit it before the first run.
+2. Keep `dashboard.yml` as-is for `whatwg/html`, or edit the repository and editor list before the first run.
 3. In the repository's **Settings → Pages**, select **GitHub Actions** as the build and deployment source.
 4. Push to `main`, or run the workflow manually.
 
@@ -120,7 +125,7 @@ A persistent failure at page size 1 is more likely to be a wider GitHub API inci
 `dashboard.yml` controls:
 
 - repository owner and name;
-- viewer login and public editor logins;
+- the public editor logins (each gets its own queue perspective, fingerprints and impact row);
 - the seven-day first-response target and 48-hour new-PR highlight;
 - the activity window that defines “active now” and how long a mention keeps claiming attention;
 - ready/bounded diff and checklist thresholds (the HTML MVP defaults to all boxes checked);
@@ -128,14 +133,14 @@ A persistent failure at page size 1 is more likely to be a wider GitHub API inci
 - the outer GraphQL page size, nested sampling sizes, and historical window;
 - suggested-next lead size and interleaving order.
 
-The current editor list is deliberately explicit. Update it when the HTML editor group changes, because it affects response-time and waiting-on-editor metrics.
+The current editor list is deliberately explicit. Update it when the HTML editor group changes, because it affects response-time and waiting-on-editor metrics, and it is also the option list of the queue's **Editor** control.
 
 ## Data collection and API economy
 
 The Python builder uses GitHub's GraphQL API and paginates open PRs and recently closed PRs. For each PR it samples:
 
 - the first and last configured number of issue comments and submitted reviews;
-- recent reviews authored by the configured viewer;
+- the latest configured number of submitted reviews, whoever wrote them, which is what the per-editor re-review lanes and impact figures are counted from;
 - current review requests and assignees;
 - current labels, mergeability, review decision, check-rollup state, and head commit;
 - a bounded review-thread sample.

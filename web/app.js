@@ -16,7 +16,7 @@ const CLOCK_TICK_MS = 60 * 1000;
 
 // Collapsible sections, and how each one starts before this browser has an opinion.
 const SECTION_DEFAULTS = {"queue-controls": false, "suggested-section": true, "lanes-section": true};
-const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, sortOrder: "queue", openSections: {}});
+const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, sortOrder: "queue", perspective: null, identity: null, openSections: {}});
 
 let dashboard = null;
 let itemsByKey = new Map();
@@ -74,6 +74,11 @@ function loadLocalState() {
         showAddressed: Boolean(parsed.settings?.showAddressed),
         showSnoozed: Boolean(parsed.settings?.showSnoozed),
         sortOrder: SORT_ORDERS.has(parsed.settings?.sortOrder) ? parsed.settings.sortOrder : "queue",
+        // Validated against the payload's option list at read time, not here: the
+        // configured editors can change between builds, and a stored login that is
+        // no longer one of them has to fall back rather than empty the queue.
+        perspective: typeof parsed.settings?.perspective === "string" ? parsed.settings.perspective : null,
+        identity: typeof parsed.settings?.identity === "string" ? parsed.settings.identity : null,
         openSections: readOpenSections(parsed.settings?.openSections),
       },
     };
@@ -110,8 +115,24 @@ function stateFor(key) {
   return localState.items[key];
 }
 
+// Which editor's fingerprints the browser measures its own state against. Null
+// until the user picks one: on a public site most readers are not editors, and
+// "addressed until somebody else changes it" has no meaning without a "somebody".
+function identityKey() {
+  const stored = localState.settings.identity;
+  return editorOptions().some(option => option.key === stored) ? stored : null;
+}
+
+// The identity's view of one item, which is what seen and addressed are read from,
+// whichever perspective's lanes are on screen.
+function identityView(item) {
+  const identity = identityKey();
+  return identity ? item.perspectives?.[identity] || null : null;
+}
+
 function isAddressed(item) {
-  return stateFor(item.key).addressedFingerprint === item.fingerprint;
+  const fingerprint = identityView(item)?.fingerprint;
+  return Boolean(fingerprint) && stateFor(item.key).addressedFingerprint === fingerprint;
 }
 
 function isSnoozed(item) {
@@ -122,8 +143,9 @@ function isSnoozed(item) {
 }
 
 function isUnseen(item) {
-  if (!item.has_attention_signal) return false;
-  return stateFor(item.key).seenAttentionFingerprint !== item.attention_fingerprint;
+  const view = identityView(item);
+  if (!view?.has_attention_signal) return false;
+  return stateFor(item.key).seenAttentionFingerprint !== view.attention_fingerprint;
 }
 
 function isPinned(item) {
@@ -131,16 +153,19 @@ function isPinned(item) {
 }
 
 function markSeen(item) {
+  const view = identityView(item);
   const state = stateFor(item.key);
-  state.seenAttentionFingerprint = item.attention_fingerprint;
+  if (view) state.seenAttentionFingerprint = view.attention_fingerprint;
   state.openedAt = new Date().toISOString();
   saveLocalState();
 }
 
 function setAddressed(item, addressed) {
+  const view = identityView(item);
+  if (!view) return;
   const state = stateFor(item.key);
-  state.addressedFingerprint = addressed ? item.fingerprint : null;
-  state.seenAttentionFingerprint = item.attention_fingerprint;
+  state.addressedFingerprint = addressed ? view.fingerprint : null;
+  state.seenAttentionFingerprint = view.attention_fingerprint;
   if (addressed) state.snoozedUntil = null;
   saveLocalState();
 }
@@ -158,7 +183,8 @@ function setSnooze(item, days) {
     const date = new Date();
     date.setDate(date.getDate() + Number(days));
     state.snoozedUntil = date.toISOString();
-    state.seenAttentionFingerprint = item.attention_fingerprint;
+    const view = identityView(item);
+    if (view) state.seenAttentionFingerprint = view.attention_fingerprint;
   }
   saveLocalState();
 }
@@ -202,6 +228,51 @@ function toast(message) {
   const node = element("div", {className: "toast", text: message, attrs: {role: "status"}});
   region.append(node);
   setTimeout(() => node.remove(), 3500);
+}
+
+function perspectiveOptions() {
+  return dashboard?.perspectives?.options || [];
+}
+
+// The perspectives that name one editor, which are the ones that can be an identity.
+function editorOptions() {
+  return perspectiveOptions().filter(option => option.editor);
+}
+
+// Which editor's queue is on screen. An unknown or dropped login falls back to the
+// payload's default rather than resolving to an empty queue.
+function perspectiveKey() {
+  const stored = localState.settings.perspective;
+  if (perspectiveOptions().some(option => option.key === stored)) return stored;
+  return dashboard?.perspectives?.default || perspectiveOptions()[0]?.key || null;
+}
+
+function perspectiveLabel(key = perspectiveKey()) {
+  const option = perspectiveOptions().find(value => value.key === key);
+  if (!option) return "";
+  return option.key === identityKey() ? `${option.label} (you)` : option.label;
+}
+
+// Your own queue and the team default are the two unremarkable states; only reading
+// somebody else's lanes is worth calling out away from the controls panel.
+function browsingSomebodyElse() {
+  const current = perspectiveKey();
+  return current !== dashboard.perspectives?.default && current !== identityKey();
+}
+
+// `active`, `direct`, `stale_direct` and `rereview` depend on which editor is
+// asking and come from `perspective_lanes`; the rest are properties of the pull
+// request and are published once.
+function laneKeys(lane) {
+  const lanes = dashboard.perspective_lanes?.[perspectiveKey()] || {};
+  return lanes[lane] || dashboard.lanes[lane] || [];
+}
+
+// The perspective's own evidence first, then the evidence every perspective shares,
+// which is the order the Python side used to emit as one list.
+function itemReasons(item) {
+  const own = item.perspectives?.[perspectiveKey()]?.reasons;
+  return own ? [...own, ...item.reasons] : item.reasons;
 }
 
 function itemMatchesSearch(item) {
@@ -289,10 +360,11 @@ function createDetails(item) {
   details.append(element("summary", {text: "Evidence and limitations"}));
   const content = element("div", {className: "card-details-content"});
 
-  if (item.reasons.length) {
+  const reasons = itemReasons(item);
+  if (reasons.length) {
     content.append(element("h4", {text: "Why it appears"}));
     const list = element("ul");
-    for (const reason of item.reasons) {
+    for (const reason of reasons) {
       const detail = reason.detail ? ` — ${reason.detail}` : "";
       list.append(element("li", {text: `${reason.label}${detail}`}));
     }
@@ -377,10 +449,11 @@ function createPRCard(item) {
   heading.append(meta);
 
   const reasonList = element("div", {className: "reason-list"});
-  const visibleReasons = item.reasons.slice(0, 6);
+  const reasons = itemReasons(item);
+  const visibleReasons = reasons.slice(0, 6);
   for (const reason of visibleReasons) reasonList.append(chip(reason));
-  if (item.reasons.length > visibleReasons.length) {
-    reasonList.append(element("span", {className: "chip muted", text: `+${item.reasons.length - visibleReasons.length} more`}));
+  if (reasons.length > visibleReasons.length) {
+    reasonList.append(element("span", {className: "chip muted", text: `+${reasons.length - visibleReasons.length} more`}));
   }
   for (const blocker of item.blockers.slice(0, 2)) reasonList.append(chip(blocker));
   heading.append(reasonList);
@@ -435,16 +508,18 @@ function createPRCard(item) {
     onAuxClick: markMiddleOpened,
   }));
 
-  actions.append(element("button", {
-    type: "button",
-    className: `action-button${addressed ? " active" : ""}`,
-    text: addressed ? "Addressed until changed ✓" : "Address until changed",
-    onClick: () => {
-      setAddressed(item, !isAddressed(item));
-      renderQueues();
-      toast(isAddressed(item) ? "Hidden until somebody else changes the PR." : "PR returned to active queues.");
-    },
-  }));
+  if (identityKey()) {
+    actions.append(element("button", {
+      type: "button",
+      className: `action-button${addressed ? " active" : ""}`,
+      text: addressed ? "Addressed until changed ✓" : "Address until changed",
+      onClick: () => {
+        setAddressed(item, !isAddressed(item));
+        renderQueues();
+        toast(isAddressed(item) ? "Hidden until somebody else changes the PR." : "PR returned to active queues.");
+      },
+    }));
+  }
 
   actions.append(element("button", {
     type: "button",
@@ -503,12 +578,12 @@ function suggestedItems() {
   // those stay in the cycle. Bounded so incoming work cannot bury live reviews, and
   // the limit is applied after filtering so addressing one promotes the next.
   const leadLimit = dashboard.suggested_next.first_response_lead || 0;
-  for (const item of orderedVisibleItems(dashboard.lanes.reply_window || []).slice(0, leadLimit)) add(item);
+  for (const item of orderedVisibleItems(laneKeys("reply_window")).slice(0, leadLimit)) add(item);
 
-  for (const item of orderedVisibleItems(dashboard.lanes.active || [])) add(item);
+  for (const item of orderedVisibleItems(laneKeys("active"))) add(item);
 
   const cycle = dashboard.suggested_next.cycle || [];
-  const laneItems = new Map(cycle.map(lane => [lane, orderedVisibleItems(dashboard.lanes[lane] || [])]));
+  const laneItems = new Map(cycle.map(lane => [lane, orderedVisibleItems(laneKeys(lane))]));
   const indexes = new Map(cycle.map(lane => [lane, 0]));
   let addedAfterActive = 0;
   let madeProgress = true;
@@ -535,7 +610,7 @@ function renderLaneTabs() {
   for (const lane of LANE_ORDER) {
     const descriptor = dashboard.lane_descriptions[lane];
     if (!descriptor) continue;
-    const visibleCount = orderedVisibleItems(dashboard.lanes[lane] || []).length;
+    const visibleCount = orderedVisibleItems(laneKeys(lane)).length;
     const button = element("button", {
       type: "button",
       className: "lane-tab",
@@ -557,17 +632,51 @@ function renderLaneTabs() {
   container.replaceChildren(...tabs);
 }
 
+// The option lists only change when a build changes the configured editors or when
+// the identity moves the "(you)" marker, so they are filled then rather than on
+// every re-render, which would replace the children of a select being operated.
+function renderPerspectiveOptions() {
+  document.querySelector("#editor-perspective").replaceChildren(
+    ...perspectiveOptions().map(option => element("option", {value: option.key, text: perspectiveLabel(option.key)})),
+  );
+  document.querySelector("#editor-identity").replaceChildren(
+    element("option", {value: "", text: "Just browsing"}),
+    ...editorOptions().map(option => element("option", {value: option.key, text: option.label})),
+  );
+}
+
+function syncPerspectiveControl() {
+  const current = perspectiveKey();
+  document.querySelector("#editor-perspective").value = current || "";
+  document.querySelector("#editor-identity").value = identityKey() || "";
+
+  // Repeated next to the heading, because the controls panel starts collapsed and a
+  // queue showing somebody else's attention lanes must not look like your own.
+  const badge = document.querySelector("#suggested-perspective");
+  const elsewhere = browsingSomebodyElse();
+  badge.textContent = elsewhere ? perspectiveLabel(current) : "";
+  badge.hidden = !elsewhere;
+}
+
 function renderLocalSummary() {
   const allItems = [...itemsByKey.values()];
-  const addressed = allItems.filter(isAddressed).length;
   const snoozed = allItems.filter(isSnoozed).length;
   const pinned = allItems.filter(isPinned).length;
+  const summary = document.querySelector("#local-state-summary");
+  if (!identityKey()) {
+    // Seen and addressed both compare against a fingerprint that leaves one
+    // editor's own footprint out, so neither can be tracked for nobody.
+    summary.textContent = `${snoozed} snoozed · ${pinned} pinned in this browser. Say who you are to track seen and addressed too.`;
+    return;
+  }
+  const addressed = allItems.filter(isAddressed).length;
   const unseen = allItems.filter(isUnseen).length;
-  document.querySelector("#local-state-summary").textContent = `${unseen} unseen · ${addressed} addressed · ${snoozed} snoozed · ${pinned} pinned in this browser`;
+  summary.textContent = `${unseen} unseen · ${addressed} addressed · ${snoozed} snoozed · ${pinned} pinned in this browser`;
 }
 
 function renderQueues() {
   if (!dashboard) return;
+  syncPerspectiveControl();
   renderLocalSummary();
   renderLaneTabs();
 
@@ -581,11 +690,14 @@ function renderQueues() {
 
   const descriptor = dashboard.lane_descriptions[activeLane];
   document.querySelector("#lane-description").textContent = descriptor?.description || "";
-  const laneItems = orderedVisibleItems(dashboard.lanes[activeLane] || [], localState.settings.sortOrder);
+  const laneItems = orderedVisibleItems(laneKeys(activeLane), localState.settings.sortOrder);
+  const forEditor = browsingSomebodyElse() ? ` for ${perspectiveLabel()}` : "";
   renderList(
     document.querySelector("#lane-list"),
     laneItems,
-    searchQuery ? "No items in this queue match your search and local filters." : "No active items in this queue."
+    searchQuery
+      ? "No items in this queue match your search and local filters."
+      : `No active items in this queue${forEditor}.`
   );
 }
 
@@ -1200,6 +1312,8 @@ async function importState(file) {
       showAddressed: Boolean(parsed.settings?.showAddressed),
       showSnoozed: Boolean(parsed.settings?.showSnoozed),
       sortOrder: SORT_ORDERS.has(parsed.settings?.sortOrder) ? parsed.settings.sortOrder : "queue",
+      perspective: typeof parsed.settings?.perspective === "string" ? parsed.settings.perspective : null,
+      identity: typeof parsed.settings?.identity === "string" ? parsed.settings.identity : null,
       openSections: readOpenSections(parsed.settings?.openSections),
     },
   };
@@ -1210,6 +1324,8 @@ async function importState(file) {
 }
 
 function syncControlState() {
+  // Import and reset can move the identity, which moves the "(you)" marker.
+  if (dashboard) renderPerspectiveOptions();
   for (const [id, fallback] of Object.entries(SECTION_DEFAULTS)) {
     const stored = localState.settings.openSections[id];
     document.querySelector(`#${id}`).open = typeof stored === "boolean" ? stored : fallback;
@@ -1233,6 +1349,22 @@ function installEventHandlers() {
   document.querySelector("#show-snoozed").addEventListener("change", event => {
     localState.settings.showSnoozed = event.target.checked;
     saveLocalState();
+    renderQueues();
+  });
+  document.querySelector("#editor-perspective").addEventListener("change", event => {
+    localState.settings.perspective = event.target.value;
+    saveLocalState();
+    renderQueues();
+  });
+  document.querySelector("#editor-identity").addEventListener("change", event => {
+    localState.settings.identity = event.target.value || null;
+    // Saying who you are is almost always followed by wanting your own queue, but
+    // an explicit perspective choice is left alone.
+    if (localState.settings.identity && localState.settings.perspective === null) {
+      localState.settings.perspective = localState.settings.identity;
+    }
+    saveLocalState();
+    renderPerspectiveOptions();
     renderQueues();
   });
   document.querySelector("#sort-order").addEventListener("change", event => {
@@ -1280,6 +1412,7 @@ function applyDashboard(payload, {preserveScroll = false} = {}) {
   dashboard = payload;
   itemsByKey = new Map(dashboard.items.map(item => [item.key, item]));
   updateBuildIndicator();
+  renderPerspectiveOptions();
   renderQueues();
   renderHealth();
   renderMethodology();

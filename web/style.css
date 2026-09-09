@@ -198,12 +198,20 @@ main {
 .queue-controls[open] > summary { border-bottom: 1px solid var(--border); }
 .queue-controls-content {
   display: grid;
-  grid-template-columns: minmax(240px, 1.4fr) minmax(170px, auto) auto auto auto;
+  grid-template-columns: minmax(150px, auto) minmax(240px, 1.4fr) minmax(170px, auto) auto auto auto;
   align-items: center;
   gap: 1rem;
   padding: 1rem;
 }
 .queue-controls-content p { grid-column: 1 / -1; margin: 0; font-size: .78rem; }
+.identity-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.identity-row p { margin: 0; font-size: .78rem; }
 .muted { color: var(--muted); }
 .search-field {
   display: flex;
@@ -305,6 +313,18 @@ main {
   background: var(--surface-subtle);
   color: var(--muted);
   font-weight: 750;
+}
+/* Which editor's queue is on screen, repeated next to the heading so it stays
+   visible when the controls panel is collapsed. */
+.perspective-badge {
+  display: inline-block;
+  padding: .2rem .55rem;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 650;
+  vertical-align: middle;
 }
 .lane-tabs {
   display: flex;

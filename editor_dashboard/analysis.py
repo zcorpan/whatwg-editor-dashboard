@@ -30,20 +30,60 @@ class Reason:
         }
 
 
+# The perspective key that answers "what needs any editor", as opposed to one
+# editor's login. Deliberately not spelled "all": that is already a lane name, and
+# lanes and perspectives are indexed by two different dictionaries.
+ALL_EDITORS = "all-editors"
+
+# Lane membership that depends on who is asking, and lane membership that does not.
+# `_direct_reasons` and `_rereview_reasons` are per-editor; everything else — the
+# first-response pair, the contributor wait, the ready heuristic — is a property of
+# the pull request, so it is computed once and shared by every perspective.
+PERSPECTIVE_LANES = ("active", "direct", "stale_direct", "rereview")
+SHARED_LANES = ("reply_window", "overdue", "oldest_wait", "ready_bounded", "all")
+
+
+def perspective_keys(config: DashboardConfig) -> tuple[str, ...]:
+    """Every queue perspective, in the order the browser offers them."""
+    return (ALL_EDITORS, *sorted(config.editors))
+
+
+@dataclass(frozen=True)
+class PerspectiveView:
+    """One PR's analysis as seen by one editor, or by all of them at once."""
+
+    lanes: tuple[str, ...]
+    reasons: tuple[Reason, ...]
+    direct_request_at: datetime | None
+    stale_direct_at: datetime | None
+    rereview_trigger_at: datetime | None
+    has_attention_signal: bool
+    latest_review: Activity | None
+    # Both are None for ALL_EDITORS. A fingerprint has to exclude exactly one
+    # person's own footprint to mean anything, and the union is not a person; the
+    # browser reads the fingerprints of whoever the user says they are, whichever
+    # perspective is on screen.
+    content_fingerprint: str | None
+    attention_fingerprint: str | None
+
+    def to_public_dict(self) -> dict[str, Any]:
+        return {
+            "lanes": list(self.lanes),
+            "reasons": [reason.to_public_dict() for reason in self.reasons],
+            "has_attention_signal": self.has_attention_signal,
+            "fingerprint": self.content_fingerprint,
+            "attention_fingerprint": self.attention_fingerprint,
+        }
+
+
 @dataclass(frozen=True)
 class PRAnalysis:
     pr: PullRequestSnapshot
     checklist: Checklist
-    lanes: tuple[str, ...]
-    reasons: tuple[Reason, ...]
+    shared_lanes: tuple[str, ...]
+    shared_reasons: tuple[Reason, ...]
+    perspectives: dict[str, PerspectiveView]
     blockers: tuple[Reason, ...]
-    content_fingerprint: str
-    attention_fingerprint: str
-    has_attention_signal: bool
-    direct_request_at: datetime | None
-    stale_direct_at: datetime | None
-    rereview_trigger_at: datetime | None
-    latest_viewer_review: Activity | None
     latest_contributor_activity_at: datetime | None
     latest_editor_activity_at: datetime | None
     current_wait_hours: float | None
@@ -53,6 +93,12 @@ class PRAnalysis:
     waiting_reason: str
     first_time_contributor: bool
     age_hours: float
+
+    def lanes_for(self, perspective: str) -> tuple[str, ...]:
+        return (*self.perspectives[perspective].lanes, *self.shared_lanes)
+
+    def reasons_for(self, perspective: str) -> tuple[Reason, ...]:
+        return (*self.perspectives[perspective].reasons, *self.shared_reasons)
 
     def to_public_dict(self, repository_slug: str) -> dict[str, Any]:
         pr = self.pr
@@ -86,16 +132,15 @@ class PRAnalysis:
             "timeline_sample_complete": pr.timeline_sample_complete,
             "reviews_total_count": pr.reviews_total_count,
             "checklist": self.checklist.to_public_dict(),
-            "lanes": list(self.lanes),
-            "reasons": [reason.to_public_dict() for reason in self.reasons],
+            # The lanes and evidence every perspective agrees on, published once;
+            # `perspectives` carries only what depends on which editor is asking, and
+            # the browser concatenates the two rather than storing six near-copies.
+            "lanes": list(self.shared_lanes),
+            "reasons": [reason.to_public_dict() for reason in self.shared_reasons],
+            "perspectives": {
+                key: view.to_public_dict() for key, view in self.perspectives.items()
+            },
             "blockers": [reason.to_public_dict() for reason in self.blockers],
-            "fingerprint": self.content_fingerprint,
-            "attention_fingerprint": self.attention_fingerprint,
-            "has_attention_signal": self.has_attention_signal,
-            "direct_request_at": isoformat(self.direct_request_at),
-            "stale_direct_at": isoformat(self.stale_direct_at),
-            "rereview_trigger_at": isoformat(self.rereview_trigger_at),
-            "latest_viewer_review_at": isoformat(self.latest_viewer_review.created_at if self.latest_viewer_review else None),
             "latest_contributor_activity_at": isoformat(self.latest_contributor_activity_at),
             "latest_editor_activity_at": isoformat(self.latest_editor_activity_at),
             "current_wait_hours": round(self.current_wait_hours, 2) if self.current_wait_hours is not None else None,
@@ -133,8 +178,8 @@ def is_bot(login: str | None) -> bool:
 _STATE_ATTENTION_CODES = frozenset({"review-requested", "assigned"})
 
 
-def _mention_pattern(viewer: str) -> re.Pattern[str]:
-    return re.compile(rf"(?<![A-Za-z0-9-])@{re.escape(viewer)}(?![A-Za-z0-9-])", re.IGNORECASE)
+def _mention_pattern(login: str) -> re.Pattern[str]:
+    return re.compile(rf"(?<![A-Za-z0-9-])@{re.escape(login)}(?![A-Za-z0-9-])", re.IGNORECASE)
 
 
 def _hours_between(start: datetime, end: datetime) -> float:
@@ -158,8 +203,8 @@ def _hash_payload(payload: Any) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:24]
 
 
-def _latest_viewer_review(pr: PullRequestSnapshot, viewer: str) -> Activity | None:
-    submitted = pr.submitted_reviews_by(viewer)
+def _latest_editor_review(pr: PullRequestSnapshot, editor: str) -> Activity | None:
+    submitted = pr.submitted_reviews_by(editor)
     return max(submitted, key=lambda review: (review.created_at, review.id)) if submitted else None
 
 
@@ -216,9 +261,10 @@ def _direct_reasons(
     pr: PullRequestSnapshot,
     config: DashboardConfig,
     *,
+    editor: str,
     now: datetime,
 ) -> tuple[list[Reason], list[Reason]]:
-    """Split direct-attention signals into currently active and expired ones.
+    """Split ``editor``'s direct-attention signals into currently active and expired ones.
 
     A review request or assignment is *current state*: GitHub removes it once the
     editor reviews, so it keeps claiming attention for as long as it is set. A
@@ -226,8 +272,7 @@ def _direct_reasons(
     single 2016 comment marks a PR as a direct request forever, which is what buried
     the live queue under a decade of archaeology.
     """
-    viewer = config.viewer
-    pattern = _mention_pattern(viewer)
+    pattern = _mention_pattern(editor)
     cutoff = now - timedelta(days=config.attention.activity_window_days)
     active: list[Reason] = []
     expired: list[Reason] = []
@@ -238,32 +283,32 @@ def _direct_reasons(
         else:
             active.append(reason)
 
-    if viewer in pr.review_requests:
+    if editor in pr.review_requests:
         record(
             Reason(
                 "review-requested",
-                f"Review requested from @{viewer}",
+                f"Review requested from @{editor}",
                 timestamp=pr.updated_at,
                 tone="urgent",
             ),
             expires=False,
         )
-    if viewer in pr.assignees:
+    if editor in pr.assignees:
         record(
             Reason(
                 "assigned",
-                f"Assigned to @{viewer}",
+                f"Assigned to @{editor}",
                 timestamp=pr.updated_at,
                 tone="urgent",
             ),
             expires=False,
         )
 
-    if pr.author != viewer and pattern.search(pr.body):
+    if pr.author != editor and pattern.search(pr.body):
         record(
             Reason(
                 "mentioned-in-description",
-                f"@{viewer} mentioned in the description",
+                f"@{editor} mentioned in the description",
                 timestamp=pr.last_edited_at or pr.created_at,
                 tone="urgent",
             ),
@@ -273,7 +318,7 @@ def _direct_reasons(
     mention_activities = [
         activity
         for activity in pr.timeline
-        if activity.author != viewer
+        if activity.author != editor
         and not is_bot(activity.author)
         and pattern.search(activity.body)
     ]
@@ -282,7 +327,7 @@ def _direct_reasons(
         record(
             Reason(
                 "mentioned-in-discussion",
-                f"@{viewer} mentioned in the discussion",
+                f"@{editor} mentioned in the discussion",
                 detail=f"by @{latest.author}" if latest.author else None,
                 timestamp=latest.updated_at,
                 tone="urgent",
@@ -296,7 +341,10 @@ def _direct_reasons(
 def _rereview_reasons(
     pr: PullRequestSnapshot,
     latest_review: Activity | None,
+    *,
+    editor: str,
 ) -> list[Reason]:
+    """What changed on ``pr`` after ``editor``'s latest sampled review."""
     if latest_review is None:
         return []
 
@@ -311,7 +359,7 @@ def _rereview_reasons(
         reasons.append(
             Reason(
                 "head-changed-since-review",
-                "Head commit changed since your review",
+                f"Head commit changed since @{editor}'s review",
                 timestamp=pr.head_committed_at or pr.updated_at,
                 tone="attention",
             )
@@ -321,7 +369,7 @@ def _rereview_reasons(
         reasons.append(
             Reason(
                 "description-edited-since-review",
-                "Description edited since your review",
+                f"Description edited since @{editor}'s review",
                 timestamp=pr.last_edited_at,
                 tone="attention",
             )
@@ -339,7 +387,7 @@ def _rereview_reasons(
         reasons.append(
             Reason(
                 "author-replied-since-review",
-                "Author activity since your review",
+                f"Author activity since @{editor}'s review",
                 timestamp=latest.updated_at,
                 tone="attention",
             )
@@ -507,6 +555,151 @@ def _waiting_reason(pr: PullRequestSnapshot, blockers: Iterable[Reason], waiting
     return "No clear next action"
 
 
+def _content_fingerprint(pr: PullRequestSnapshot, editor: str, body_hash: str) -> str:
+    """Hash ``pr``'s public content, excluding ``editor``'s own footprint.
+
+    "Address until changed" means "until somebody other than me changes it", so
+    every field below has to be independent of that editor's own actions.
+    Reviewing a PR used to change five of them at once — pr.updated_at, the
+    sampled activity list, the reviewer's own review request, review_decision and
+    the review-thread counts — which brought every addressed item straight back
+    the next morning.
+
+    pr.updated_at is therefore left out entirely: it bumps on the editor's own
+    comment and cannot be attributed. The public state it stood proxy for is
+    hashed field by field instead, so a change by anyone else is still caught.
+    """
+    external_activity = [activity for activity in pr.timeline if activity.author != editor]
+    # Only the newest foreign comment or review, not the whole sampled list: on a
+    # PR with more than 2 * timeline_each_end of them, the editor's own comment
+    # shifts the sampling window and drops an older foreign item out of it, which
+    # would move a list-based hash for exactly the same reason. Comments other
+    # than the newest can therefore be edited unnoticed.
+    latest_external = external_activity[-1] if external_activity else None
+    open_threads_by_others, threads_by_others = pr.review_threads_started_by_others(editor)
+    return _hash_payload(
+        {
+            "number": pr.number,
+            "title": pr.title,
+            "body_hash": body_hash,
+            "is_draft": pr.is_draft,
+            "head_oid": pr.head_oid,
+            "labels": pr.labels,
+            # GitHub clears an editor's review request the moment they review, and
+            # review_decision reflects their own verdict, so neither their own
+            # request nor the decision can be hashed. A re-request from somebody
+            # else no longer resurfaces an addressed item on its own; in practice
+            # it arrives with a comment or a push, which does.
+            "assignees": [login for login in pr.assignees if login != editor],
+            "review_requests": [login for login in pr.review_requests if login != editor],
+            "status_state": pr.status_state,
+            # mergeable is deliberately absent. GitHub computes mergeability lazily: a
+            # cold query returns UNKNOWN and only schedules the real answer, so a build
+            # reads UNKNOWN for most PRs and something else for the rest, with nothing
+            # about the PR having changed. Measured against one deployed build, 258 of
+            # 277 open PRs reported a different value minutes later on identical
+            # updatedAt and head commits, which brought back nearly every addressed
+            # item on the next build. A conflict appearing is also not something the
+            # PR's author did; the head commit and the base branch cover real changes,
+            # and the merge-conflict blocker chip still shows the current state.
+            "latest_activity": (
+                [
+                    latest_external.id,
+                    isoformat(latest_external.updated_at),
+                    latest_external.state,
+                    latest_external.commit_oid,
+                ]
+                if latest_external is not None
+                else None
+            ),
+            "threads": [open_threads_by_others, threads_by_others],
+        }
+    )
+
+
+def _attention_fingerprint(reasons: Iterable[Reason]) -> str:
+    """Hash the direct-request and re-review signals claiming one editor's attention."""
+    payload = [
+        (
+            reason.code,
+            # A review request and an assignment are current state; this query
+            # cannot see when either was set, so the reason carries pr.updated_at
+            # as a stand-in for ordering. Hashing that made an unrelated push —
+            # or the editor's own comment — mark the item unseen again.
+            None if reason.code in _STATE_ATTENTION_CODES else isoformat(reason.timestamp),
+            reason.detail,
+        )
+        for reason in reasons
+    ]
+    return _hash_payload(payload or [("none", None, None)])
+
+
+def _perspective_view(
+    pr: PullRequestSnapshot,
+    config: DashboardConfig,
+    *,
+    editor: str | None,
+    direct: list[Reason],
+    expired: list[Reason],
+    rereview: list[Reason],
+    latest_review: Activity | None,
+    body_hash: str,
+    now: datetime,
+) -> PerspectiveView:
+    """Turn one perspective's attention signals into its lanes, evidence and hashes.
+
+    ``editor`` is None for the union of every editor, which gets no fingerprints.
+    """
+    # Recency is the primary axis: the top of the queue answers "which reviews is
+    # this editor currently in the middle of", not "which claim on their attention
+    # is oldest".
+    activity_cutoff = now - timedelta(days=config.attention.activity_window_days)
+    involved = bool(direct) or bool(rereview) or latest_review is not None
+    is_active = bool(pr.updated_at >= activity_cutoff and involved)
+
+    lanes: list[str] = []
+    reasons: list[Reason] = []
+    if is_active:
+        lanes.append("active")
+        reasons.append(
+            Reason(
+                "recently-active",
+                f"Active within {config.attention.activity_window_days} days",
+                timestamp=pr.updated_at,
+                tone="attention",
+            )
+        )
+    if direct:
+        lanes.append("direct")
+    elif expired:
+        lanes.append("stale_direct")
+    if rereview:
+        lanes.append("rereview")
+    reasons.extend((*direct, *expired, *rereview))
+
+    # The freshest signal represents the PR. Taking the oldest meant one stale
+    # mention outranked a review request filed on the same PR the same week.
+    def latest(values: Iterable[Reason]) -> datetime | None:
+        present = list(values)
+        if not present:
+            return None
+        return max((reason.timestamp for reason in present if reason.timestamp), default=pr.updated_at)
+
+    return PerspectiveView(
+        lanes=tuple(lanes),
+        reasons=tuple(reasons),
+        direct_request_at=latest(direct),
+        stale_direct_at=latest(expired),
+        rereview_trigger_at=latest(rereview),
+        has_attention_signal=bool(direct or rereview),
+        latest_review=latest_review,
+        content_fingerprint=_content_fingerprint(pr, editor, body_hash) if editor else None,
+        # Expired mentions stay in the hash so that a signal ageing out does not by
+        # itself mark an already-seen item unseen again.
+        attention_fingerprint=_attention_fingerprint((*direct, *expired, *rereview)) if editor else None,
+    )
+
+
 def analyze_pull_request(
     pr: PullRequestSnapshot,
     config: DashboardConfig,
@@ -514,11 +707,44 @@ def analyze_pull_request(
     now: datetime,
 ) -> PRAnalysis:
     now = now.astimezone(timezone.utc)
-    viewer = config.viewer
     checklist = parse_checklist(pr.body)
-    direct_reasons, expired_direct_reasons = _direct_reasons(pr, config, now=now)
-    latest_review = _latest_viewer_review(pr, viewer)
-    rereview_reasons = _rereview_reasons(pr, latest_review)
+    body_hash = hashlib.sha256(pr.body.encode("utf-8")).hexdigest()
+
+    # Every editor's direct and re-review signals, plus their own fingerprints, so
+    # the browser can show the queue from any perspective and track seen/addressed
+    # state for whoever the user says they are.
+    editors = sorted(config.editors)
+    signals: dict[str, tuple[list[Reason], list[Reason], list[Reason], Activity | None]] = {}
+    for editor in editors:
+        direct, expired = _direct_reasons(pr, config, editor=editor, now=now)
+        editor_review = _latest_editor_review(pr, editor)
+        signals[editor] = (direct, expired, _rereview_reasons(pr, editor_review, editor=editor), editor_review)
+
+    def merged(index: int) -> list[Reason]:
+        return [reason for editor in editors for reason in signals[editor][index]]
+
+    perspectives: dict[str, PerspectiveView] = {}
+    for key in perspective_keys(config):
+        if key == ALL_EDITORS:
+            # The union: a PR claims the team's attention if it claims any editor's.
+            # Assembled from the merged signal lists rather than from the per-editor
+            # lane sets, so the direct/stale-mention split stays a single decision.
+            direct, expired, rereview = merged(0), merged(1), merged(2)
+            reviews = [signals[editor][3] for editor in editors if signals[editor][3] is not None]
+            latest_review = max(reviews, key=lambda review: (review.created_at, review.id)) if reviews else None
+        else:
+            direct, expired, rereview, latest_review = signals[key]
+        perspectives[key] = _perspective_view(
+            pr,
+            config,
+            editor=None if key == ALL_EDITORS else key,
+            direct=direct,
+            expired=expired,
+            rereview=rereview,
+            latest_review=latest_review,
+            body_hash=body_hash,
+            now=now,
+        )
 
     contributor_times = _contributor_activity_times(pr, config.editors)
     editor_times = _editor_activity_times(pr, config.editors)
@@ -560,44 +786,22 @@ def analyze_pull_request(
     first_response_overdue = never_answered and age_hours > target_hours
     oldest_wait = bool(waiting_on_editor and not pr.is_draft)
 
-    # Recency is the primary axis: the top of the queue answers "which reviews am I
-    # currently in the middle of", not "which claim on my attention is oldest".
-    activity_cutoff = now - timedelta(days=config.attention.activity_window_days)
-    editor_involved = bool(direct_reasons) or bool(rereview_reasons) or latest_review is not None
-    is_active = bool(pr.updated_at >= activity_cutoff and editor_involved)
-
-    lanes: list[str] = []
-    if is_active:
-        lanes.append("active")
-    if direct_reasons:
-        lanes.append("direct")
-    elif expired_direct_reasons:
-        lanes.append("stale_direct")
-    if rereview_reasons:
-        lanes.append("rereview")
+    # These four lanes are properties of the pull request, not of whoever is asking,
+    # so they are computed once and shared by every perspective.
+    shared_lanes: list[str] = []
     if in_reply_window:
-        lanes.append("reply_window")
+        shared_lanes.append("reply_window")
     if first_response_overdue:
-        lanes.append("overdue")
+        shared_lanes.append("overdue")
     if oldest_wait:
-        lanes.append("oldest_wait")
+        shared_lanes.append("oldest_wait")
     if ready_bounded:
-        lanes.append("ready_bounded")
-    lanes.append("all")
+        shared_lanes.append("ready_bounded")
+    shared_lanes.append("all")
 
-    reasons: list[Reason] = []
-    if is_active:
-        reasons.append(
-            Reason(
-                "recently-active",
-                f"Active within {config.attention.activity_window_days} days",
-                timestamp=pr.updated_at,
-                tone="attention",
-            )
-        )
-    reasons.extend((*direct_reasons, *expired_direct_reasons, *rereview_reasons))
+    shared_reasons: list[Reason] = []
     if first_response_overdue:
-        reasons.append(
+        shared_reasons.append(
             Reason(
                 "first-response-overdue",
                 "First editor response overdue",
@@ -608,7 +812,7 @@ def analyze_pull_request(
         )
     elif in_reply_window:
         tone = "positive" if age_hours <= config.response_targets.highlight_new_hours else "attention"
-        reasons.append(
+        shared_reasons.append(
             Reason(
                 "new-untriaged",
                 "Awaiting a first editor response",
@@ -620,7 +824,7 @@ def analyze_pull_request(
         )
     if oldest_wait and current_wait_hours is not None:
         days = current_wait_hours / 24
-        reasons.append(
+        shared_reasons.append(
             Reason(
                 "waiting-on-editor",
                 "Contributor activity awaiting editor response",
@@ -630,94 +834,8 @@ def analyze_pull_request(
             )
         )
     if ready_bounded:
-        reasons.append(Reason("ready-bounded", "Appears ready and bounded", tone="positive"))
-        reasons.extend(positive_reasons)
-
-    # The freshest signal represents the PR. Taking the oldest meant one stale
-    # mention outranked a review request filed on the same PR the same week.
-    def _latest(reasons_in: Iterable[Reason]) -> datetime | None:
-        values = list(reasons_in)
-        if not values:
-            return None
-        return max((reason.timestamp for reason in values if reason.timestamp), default=pr.updated_at)
-
-    direct_at = _latest(direct_reasons)
-    rereview_at = _latest(rereview_reasons)
-    stale_direct_at = _latest(expired_direct_reasons)
-
-    body_hash = hashlib.sha256(pr.body.encode("utf-8")).hexdigest()
-    # "Address until changed" means "until somebody other than me changes it", so
-    # every field below has to be independent of the viewer's own actions.
-    # Reviewing a PR used to change five of them at once — pr.updated_at, the
-    # sampled activity list, the viewer's own review request, review_decision and
-    # the review-thread counts — which brought every addressed item straight back
-    # the next morning.
-    #
-    # pr.updated_at is therefore left out entirely: it bumps on the viewer's own
-    # comment and cannot be attributed. The public state it stood proxy for is
-    # hashed field by field instead, so a change by anyone else is still caught.
-    external_activity = [activity for activity in pr.timeline if activity.author != viewer]
-    # Only the newest foreign comment or review, not the whole sampled list: on a
-    # PR with more than 2 * timeline_each_end of them, the viewer's own comment
-    # shifts the sampling window and drops an older foreign item out of it, which
-    # would move a list-based hash for exactly the same reason. Comments other
-    # than the newest can therefore be edited unnoticed.
-    latest_external = external_activity[-1] if external_activity else None
-    open_threads_by_others, threads_by_others = pr.review_threads_started_by_others(viewer)
-    content_payload = {
-        "number": pr.number,
-        "title": pr.title,
-        "body_hash": body_hash,
-        "is_draft": pr.is_draft,
-        "head_oid": pr.head_oid,
-        "labels": pr.labels,
-        # GitHub clears the viewer's review request the moment they review, and
-        # review_decision reflects the viewer's own verdict, so neither the
-        # viewer's request nor the decision can be hashed. A re-request from
-        # somebody else no longer resurfaces an addressed item on its own; in
-        # practice it arrives with a comment or a push, which does.
-        "assignees": [login for login in pr.assignees if login != viewer],
-        "review_requests": [login for login in pr.review_requests if login != viewer],
-        "status_state": pr.status_state,
-        # mergeable is deliberately absent. GitHub computes mergeability lazily: a
-        # cold query returns UNKNOWN and only schedules the real answer, so a build
-        # reads UNKNOWN for most PRs and something else for the rest, with nothing
-        # about the PR having changed. Measured against one deployed build, 258 of
-        # 277 open PRs reported a different value minutes later on identical
-        # updatedAt and head commits, which brought back nearly every addressed
-        # item on the next build. A conflict appearing is also not something the
-        # PR's author did; the head commit and the base branch cover real changes,
-        # and the merge-conflict blocker chip still shows the current state.
-        "latest_activity": (
-            [
-                latest_external.id,
-                isoformat(latest_external.updated_at),
-                latest_external.state,
-                latest_external.commit_oid,
-            ]
-            if latest_external is not None
-            else None
-        ),
-        "threads": [open_threads_by_others, threads_by_others],
-    }
-    content_fingerprint = _hash_payload(content_payload)
-
-    # Expired mentions stay in the fingerprint so that a signal ageing out does not
-    # by itself mark an already-seen item unseen again.
-    attention_reasons = [*direct_reasons, *expired_direct_reasons, *rereview_reasons]
-    attention_payload = [
-        (
-            reason.code,
-            # A review request and an assignment are current state; this query
-            # cannot see when either was set, so the reason carries pr.updated_at
-            # as a stand-in for ordering. Hashing that made an unrelated push —
-            # or the viewer's own comment — mark the item unseen again.
-            None if reason.code in _STATE_ATTENTION_CODES else isoformat(reason.timestamp),
-            reason.detail,
-        )
-        for reason in attention_reasons
-    ]
-    attention_fingerprint = _hash_payload(attention_payload or [("none", None, None)])
+        shared_reasons.append(Reason("ready-bounded", "Appears ready and bounded", tone="positive"))
+        shared_reasons.extend(positive_reasons)
 
     waiting_reason = _waiting_reason(pr, blockers, waiting_on_editor)
     # GitHub reports NONE for an author with no prior merged contribution to the
@@ -728,16 +846,10 @@ def analyze_pull_request(
     return PRAnalysis(
         pr=pr,
         checklist=checklist,
-        lanes=tuple(lanes),
-        reasons=tuple(reasons),
+        shared_lanes=tuple(shared_lanes),
+        shared_reasons=tuple(shared_reasons),
+        perspectives=perspectives,
         blockers=tuple(blockers),
-        content_fingerprint=content_fingerprint,
-        attention_fingerprint=attention_fingerprint,
-        has_attention_signal=bool(direct_reasons or rereview_reasons),
-        direct_request_at=direct_at,
-        stale_direct_at=stale_direct_at,
-        rereview_trigger_at=rereview_at,
-        latest_viewer_review=latest_review,
         latest_contributor_activity_at=latest_contributor,
         latest_editor_activity_at=latest_editor,
         current_wait_hours=current_wait_hours,
@@ -760,62 +872,73 @@ def analyze_all(
 
 
 def build_lanes(analyses: Iterable[PRAnalysis], repository_slug: str) -> dict[str, list[str]]:
+    """The lanes every perspective shares, keyed by lane."""
     values = list(analyses)
 
     def key(analysis: PRAnalysis) -> str:
         return f"{repository_slug}#{analysis.pr.number}"
 
-    # Newest first for the attention lanes: on a decade-old backlog, age is a poor
-    # proxy for actionability. `oldest_wait`, `reply_window` and `overdue` keep
-    # oldest-first ordering because fairness to waiting contributors is exactly what
-    # they measure. For `reply_window` that ordering is deadline proximity, which
-    # coincides with oldest-first only because every member shares one target.
-    active = sorted(
-        (analysis for analysis in values if "active" in analysis.lanes),
-        key=lambda analysis: (analysis.pr.updated_at, analysis.pr.number),
-        reverse=True,
-    )
-    direct = sorted(
-        (analysis for analysis in values if "direct" in analysis.lanes),
-        key=lambda analysis: (analysis.direct_request_at or analysis.pr.updated_at, analysis.pr.number),
-        reverse=True,
-    )
-    stale_direct = sorted(
-        (analysis for analysis in values if "stale_direct" in analysis.lanes),
-        key=lambda analysis: (analysis.stale_direct_at or analysis.pr.updated_at, analysis.pr.number),
-        reverse=True,
-    )
-    rereview = sorted(
-        (analysis for analysis in values if "rereview" in analysis.lanes),
-        key=lambda analysis: (analysis.rereview_trigger_at or analysis.pr.updated_at, analysis.pr.number),
-        reverse=True,
-    )
+    # `oldest_wait`, `reply_window` and `overdue` sort oldest-first because fairness
+    # to waiting contributors is exactly what they measure. For `reply_window` that
+    # ordering is deadline proximity, which coincides with oldest-first only because
+    # every member shares one target.
     reply_window = sorted(
-        (analysis for analysis in values if "reply_window" in analysis.lanes),
+        (analysis for analysis in values if "reply_window" in analysis.shared_lanes),
         key=lambda analysis: (analysis.pr.created_at, analysis.pr.number),
     )
     overdue = sorted(
-        (analysis for analysis in values if "overdue" in analysis.lanes),
+        (analysis for analysis in values if "overdue" in analysis.shared_lanes),
         key=lambda analysis: (analysis.pr.created_at, analysis.pr.number),
     )
     oldest_wait = sorted(
-        (analysis for analysis in values if "oldest_wait" in analysis.lanes),
+        (analysis for analysis in values if "oldest_wait" in analysis.shared_lanes),
         key=lambda analysis: (-(analysis.current_wait_hours or 0), analysis.pr.number),
     )
     ready = sorted(
-        (analysis for analysis in values if "ready_bounded" in analysis.lanes),
+        (analysis for analysis in values if "ready_bounded" in analysis.shared_lanes),
         key=lambda analysis: (analysis.pr.changed_lines, analysis.pr.changed_files, analysis.pr.created_at),
     )
     all_items = sorted(values, key=lambda analysis: (analysis.pr.updated_at, analysis.pr.number), reverse=True)
 
     return {
-        "active": [key(value) for value in active],
-        "direct": [key(value) for value in direct],
-        "stale_direct": [key(value) for value in stale_direct],
-        "rereview": [key(value) for value in rereview],
         "reply_window": [key(value) for value in reply_window],
         "overdue": [key(value) for value in overdue],
         "oldest_wait": [key(value) for value in oldest_wait],
         "ready_bounded": [key(value) for value in ready],
         "all": [key(value) for value in all_items],
+    }
+
+
+def build_perspective_lanes(
+    analyses: Iterable[PRAnalysis],
+    config: DashboardConfig,
+) -> dict[str, dict[str, list[str]]]:
+    """The attention lanes, keyed by perspective and then by lane."""
+    values = list(analyses)
+    slug = config.repository.slug
+
+    # Newest first for every attention lane: on a decade-old backlog, age is a poor
+    # proxy for actionability. `active` has no signal timestamp of its own, so it
+    # falls through to the PR's own update time, which is what defines the lane.
+    def ordered(perspective: str, lane: str, timestamp) -> list[str]:
+        selected = [
+            analysis for analysis in values if lane in analysis.perspectives[perspective].lanes
+        ]
+        selected.sort(
+            key=lambda analysis: (
+                timestamp(analysis.perspectives[perspective]) or analysis.pr.updated_at,
+                analysis.pr.number,
+            ),
+            reverse=True,
+        )
+        return [f"{slug}#{analysis.pr.number}" for analysis in selected]
+
+    return {
+        perspective: {
+            "active": ordered(perspective, "active", lambda view: None),
+            "direct": ordered(perspective, "direct", lambda view: view.direct_request_at),
+            "stale_direct": ordered(perspective, "stale_direct", lambda view: view.stale_direct_at),
+            "rereview": ordered(perspective, "rereview", lambda view: view.rereview_trigger_at),
+        }
+        for perspective in perspective_keys(config)
     }

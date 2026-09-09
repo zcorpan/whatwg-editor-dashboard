@@ -50,7 +50,7 @@ def validate_command(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     print(
         f"Configuration is valid for {config.repository.slug}; "
-        f"viewer=@{config.viewer}; editors={len(config.editors)}."
+        f"editors={len(config.editors)} ({', '.join('@' + login for login in sorted(config.editors))})."
     )
     return 0
 
