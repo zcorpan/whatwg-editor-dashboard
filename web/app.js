@@ -340,10 +340,14 @@ function createDetails(item) {
 
   if (item.checklist.total) {
     content.append(element("h4", {text: "Description checklist"}));
-    const list = element("ul");
+    // The ballot-box marker carries the checked state; style.css explains why that
+    // is enough to drop the "Checked:" / "Unchecked:" prefixes this used to print.
+    const list = element("ul", {className: "checklist"});
     for (const checklistItem of item.checklist.items) {
-      const prefix = checklistItem.checked ? "Checked: " : "Unchecked: ";
-      list.append(element("li", {text: `${prefix}${checklistItem.label || "Untitled task"}`}));
+      list.append(element("li", {
+        className: checklistItem.checked ? "checked" : "unchecked",
+        text: checklistItem.label || "Untitled task",
+      }));
     }
     content.append(list);
   }

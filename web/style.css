@@ -520,6 +520,20 @@ main {
 .card-details-content h4 { margin: .35rem 0; color: var(--text); font-size: .78rem; }
 .card-details-content ul { margin: .25rem 0 .75rem; padding-left: 1.15rem; }
 .card-details-content li + li { margin-top: .25rem; }
+/* The marker carries the checked state rather than a "Checked:" prefix, because
+   `::marker` content reaches the accessibility tree: Chrome exposes it as a
+   ListMarker node named "☑︎ ". The family is pinned to `monospace` on purpose —
+   in this page's own `system-ui` stack, U+2611 resolves to a font whose box is
+   visibly larger and heavier than U+2610's, so the two states would not line up.
+   U+FE0E keeps a platform whose monospace face lacks U+2611 from picking a
+   colour emoji for it. */
+.checklist li::marker {
+  /* U+00A0, because a trailing ordinary space is trimmed from the marker box. */
+  font-family: monospace;
+  font-size: 1.2em;
+  content: "\2610\FE0E\A0";
+}
+.checklist li.checked::marker { content: "\2611\FE0E\A0"; }
 .empty-state {
   padding: 2.2rem 1rem;
   border: 1px dashed var(--border-strong);
