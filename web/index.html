@@ -29,25 +29,13 @@
       <details class="panel queue-controls" id="queue-controls">
         <summary>Queue controls</summary>
         <div class="queue-controls-content">
-          <label class="sort-field">
+          <label class="control-field">
             <span>Editor</span>
             <select id="editor-perspective"></select>
           </label>
-          <label class="search-field">
-            <span class="visually-hidden">Search pull requests</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z"/></svg>
-            <input type="search" id="search-input" placeholder="Search title, number, author, or label">
-          </label>
-          <label class="sort-field">
-            <span>Sort current lane</span>
-            <select id="sort-order">
-              <option value="queue">Queue priority</option>
-              <option value="checklist">Checklist completion</option>
-              <option value="unchecked">Fewest unchecked boxes</option>
-              <option value="wait">Longest contributor wait</option>
-              <option value="updated">Recently updated</option>
-              <option value="created">Oldest opened</option>
-            </select>
+          <label class="control-field">
+            <span>Search</span>
+            <input type="search" id="search-input" placeholder="Title, number, author, or label">
           </label>
           <label class="toggle"><input type="checkbox" id="show-addressed"> <span>Show addressed</span></label>
           <label class="toggle"><input type="checkbox" id="show-snoozed"> <span>Show snoozed</span></label>
@@ -61,7 +49,7 @@
                sits on the row with the local-state summary rather than with the
                controls that only change what is displayed. -->
           <div class="identity-row">
-            <label class="sort-field">
+            <label class="control-field">
               <span>You are</span>
               <select id="editor-identity"></select>
             </label>

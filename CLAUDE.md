@@ -73,7 +73,7 @@ The identity starts unset, and `createPRCard` omits the Address button while it 
 
 Health indicator statuses (`on_track`, `watch`, `off_track`, `unknown`) are decided in `metrics.py` `_status` and only styled in the browser; the page never re-judges a number it was handed.
 
-Two smaller vocabularies cross the Python/browser boundary the same way. Sort orders (`queue`, `checklist`, `unchecked`, `wait`, `updated`, `created`) must agree between `web/app.js` `SORT_ORDERS` and the `<option value>` list in [web/index.html](web/index.html); `test_build.py` pins two of them. The perspective `<select>` is populated from `perspectives.options` instead, so it needs no such agreement. A `Reason`'s `tone` becomes a `chip <tone>` class, so it has to be one of the `.chip.*` rules in [web/style.css](web/style.css) (`urgent`, `attention`, `positive`, `warning`, `muted`) — `neutral` is the JS default and is deliberately unstyled.
+Both queue `<select>`s are populated from `perspectives.options`, so no lane or option vocabulary has to be kept in step between the two languages. A `Reason`'s `tone` becomes a `chip <tone>` class, so it has to be one of the `.chip.*` rules in [web/style.css](web/style.css) (`urgent`, `attention`, `positive`, `warning`, `muted`) — `neutral` is the JS default and is deliberately unstyled.
 
 ### The two fingerprints
 
@@ -113,6 +113,8 @@ GitHub returns HTTP 502/504 for GraphQL request timeouts, and this query is nest
 This codebase is milestones 1–2 of a longer plan, and several apparent gaps are decisions rather than omissions. Don't "fix" these without a deliberate change of direction.
 
 **Lanes, not a score.** A single numeric ranking across all open PRs was considered and rejected: buckets plus visible `Reason` chips are the product. Any scoring may only order items *within* a lane, and the reasons must always be shown. The `active` lane outranks everything else except the bounded `reply_window` lead.
+
+A "sort current lane" select (checklist completion, unchecked boxes, contributor wait, update time, age) existed and was removed. Each lane already arrives ordered by the rule that defines it, so a second ordering control competed with the lane list for the same job, and it could not reorder "Suggested next" above it — which made it look broken, because the top of the page never moved. `orderedVisibleItems` therefore applies exactly one ordering: the lane's own, with this browser's pins hoisted, relying on `Array.prototype.sort` being stable. Wanting a different order is a sign a lane is missing, not that the lanes need a sort menu.
 
 **Recency is the primary axis for "what needs me now".** The top of the queue answers "which reviews am I currently in the middle of", not "which claim on my attention is oldest". The `active` lane holds PRs with public activity inside `activity_window_days` (30) where the editor is involved — a direct signal, a re-review owed, or a review previously submitted. It sorts newest activity first, and `suggested_next` emits all of it before the cycle — behind only the bounded `reply_window` lead.
 

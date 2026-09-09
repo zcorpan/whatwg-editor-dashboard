@@ -126,9 +126,10 @@ class BuildTests(unittest.TestCase):
         self.assertNotIn("innerHTML", javascript)
         html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
         self.assertIn("Content-Security-Policy", html)
-        self.assertIn('value="checklist"', html)
-        self.assertIn('value="unchecked"', html)
+        # The two selects the payload drives: which editor's lanes to show, and
+        # which editor's fingerprints the browser measures its own state against.
         self.assertIn('id="editor-perspective"', html)
+        self.assertIn('id="editor-identity"', html)
 
 
 if __name__ == "__main__":

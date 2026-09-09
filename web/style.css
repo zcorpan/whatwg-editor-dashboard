@@ -196,80 +196,86 @@ main {
   cursor: pointer;
 }
 .queue-controls[open] > summary { border-bottom: 1px solid var(--border); }
+/* Every cell in the controls row is either a labelled control or a bare one, so
+   they are aligned on their bottom edge and every control is --control-height
+   tall. Centring them instead left the shorter cells floating between a label and
+   the control below it. */
 .queue-controls-content {
+  --control-height: 2.35rem;
+  /* Both selects are exactly this wide, and so is the column holding the first of
+     them, so the left edge of the panel reads as one column across both rows. */
+  --select-width: 10.5rem;
   display: grid;
-  grid-template-columns: minmax(150px, auto) minmax(240px, 1.4fr) minmax(170px, auto) auto auto auto;
-  align-items: center;
-  gap: 1rem;
+  grid-template-columns: var(--select-width) minmax(240px, 1.6fr) auto auto auto;
+  align-items: end;
+  gap: .85rem 1rem;
   padding: 1rem;
 }
-.queue-controls-content p { grid-column: 1 / -1; margin: 0; font-size: .78rem; }
 .identity-row {
   grid-column: 1 / -1;
   display: flex;
-  align-items: center;
+  align-items: end;
   gap: 1rem;
   flex-wrap: wrap;
 }
-.identity-row p { margin: 0; font-size: .78rem; }
-.muted { color: var(--muted); }
-.search-field {
+.identity-row p {
   display: flex;
   align-items: center;
-  gap: .55rem;
-  min-width: 0;
-  padding: .58rem .75rem;
-  border: 1px solid var(--border);
-  border-radius: .65rem;
-  background: var(--surface-subtle);
+  min-height: var(--control-height);
+  margin: 0;
+  font-size: .78rem;
 }
-.search-field:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
-.search-field svg {
-  width: 1.1rem;
-  height: 1.1rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  color: var(--muted);
-}
-.search-field input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--text);
-}
-.search-field input::placeholder { color: var(--muted); }
-.sort-field {
+.muted { color: var(--muted); }
+.control-field {
   display: grid;
-  gap: .2rem;
+  gap: .3rem;
+  min-width: 0;
   color: var(--muted);
   font-size: .68rem;
   font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
-.sort-field select {
-  min-height: 2.35rem;
-  padding: .45rem 1.8rem .45rem .65rem;
+.control-field select {
+  box-sizing: border-box;
+  width: var(--select-width);
+  min-height: var(--control-height);
+  padding: 0 1.8rem 0 .65rem;
   border: 1px solid var(--border);
   border-radius: .65rem;
   background: var(--surface);
   color: var(--text);
   font-size: .78rem;
+  font-family: inherit;
   cursor: pointer;
 }
-.sort-field select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The search box is the input itself rather than a decorated wrapper, so the
+   browser draws its focus ring around the box the user actually sees. */
+.control-field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-height);
+  padding: 0 .75rem;
+  border: 1px solid var(--border);
+  border-radius: .65rem;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font-size: .78rem;
+  font-family: inherit;
+}
+.control-field input::placeholder { color: var(--muted); }
 .toggle {
   display: inline-flex;
   align-items: center;
   gap: .4rem;
+  min-height: var(--control-height);
   color: var(--muted);
   font-size: .82rem;
   white-space: nowrap;
 }
-.toggle input { accent-color: var(--accent); }
-.state-actions { display: flex; gap: .35rem; }
+.state-actions { display: flex; align-items: center; gap: .35rem; min-height: var(--control-height); }
 .state-actions button {
   padding: .45rem .7rem;
   border: 1px solid var(--border);
@@ -727,7 +733,10 @@ tbody th { font-weight: 730; }
 }
 
 @media (max-width: 1000px) {
-  .queue-controls-content { grid-template-columns: 1fr 1fr; }
+  /* The select keeps its own width and the search box takes the rest of the row;
+     an even split left the select with half a panel of empty space beside it. */
+  .queue-controls-content { grid-template-columns: var(--select-width) 1fr; }
+  .queue-controls-content .state-actions { grid-column: 1 / -1; }
   .build-indicator { display: none; }
 }
 

@@ -3,7 +3,6 @@ const STATE_NAMESPACE = location.pathname.replace(/\/+$/, "") || "/";
 const STATE_KEY = `whatwg-editor-dashboard:v${STATE_VERSION}:${STATE_NAMESPACE}`;
 const LANE_ORDER = ["reply_window", "active", "direct", "rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct", "all"];
 const SUGGESTED_LIMIT_AFTER_ACTIVE = 12;
-const SORT_ORDERS = new Set(["queue", "checklist", "unchecked", "wait", "updated", "created"]);
 
 const DATA_URL = "data.json";
 // The scheduled build runs once every 24 hours, so data younger than that cannot have a successor yet.
@@ -16,7 +15,7 @@ const CLOCK_TICK_MS = 60 * 1000;
 
 // Collapsible sections, and how each one starts before this browser has an opinion.
 const SECTION_DEFAULTS = {"queue-controls": false, "suggested-section": true, "lanes-section": true};
-const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, sortOrder: "queue", perspective: null, identity: null, openSections: {}});
+const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, perspective: null, identity: null, openSections: {}});
 
 let dashboard = null;
 let itemsByKey = new Map();
@@ -73,7 +72,6 @@ function loadLocalState() {
       settings: {
         showAddressed: Boolean(parsed.settings?.showAddressed),
         showSnoozed: Boolean(parsed.settings?.showSnoozed),
-        sortOrder: SORT_ORDERS.has(parsed.settings?.sortOrder) ? parsed.settings.sortOrder : "queue",
         // Validated against the payload's option list at read time, not here: the
         // configured editors can change between builds, and a stored login that is
         // no longer one of them has to fall back rather than empty the queue.
@@ -289,55 +287,14 @@ function itemVisible(item) {
   return true;
 }
 
-function orderedVisibleItems(keys, sortOrder = "queue") {
-  const values = keys
-    .map((key, index) => ({item: itemsByKey.get(key), index}))
-    .filter(entry => entry.item)
-    .filter(entry => itemVisible(entry.item));
-
-  const compareNullableNumber = (a, b, direction = 1) => {
-    const aMissing = a === null || a === undefined || !Number.isFinite(a);
-    const bMissing = b === null || b === undefined || !Number.isFinite(b);
-    if (aMissing !== bMissing) return aMissing ? 1 : -1;
-    if (aMissing) return 0;
-    return (a - b) * direction;
-  };
-
-  values.sort((aEntry, bEntry) => {
-    const a = aEntry.item;
-    const b = bEntry.item;
-    const pinned = Number(isPinned(b)) - Number(isPinned(a));
-    if (pinned) return pinned;
-
-    let result = 0;
-    if (sortOrder === "checklist") {
-      const aHas = Boolean(a.checklist.total);
-      const bHas = Boolean(b.checklist.total);
-      if (aHas !== bHas) result = aHas ? -1 : 1;
-      else if (aHas) {
-        result = compareNullableNumber(a.checklist.ratio, b.checklist.ratio, -1)
-          || (b.checklist.checked - a.checklist.checked)
-          || ((a.checklist.total - a.checklist.checked) - (b.checklist.total - b.checklist.checked));
-      }
-    } else if (sortOrder === "unchecked") {
-      const aHas = Boolean(a.checklist.total);
-      const bHas = Boolean(b.checklist.total);
-      if (aHas !== bHas) result = aHas ? -1 : 1;
-      else if (aHas) {
-        result = ((a.checklist.total - a.checklist.checked) - (b.checklist.total - b.checklist.checked))
-          || compareNullableNumber(a.checklist.ratio, b.checklist.ratio, -1);
-      }
-    } else if (sortOrder === "wait") {
-      result = compareNullableNumber(a.current_wait_hours, b.current_wait_hours, -1);
-    } else if (sortOrder === "updated") {
-      result = new Date(b.updated_at) - new Date(a.updated_at);
-    } else if (sortOrder === "created") {
-      result = new Date(a.created_at) - new Date(b.created_at);
-    }
-
-    return result || (aEntry.index - bEntry.index);
-  });
-  return values.map(entry => entry.item);
+// Lane order, with this browser's pins hoisted. The lane lists arrive already
+// ordered by the rule that defines the lane, which is the whole point of having
+// lanes rather than one sortable table.
+function orderedVisibleItems(keys) {
+  return keys
+    .map(key => itemsByKey.get(key))
+    .filter(item => item && itemVisible(item))
+    .sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)));
 }
 
 function chip(reason) {
@@ -690,7 +647,7 @@ function renderQueues() {
 
   const descriptor = dashboard.lane_descriptions[activeLane];
   document.querySelector("#lane-description").textContent = descriptor?.description || "";
-  const laneItems = orderedVisibleItems(laneKeys(activeLane), localState.settings.sortOrder);
+  const laneItems = orderedVisibleItems(laneKeys(activeLane));
   const forEditor = browsingSomebodyElse() ? ` for ${perspectiveLabel()}` : "";
   renderList(
     document.querySelector("#lane-list"),
@@ -1311,7 +1268,6 @@ async function importState(file) {
     settings: {
       showAddressed: Boolean(parsed.settings?.showAddressed),
       showSnoozed: Boolean(parsed.settings?.showSnoozed),
-      sortOrder: SORT_ORDERS.has(parsed.settings?.sortOrder) ? parsed.settings.sortOrder : "queue",
       perspective: typeof parsed.settings?.perspective === "string" ? parsed.settings.perspective : null,
       identity: typeof parsed.settings?.identity === "string" ? parsed.settings.identity : null,
       openSections: readOpenSections(parsed.settings?.openSections),
@@ -1332,7 +1288,6 @@ function syncControlState() {
   }
   document.querySelector("#show-addressed").checked = localState.settings.showAddressed;
   document.querySelector("#show-snoozed").checked = localState.settings.showSnoozed;
-  document.querySelector("#sort-order").value = localState.settings.sortOrder;
 }
 
 function installEventHandlers() {
@@ -1365,11 +1320,6 @@ function installEventHandlers() {
     }
     saveLocalState();
     renderPerspectiveOptions();
-    renderQueues();
-  });
-  document.querySelector("#sort-order").addEventListener("change", event => {
-    localState.settings.sortOrder = SORT_ORDERS.has(event.target.value) ? event.target.value : "queue";
-    saveLocalState();
     renderQueues();
   });
   for (const id of Object.keys(SECTION_DEFAULTS)) {
