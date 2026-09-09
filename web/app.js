@@ -1025,9 +1025,15 @@ function renderHealth() {
   ].filter(Boolean);
   const verdict = document.querySelector("#health-verdict");
   verdict.dataset.status = health.overall_status;
-  verdict.textContent = problems.length
-    ? `Needs attention: ${problems.join("; ")}.`
-    : `On target: the backlog is ${changePhrase(backlog.change, {period})}, and ${percentText(rate.percent)} of contributor PRs get a first reply within ${targetDays} days.`;
+  // The verdict itself is the only bold part; the sentence after it reads as prose.
+  const [label, detail] = problems.length
+    ? ["Needs attention:", ` ${problems.join("; ")}.`]
+    : [
+        "On target:",
+        ` the backlog is ${changePhrase(backlog.change, {period})}, and ${percentText(rate.percent)}` +
+          ` of contributor PRs get a first reply within ${targetDays} days.`,
+      ];
+  verdict.replaceChildren(element("strong", {text: label}), detail);
 
   document.querySelector("#trend-table tbody").replaceChildren(...buckets.map((bucket, index) => {
     const point = points[index + 1];

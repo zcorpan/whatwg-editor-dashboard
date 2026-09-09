@@ -605,7 +605,6 @@ main {
   border-left: 4px solid var(--border-strong);
   border-radius: .7rem;
   background: var(--surface);
-  font-weight: 640;
 }
 .verdict[data-status="on_track"] { border-left-color: var(--positive); }
 .verdict[data-status="watch"] { border-left-color: var(--warning); }
