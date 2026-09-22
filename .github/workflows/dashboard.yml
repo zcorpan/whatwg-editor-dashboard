@@ -18,7 +18,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # A normal build takes a few minutes. The rest is room for the GraphQL client's
+    # retry budget (DEFAULT_RETRY_BUDGET_SECONDS in editor_dashboard/github.py) plus
+    # the timed-out requests themselves, so a GitHub incident is waited out rather
+    # than costing a day.
+    timeout-minutes: 90
     steps:
       - name: Check out dashboard source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

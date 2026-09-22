@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import http.client
 import json
 import logging
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -17,6 +19,29 @@ from .models import PullRequestSnapshot, snapshots_from_nodes
 
 LOGGER = logging.getLogger(__name__)
 GRAPHQL_ENDPOINT = "https://api.github.com/graphql"
+
+# How long one build may spend waiting between retries, summed over every request it makes.
+# A burst of 502s clears in seconds, but a GitHub incident runs for tens of minutes, and the
+# scheduled build has nobody waiting for it, so outlasting most incidents is cheaper than
+# skipping a day. The build job's `timeout-minutes` in .github/workflows/dashboard.yml has
+# to leave room for this budget plus the requests themselves, each bounded by
+# `timeout_seconds`, on top of a normal build.
+DEFAULT_RETRY_BUDGET_SECONDS = 60 * 60.0
+# The delay doubles from the first value to the cap: 37.5 s, 75 s, 150 s, then five minutes
+# for the rest of the budget, so a long outage is polled every five minutes instead of once
+# an hour. Nobody is waiting on the scheduled build, so the first retry is not in a hurry.
+DEFAULT_RETRY_BASE_SECONDS = 37.5
+DEFAULT_MAX_RETRY_DELAY_SECONDS = 300.0
+# Doubling to the delay cap and then spending a whole budget at the cap takes about this
+# many attempts; the count is a safety net against retrying forever when the delays are
+# zero, not the working limit.
+DEFAULT_MAX_RETRIES = 20
+
+# GitHub also reports a GraphQL timeout inside an HTTP 200 body, as an `errors` entry whose
+# message starts like this ("...This may be the result of a timeout, or it could be a GitHub
+# bug.") and says nothing else that would identify the query. Only this wording is retried;
+# any other GraphQL error is a real answer.
+_TRANSIENT_GRAPHQL_ERROR_MARKER = "something went wrong while executing your query"
 
 
 class GitHubAPIError(RuntimeError):
@@ -69,6 +94,20 @@ class RepositoryData:
     metadata: FetchMetadata
 
 
+@dataclass(frozen=True)
+class _Failure:
+    """One failed attempt, classified for the retry loop."""
+
+    error: GitHubAPIError
+    # A one-line version for the retry log; ``error`` may carry a response body.
+    summary: str
+    cause: BaseException | None
+    retryable: bool
+    # A GitHub-side timeout, which also halves the outer page size.
+    timeout: bool
+    delay: float
+
+
 class GraphQLClient:
     """Small resilient client for GitHub's GraphQL endpoint.
 
@@ -76,6 +115,12 @@ class GraphQLClient:
     dashboard asks for several nested connections for every PR, so a timed-out
     page is retried with a smaller outer ``pageSize``. The smaller size is then
     retained for subsequent pages in the same build.
+
+    Retries are bounded by a waiting budget shared across the whole build rather
+    than by a count per request: the delay doubles from ``retry_base_seconds`` up
+    to ``max_retry_delay_seconds``, and the build gives up once it has slept
+    ``retry_budget_seconds`` in total. ``max_retries`` is a per-request safety net
+    that only matters when the delays are zero.
     """
 
     def __init__(
@@ -83,8 +128,10 @@ class GraphQLClient:
         token: str,
         *,
         endpoint: str = GRAPHQL_ENDPOINT,
-        max_retries: int = 5,
-        retry_base_seconds: float = 2.0,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        retry_base_seconds: float = DEFAULT_RETRY_BASE_SECONDS,
+        max_retry_delay_seconds: float = DEFAULT_MAX_RETRY_DELAY_SECONDS,
+        retry_budget_seconds: float = DEFAULT_RETRY_BUDGET_SECONDS,
         timeout_seconds: float = 30.0,
         urlopen: Callable[..., Any] | None = None,
         sleep: Callable[[float], None] | None = None,
@@ -95,6 +142,10 @@ class GraphQLClient:
             raise ValueError("max_retries must not be negative")
         if retry_base_seconds < 0:
             raise ValueError("retry_base_seconds must not be negative")
+        if max_retry_delay_seconds < 0:
+            raise ValueError("max_retry_delay_seconds must not be negative")
+        if retry_budget_seconds < 0:
+            raise ValueError("retry_budget_seconds must not be negative")
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
 
@@ -102,6 +153,8 @@ class GraphQLClient:
         self.endpoint = endpoint
         self.max_retries = max_retries
         self.retry_base_seconds = retry_base_seconds
+        self.max_retry_delay_seconds = max_retry_delay_seconds
+        self.retry_budget_seconds = retry_budget_seconds
         self.timeout_seconds = timeout_seconds
         self._urlopen = urlopen or urllib.request.urlopen
         self._sleep = sleep or time.sleep
@@ -110,6 +163,7 @@ class GraphQLClient:
         self.request_attempts = 0
         self.retry_count = 0
         self.timeout_count = 0
+        self.retry_seconds_spent = 0.0
 
     @property
     def page_size_cap(self) -> int | None:
@@ -138,7 +192,11 @@ class GraphQLClient:
                     return max(0.0, float(retry_after))
                 except ValueError:
                     pass
-        return min(60.0, self.retry_base_seconds * (2**attempt))
+        return min(self.max_retry_delay_seconds, self.retry_base_seconds * (2**attempt))
+
+    @property
+    def retry_budget_remaining(self) -> float:
+        return max(0.0, self.retry_budget_seconds - self.retry_seconds_spent)
 
     @staticmethod
     def _request_id(error: urllib.error.HTTPError) -> str | None:
@@ -167,104 +225,143 @@ class GraphQLClient:
         if self._page_size_cap is not None and page_size is not None:
             request_variables["pageSize"] = min(int(page_size), self._page_size_cap)
 
-        last_error: Exception | None = None
-        total_attempts = self.max_retries + 1
+        attempt = 0
+        while True:
+            outcome = self._attempt(query, request_variables, attempt)
+            if not isinstance(outcome, _Failure):
+                return outcome
+            if not outcome.retryable:
+                raise outcome.error from outcome.cause
 
-        for attempt in range(total_attempts):
-            request = self._make_request(query, request_variables)
-            self.request_attempts += 1
-            try:
-                with self._urlopen(request, timeout=self.timeout_seconds) as response:
-                    raw_response = response.read().decode("utf-8")
-                result = json.loads(raw_response)
-                if result.get("errors"):
-                    messages = "; ".join(
-                        str(error.get("message", error)) for error in result["errors"]
-                    )
-                    raise GitHubAPIError(f"GitHub GraphQL error: {messages}")
-                data = result.get("data")
-                if not isinstance(data, dict):
-                    raise GitHubAPIError("GitHub GraphQL response did not contain a data object")
-                return data
-            except urllib.error.HTTPError as error:
-                body = error.read().decode("utf-8", errors="replace")
-                request_id = self._request_id(error)
-                request_id_text = f" (request {request_id})" if request_id else ""
-                last_error = GitHubAPIError(
-                    f"GitHub returned HTTP {error.code}{request_id_text}: {body[:1000]}"
-                )
+            page_change: tuple[int, int] | None = None
+            if outcome.timeout:
+                self.timeout_count += 1
+                page_change = self._reduce_page_size_after_timeout(request_variables)
 
-                remaining = error.headers.get("X-RateLimit-Remaining") if error.headers else None
-                if error.code == 403 and remaining == "0":
-                    reset = error.headers.get("X-RateLimit-Reset") if error.headers else None
-                    reset_text = f"; reset epoch {reset}" if reset else ""
-                    raise GitHubAPIError(f"GitHub GraphQL rate limit exhausted{reset_text}") from error
+            remaining = self.retry_budget_remaining
+            if attempt >= self.max_retries or remaining <= 0:
+                raise outcome.error from outcome.cause
+            delay = min(outcome.delay, remaining)
+            self.retry_count += 1
+            self.retry_seconds_spent += delay
+            page_text = (
+                f"; reducing pageSize from {page_change[0]} to {page_change[1]}"
+                if page_change
+                else ""
+            )
+            LOGGER.warning(
+                "%s on attempt %d%s; retrying in %.1f seconds (%.0f seconds of retry budget left)",
+                outcome.summary,
+                attempt + 1,
+                page_text,
+                delay,
+                remaining - delay,
+            )
+            self._sleep(delay)
+            attempt += 1
 
-                body_lower = body.lower()
-                secondary_limit = error.code == 403 and (
-                    "secondary rate limit" in body_lower or "abuse detection" in body_lower
-                )
-                retryable = error.code in {429, 500, 502, 503, 504} or secondary_limit
-                if not retryable or attempt >= self.max_retries:
-                    raise last_error from error
+    def _attempt(
+        self, query: str, variables: dict[str, Any], attempt: int
+    ) -> dict[str, Any] | _Failure:
+        """Make one request and return its ``data`` object, or the classified failure."""
+        request = self._make_request(query, variables)
+        self.request_attempts += 1
+        try:
+            with self._urlopen(request, timeout=self.timeout_seconds) as response:
+                raw_response = response.read().decode("utf-8")
+            result = json.loads(raw_response)
+        except urllib.error.HTTPError as error:
+            return self._classify_http_error(error, attempt)
+        except json.JSONDecodeError as error:
+            return _Failure(
+                error=GitHubAPIError(f"GitHub returned invalid JSON: {error.doc[:500]}"),
+                summary="GitHub returned invalid JSON",
+                cause=error,
+                retryable=True,
+                timeout=False,
+                delay=self._retry_delay(attempt),
+            )
+        except (OSError, http.client.HTTPException) as error:
+            # Everything the socket, TLS and HTTP layers can raise: connection refused or
+            # reset, DNS failure, a read timeout, and a response torn off mid-body
+            # (`http.client.IncompleteRead`), which is what a GitHub outage looks like once
+            # the load balancer stops answering with a clean 502. A certificate that does
+            # not verify is this machine's problem, not GitHub's, and waiting will not
+            # change it.
+            reason = getattr(error, "reason", None)
+            certificate_problem = isinstance(
+                reason if reason is not None else error, ssl.SSLCertVerificationError
+            )
+            return _Failure(
+                error=GitHubAPIError(f"GitHub request failed: {error!r}"),
+                summary=f"GitHub request failed: {error!r}",
+                cause=error,
+                retryable=not certificate_problem,
+                timeout=False,
+                delay=self._retry_delay(attempt),
+            )
 
-                page_change: tuple[int, int] | None = None
-                if error.code in {502, 504}:
-                    self.timeout_count += 1
-                    page_change = self._reduce_page_size_after_timeout(request_variables)
+        if result.get("errors"):
+            messages = "; ".join(str(error.get("message", error)) for error in result["errors"])
+            transient = _TRANSIENT_GRAPHQL_ERROR_MARKER in messages.lower()
+            return _Failure(
+                error=GitHubAPIError(f"GitHub GraphQL error: {messages}"),
+                summary=f"GitHub GraphQL error: {messages[:200]}",
+                cause=None,
+                retryable=transient,
+                timeout=transient,
+                delay=self._retry_delay(attempt),
+            )
+        data = result.get("data")
+        if not isinstance(data, dict):
+            return _Failure(
+                error=GitHubAPIError("GitHub GraphQL response did not contain a data object"),
+                summary="GitHub GraphQL response did not contain a data object",
+                cause=None,
+                retryable=False,
+                timeout=False,
+                delay=0.0,
+            )
+        return data
 
-                self.retry_count += 1
-                delay = self._retry_delay(attempt, error)
-                if secondary_limit and not (error.headers and error.headers.get("Retry-After")):
-                    delay = max(60.0, delay)
-                page_text = (
-                    f"; reducing pageSize from {page_change[0]} to {page_change[1]}"
-                    if page_change
-                    else ""
-                )
-                LOGGER.warning(
-                    "GitHub GraphQL request failed with HTTP %d%s on attempt %d/%d%s; "
-                    "retrying in %.1f seconds",
-                    error.code,
-                    request_id_text,
-                    attempt + 1,
-                    total_attempts,
-                    page_text,
-                    delay,
-                )
-                self._sleep(delay)
-            except json.JSONDecodeError as error:
-                last_error = GitHubAPIError(
-                    f"GitHub returned invalid JSON: {error.doc[:500]}"
-                )
-                if attempt >= self.max_retries:
-                    raise last_error from error
-                self.retry_count += 1
-                delay = self._retry_delay(attempt)
-                LOGGER.warning(
-                    "GitHub GraphQL returned invalid JSON on attempt %d/%d; retrying in %.1f seconds",
-                    attempt + 1,
-                    total_attempts,
-                    delay,
-                )
-                self._sleep(delay)
-            except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
-                last_error = error
-                if attempt >= self.max_retries:
-                    raise GitHubAPIError(f"GitHub request failed: {error}") from error
-                self.retry_count += 1
-                delay = self._retry_delay(attempt)
-                LOGGER.warning(
-                    "GitHub GraphQL network request failed on attempt %d/%d: %s; "
-                    "retrying in %.1f seconds",
-                    attempt + 1,
-                    total_attempts,
-                    error,
-                    delay,
-                )
-                self._sleep(delay)
+    def _classify_http_error(self, error: urllib.error.HTTPError, attempt: int) -> _Failure:
+        body = error.read().decode("utf-8", errors="replace")
+        request_id = self._request_id(error)
+        request_id_text = f" (request {request_id})" if request_id else ""
+        headers = error.headers
 
-        raise GitHubAPIError(f"GitHub request failed: {last_error}")
+        remaining = headers.get("X-RateLimit-Remaining") if headers else None
+        if error.code == 403 and remaining == "0":
+            reset = headers.get("X-RateLimit-Reset") if headers else None
+            reset_text = f"; reset epoch {reset}" if reset else ""
+            return _Failure(
+                error=GitHubAPIError(f"GitHub GraphQL rate limit exhausted{reset_text}"),
+                summary="GitHub GraphQL rate limit exhausted",
+                cause=error,
+                retryable=False,
+                timeout=False,
+                delay=0.0,
+            )
+
+        body_lower = body.lower()
+        secondary_limit = error.code == 403 and (
+            "secondary rate limit" in body_lower or "abuse detection" in body_lower
+        )
+        timeout = error.code in {502, 504}
+        retryable = timeout or error.code in {429, 500, 503} or secondary_limit
+        delay = self._retry_delay(attempt, error)
+        if secondary_limit and not (headers and headers.get("Retry-After")):
+            delay = max(60.0, delay)
+        return _Failure(
+            error=GitHubAPIError(
+                f"GitHub returned HTTP {error.code}{request_id_text}: {body[:1000]}"
+            ),
+            summary=f"GitHub returned HTTP {error.code}{request_id_text}",
+            cause=error,
+            retryable=retryable,
+            timeout=timeout,
+            delay=delay,
+        )
 
 
 def _deduplicate_pr_nodes(

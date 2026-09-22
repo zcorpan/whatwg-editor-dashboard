@@ -116,9 +116,9 @@ python -m unittest discover -s tests -v
 
 ### GitHub 502 or 504 during a build
 
-For GraphQL, GitHub uses HTTP 502 and 504 when a request exceeds its processing-time limit. The client automatically retries and reduces `sampling.graphql_page_size`; the checked-in default is already a conservative 10 rather than 50. Retry messages show the attempt number, request ID when GitHub supplies one, delay, and any page-size reduction.
+For GraphQL, GitHub uses HTTP 502 and 504 when a request exceeds its processing-time limit. The client automatically retries and reduces `sampling.graphql_page_size`; the checked-in default is already a conservative 10 rather than 50. Retry messages show the attempt number, request ID when GitHub supplies one, delay, any page-size reduction, and how much of the build's retry budget is left.
 
-A persistent failure at page size 1 is more likely to be a wider GitHub API incident or a pathological single item. Check GitHub Status and rerun the workflow. Do not add a PAT merely to address a 502/504; these status codes do not indicate missing permissions.
+The delay starts at 37.5 seconds and doubles up to 5 minutes, and the build keeps retrying until it has waited an hour in total across all of its requests, so a GitHub incident of ordinary length is waited out rather than failing the day's build. The workflow's build job is allowed 90 minutes for that reason. A build that still fails after spending the budget, or a persistent failure at page size 1, is more likely to be a longer GitHub API incident or a pathological single item. Check GitHub Status and rerun the workflow. Do not add a PAT merely to address a 502/504; these status codes do not indicate missing permissions.
 
 ## Configuration
 
@@ -149,7 +149,7 @@ Only derived public data is written to `site/data.json`; raw PR bodies and comme
 
 GitHub computes mergeability lazily, answering `UNKNOWN` to a cold query and only scheduling the real value, so a build that trusts the first answer reports almost nothing as mergeable. After the closed-PR search — which gives GitHub several seconds of computing time — the builder re-asks for the PRs that answered `UNKNOWN`, by node id, in rounds that back off up to just under a minute in total. Anything still unknown keeps its “Mergeability unknown” marker and is counted in the build warnings rather than guessed at.
 
-The outer GraphQL page defaults to 10 PRs because every PR includes several nested connections. GitHub documents HTTP 502 and 504 responses from the GraphQL endpoint as request timeouts. When either occurs, the client retries with exponential backoff, halves the outer page size, and retains that smaller size for the rest of the build. Other transient 5xx and network failures are retried without changing the page size.
+The outer GraphQL page defaults to 10 PRs because every PR includes several nested connections. GitHub documents HTTP 502 and 504 responses from the GraphQL endpoint as request timeouts. When either occurs, or when GitHub reports the same timeout inside an HTTP 200 `errors` entry, the client retries with exponential backoff, halves the outer page size, and retains that smaller size for the rest of the build. Other transient 5xx responses, and connection failures including a response cut off mid-body, are retried without changing the page size. Retries are bounded by a waiting budget shared across the build rather than by a fixed count per request.
 
 The build logs successful GraphQL query count, total request attempts, retries, query cost, remaining quota, and the effective outer page size. Sampling limits are configurable, but increasing the outer page or nested connection sizes increases server work and makes timeouts more likely.
 

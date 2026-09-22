@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import http.client
 import io
 import json
+import ssl
 import unittest
 import urllib.error
 from datetime import datetime, timezone
@@ -11,6 +13,10 @@ from typing import Any
 from editor_dashboard.config import load_config
 from editor_dashboard.github import (
     _MERGEABILITY_RETRY_DELAYS,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_MAX_RETRY_DELAY_SECONDS,
+    DEFAULT_RETRY_BASE_SECONDS,
+    DEFAULT_RETRY_BUDGET_SECONDS,
     GraphQLClient,
     GitHubAPIError,
     fetch_repository_data,
@@ -132,6 +138,156 @@ class GraphQLClientTests(unittest.TestCase):
         self.assertEqual(client.request_attempts, 1)
         self.assertEqual(client.retry_count, 0)
         self.assertEqual(delays, [])
+
+    def _client_with_failures(
+        self,
+        failures: list[Exception | FakeHTTPResponse],
+        *,
+        then: dict[str, Any] | None = {"data": {"ok": True}},
+        **options: Any,
+    ) -> tuple[GraphQLClient, list[float], list[int]]:
+        responses = list(failures)
+        if then is not None:
+            responses.append(FakeHTTPResponse(then))
+        delays: list[float] = []
+        page_sizes: list[int] = []
+
+        def urlopen(request, *, timeout):
+            payload = json.loads(request.data.decode("utf-8"))
+            page_sizes.append(int(payload["variables"]["pageSize"]))
+            if not responses:
+                raise AssertionError("More requests than responses")
+            response = responses.pop(0)
+            if isinstance(response, Exception):
+                raise response
+            return response
+
+        client = GraphQLClient("token", urlopen=urlopen, sleep=delays.append, **options)
+        return client, delays, page_sizes
+
+    def test_a_response_torn_off_mid_body_is_retried(self) -> None:
+        """Regression: a build died on `IncompleteRead` with retries left.
+
+        Three 502s in a row were retried, then the fourth attempt's connection
+        dropped mid-body, which the retry loop did not catch.
+        """
+        client, delays, _ = self._client_with_failures(
+            [
+                http_error(502, "Bad Gateway"),
+                http.client.IncompleteRead(b"", 9845),
+                http.client.RemoteDisconnected("Remote end closed connection without response"),
+                ConnectionResetError(104, "Connection reset by peer"),
+            ]
+        )
+
+        self.assertEqual(client.execute("query Test { viewer { login } }", {"pageSize": 10}), {"ok": True})
+        self.assertEqual(client.request_attempts, 5)
+        self.assertEqual(client.retry_count, 4)
+        self.assertEqual(client.timeout_count, 1)
+        self.assertEqual(delays, [37.5, 75.0, 150.0, 300.0])
+
+    def test_backoff_doubles_to_the_cap_and_stops_at_the_budget(self) -> None:
+        """An outage is polled every few minutes until the build-wide budget is spent."""
+        client, delays, _ = self._client_with_failures(
+            [http_error(503, "Service Unavailable")] * 30,
+            then=None,
+            retry_budget_seconds=1000.0,
+        )
+
+        with self.assertRaisesRegex(GitHubAPIError, "HTTP 503"):
+            client.execute("query Test { viewer { login } }", {"pageSize": 10})
+        self.assertEqual(delays, [37.5, 75.0, 150.0, 300.0, 300.0, 137.5])
+        self.assertEqual(sum(delays), 1000.0)
+        self.assertEqual(client.retry_seconds_spent, 1000.0)
+        self.assertEqual(client.request_attempts, 7)
+
+        # The budget is shared by the build: once it is gone, the next request fails on
+        # its first error instead of sleeping again.
+        with self.assertRaisesRegex(GitHubAPIError, "HTTP 503"):
+            client.execute("query Test { viewer { login } }", {"pageSize": 10})
+        self.assertEqual(client.request_attempts, 8)
+        self.assertEqual(len(delays), 6)
+
+    def test_default_retry_budget_outlasts_an_incident_within_the_job_timeout(self) -> None:
+        """The defaults and the workflow's `timeout-minutes` are one decision."""
+        delay = 0.0
+        delays: list[float] = []
+        for attempt in range(DEFAULT_MAX_RETRIES):
+            delay = min(DEFAULT_MAX_RETRY_DELAY_SECONDS, DEFAULT_RETRY_BASE_SECONDS * 2**attempt)
+            delays.append(delay)
+        # The per-request attempt cap alone can spend the whole budget, so the budget,
+        # not the count, is what ends a long outage.
+        self.assertGreaterEqual(sum(delays), DEFAULT_RETRY_BUDGET_SECONDS)
+        # A spent budget plus every attempt hanging for the full request timeout still
+        # fits the build job's timeout with room for a normal build.
+        client = GraphQLClient("token")
+        worst_case_minutes = (
+            DEFAULT_RETRY_BUDGET_SECONDS + (DEFAULT_MAX_RETRIES + 1) * client.timeout_seconds
+        ) / 60
+        workflow = (ROOT / ".github" / "workflows" / "dashboard.yml").read_text(encoding="utf-8")
+        build_job = workflow.split("  build:", 1)[1].split("  deploy:", 1)[0]
+        timeout_minutes = int(build_job.split("timeout-minutes:", 1)[1].split()[0])
+        self.assertLessEqual(worst_case_minutes + 10, timeout_minutes)
+
+    def test_graphql_timeout_reported_in_a_200_is_retried_like_a_502(self) -> None:
+        client, delays, page_sizes = self._client_with_failures(
+            [
+                FakeHTTPResponse(
+                    {
+                        "data": None,
+                        "errors": [
+                            {
+                                "message": "Something went wrong while executing your query. "
+                                "This may be the result of a timeout, or it could be a GitHub bug."
+                            }
+                        ],
+                    }
+                )
+            ]
+        )
+
+        self.assertEqual(client.execute("query Test { viewer { login } }", {"pageSize": 10}), {"ok": True})
+        self.assertEqual(page_sizes, [10, 5])
+        self.assertEqual(client.timeout_count, 1)
+        self.assertEqual(delays, [37.5])
+
+    def test_other_graphql_errors_fail_without_retrying(self) -> None:
+        client, delays, _ = self._client_with_failures(
+            [
+                FakeHTTPResponse(
+                    {
+                        "data": {"repository": None},
+                        "errors": [{"type": "NOT_FOUND", "message": "Could not resolve to a Repository"}],
+                    }
+                )
+            ],
+            then=None,
+        )
+
+        with self.assertRaisesRegex(GitHubAPIError, "Could not resolve"):
+            client.execute("query Test { viewer { login } }", {"pageSize": 10})
+        self.assertEqual(client.request_attempts, 1)
+        self.assertEqual(delays, [])
+
+    def test_a_certificate_that_does_not_verify_is_not_retried(self) -> None:
+        """A local Python without a certificate store would otherwise wait out the budget."""
+        certificate_error = ssl.SSLCertVerificationError(1, "certificate verify failed")
+        client, delays, _ = self._client_with_failures(
+            [urllib.error.URLError(certificate_error)], then=None
+        )
+
+        with self.assertRaisesRegex(GitHubAPIError, "certificate verify failed"):
+            client.execute("query Test { viewer { login } }", {"pageSize": 10})
+        self.assertEqual(client.request_attempts, 1)
+        self.assertEqual(delays, [])
+
+    def test_retry_after_header_overrides_the_backoff(self) -> None:
+        error = http_error(429, "Too many requests")
+        error.headers["Retry-After"] = "45"
+        client, delays, _ = self._client_with_failures([error])
+
+        self.assertEqual(client.execute("query Test { viewer { login } }", {"pageSize": 10}), {"ok": True})
+        self.assertEqual(delays, [45.0])
 
 
 class GitHubFetchTests(unittest.TestCase):
