@@ -108,8 +108,9 @@ class IssuesConfig:
 
 @dataclass(frozen=True)
 class ExpertiseConfig:
-    # How far back merged PRs count as evidence of who knows a topic.
-    since: str = "2019-01-01"
+    # How far back full builds fetch merged PRs: for the label suggester and the
+    # manual `dashboard.py expertise` report. Routing reads `knows:` instead.
+    since: str = "2016-01-01"
     # Older work counts for less: a contribution this many days old counts half.
     half_life_days: int = 365
 
@@ -171,6 +172,10 @@ class DashboardConfig:
     helpers: frozenset[str] = frozenset()
     # Relative share of routed work, by login; 0 means never routed.
     shares: tuple[tuple[str, float], ...] = ()
+    # What each person says they know, as lowercased topic keys: `label:topic: img`
+    # for a topic label, `page:images` for a multipage spec page. Routing reads only
+    # these; computed expertise is a manual report (`dashboard.py expertise`).
+    knows: tuple[tuple[str, frozenset[str]], ...] = ()
 
     @property
     def people(self) -> frozenset[str]:
@@ -179,6 +184,9 @@ class DashboardConfig:
 
     def share(self, login: str) -> float:
         return dict(self.shares).get(login, 0.0)
+
+    def knows_of(self, login: str) -> frozenset[str]:
+        return dict(self.knows).get(login, frozenset())
 
 
 def _mapping(value: Any, name: str) -> dict[str, Any]:
@@ -230,6 +238,7 @@ def load_config(path: str | Path) -> DashboardConfig:
         raise ValueError("editors must be a list")
     shares: dict[str, float] = {}
     retired: set[str] = set()
+    knows_raw: dict[str, list[Any]] = {}
 
     def person(value: Any, name: str) -> tuple[str, float, str]:
         """A bare login, or a mapping with `login`, optional `share` and `status`."""
@@ -239,6 +248,10 @@ def load_config(path: str | Path) -> DashboardConfig:
             if status not in {"active", "retired"}:
                 raise ValueError(f"{name}.status must be active or retired")
             share = float(value.get("share", 0 if status == "retired" else 1))
+            declared = value.get("knows", [])
+            if not isinstance(declared, list):
+                raise ValueError(f"{name}.knows must be a list")
+            knows_raw[str(value.get("login", "")).strip().lstrip("@").lower()] = declared
         else:
             login, status, share = str(value).strip().lstrip("@").lower(), "active", 1.0
         if not login:
@@ -417,7 +430,7 @@ def load_config(path: str | Path) -> DashboardConfig:
 
     expertise_raw = _mapping(raw.get("expertise", {}), "expertise")
     expertise = ExpertiseConfig(
-        since=_iso_date(expertise_raw.get("since", "2019-01-01"), "expertise.since"),
+        since=_iso_date(expertise_raw.get("since", "2016-01-01"), "expertise.since"),
         half_life_days=_positive_int(expertise_raw.get("half_life_days", 365), "expertise.half_life_days"),
     )
     routing_raw = _mapping(raw.get("routing", {}), "routing")
@@ -439,6 +452,26 @@ def load_config(path: str | Path) -> DashboardConfig:
             raise ValueError(f"teams.{slug} must be a non-empty list of labels")
         teams.append((str(slug).strip(), tuple(sorted(str(label).strip().lower() for label in labels))))
 
+    ignore_pages = (
+        frozenset(str(value).strip() for value in ignore_raw)
+        if ignore_raw is not None
+        else DashboardConfig.__dataclass_fields__["ignore_pages"].default
+    )
+    knows: dict[str, frozenset[str]] = {}
+    for login, declared in knows_raw.items():
+        keys = set()
+        for entry in declared:
+            text = str(entry).strip().lower()
+            if not text:
+                raise ValueError(f"knows of @{login} has an empty entry")
+            if text.startswith(issues.topic_label_prefix):
+                keys.add(f"label:{text}")
+            else:
+                if text in ignore_pages:
+                    raise ValueError(f"knows of @{login}: {text} is in ignore_pages, so it says nothing")
+                keys.add(f"page:{text}")
+        knows[login] = frozenset(keys)
+
     blocking_labels_raw = raw.get("blocking_labels", [])
     if not isinstance(blocking_labels_raw, list):
         raise ValueError("blocking_labels must be a list")
@@ -449,6 +482,7 @@ def load_config(path: str | Path) -> DashboardConfig:
         retired_editors=frozenset(retired),
         helpers=frozenset(helpers),
         shares=tuple(sorted(shares.items())),
+        knows=tuple(sorted(knows.items())),
         response_targets=targets,
         attention=attention,
         ready_bounded=bounded,
@@ -460,11 +494,7 @@ def load_config(path: str | Path) -> DashboardConfig:
         issues=issues,
         expertise=expertise,
         routing=routing,
-        ignore_pages=(
-            frozenset(str(value).strip() for value in ignore_raw)
-            if ignore_raw is not None
-            else DashboardConfig.__dataclass_fields__["ignore_pages"].default
-        ),
+        ignore_pages=ignore_pages,
         teams=tuple(sorted(teams)),
         min_reviews_of_others=_positive_int(
             _mapping(raw.get("contributors", {}), "contributors").get("min_reviews_of_others", 10),

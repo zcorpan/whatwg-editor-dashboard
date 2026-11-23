@@ -14,7 +14,6 @@ from typing import Any, Iterable
 
 from .analysis import ALL_EDITORS, PRAnalysis, is_bot
 from .config import DashboardConfig
-from .expertise import Expertise, contributions
 from .issue_analysis import IssueAnalysis
 from .models import HistoryRecord
 from .routing import Candidate, Routing, route, suggest_teams
@@ -33,7 +32,6 @@ def _mentioned_teams(texts: Iterable[str]) -> frozenset[str]:
 class Assignments:
     decisions: dict[str, Routing]
     candidates: dict[str, Candidate]
-    expertise: Expertise
 
 
 def _contributor(author: str | None, config: DashboardConfig) -> bool:
@@ -64,7 +62,6 @@ def apply_assignments(
     by_commit = spec.by_commit or {}
     by_pr = spec.by_pr or {}
     merge_oids = {record.number: record.merge_oid for record in history}
-    expertise = Expertise(contributions(history, by_commit, config), config)
     recent = now - timedelta(days=config.sampling.history_days)
 
     known_labels = {label for record in history for label in (*record.labels, *record.issue_labels)}
@@ -126,7 +123,7 @@ def apply_assignments(
         known_labels,
     )
 
-    decisions = route(candidates.values(), expertise, config)
+    decisions = route(candidates.values(), config)
     for key, decision in decisions.items():
         item = items.get(key)
         if item is None or not candidates[key].unowned:
@@ -158,9 +155,9 @@ def apply_assignments(
                 label, reason = suggestion
                 item.setdefault("suggested_labels", []).append({"label": label, "reason": reason})
         item["suggested_teams"] = [
-            suggestion.to_public_dict() for suggestion in suggest_teams(candidate, expertise, config, now=now)
+            suggestion.to_public_dict() for suggestion in suggest_teams(candidate, config)
         ]
-    return Assignments(decisions=decisions, candidates=candidates, expertise=expertise)
+    return Assignments(decisions=decisions, candidates=candidates)
 
 
 def _unowned(analysis: PRAnalysis | IssueAnalysis) -> bool:

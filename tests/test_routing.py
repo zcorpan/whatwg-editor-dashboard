@@ -6,29 +6,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from editor_dashboard.config import load_config
-from editor_dashboard.expertise import Expertise, contributions
-from editor_dashboard.models import HistoryRecord
 from editor_dashboard.routing import Candidate, route, suggest_teams
 from editor_dashboard.topics import LabelSuggester, item_topics
 
 
 ROOT = Path(__file__).resolve().parent.parent
 NOW = datetime(2026, 8, 3, 12, tzinfo=timezone.utc)
-
-
-def record(number: int, author: str, days_ago: float, labels=(), reviewers=(), oid=None) -> HistoryRecord:
-    at = NOW - timedelta(days=days_ago)
-    return HistoryRecord(
-        number=number,
-        title=f"Change {number}",
-        author=author,
-        merged_at=at,
-        merged_by=reviewers[0] if reviewers else None,
-        merge_oid=oid,
-        labels=tuple(labels),
-        issue_labels=(),
-        reviews=tuple((login, at - timedelta(hours=1)) for login in reviewers),
-    )
 
 
 def candidate(key: str, days_ago: float, labels=(), *, kind="pr", pages=None, unowned=True, routable=True) -> Candidate:
@@ -48,54 +31,56 @@ def candidate(key: str, days_ago: float, labels=(), *, kind="pr", pages=None, un
 class RoutingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        # Routing began long before these items, so each is routed at its own ready time.
         config = load_config(ROOT / "dashboard.yml")
-        cls.config = replace(config, routing=replace(config.routing, start="2020-01-01"))
-        history = [
-            # zcorpan knows the parser, annevk forms; foolip reviewed media once, long ago.
-            *(record(100 + n, "contributor", 30 + n, ["topic: parser"], ["zcorpan"]) for n in range(6)),
-            *(record(200 + n, "annevk", 40 + n, ["topic: forms"]) for n in range(6)),
-            record(300, "contributor", 900, ["topic: media"], ["foolip"]),
-            # A retired editor's expertise is real, but they are not routed to.
-            *(record(400 + n, "domenic", 20 + n, ["topic: navigation"]) for n in range(6)),
-        ]
-        cls.expertise = Expertise(contributions(history, {}, cls.config), cls.config)
-
-    def test_items_go_to_the_person_who_knows_the_topic(self) -> None:
-        decisions = route(
-            [candidate("parser", 2, ["topic: parser"]), candidate("forms", 1, ["topic: forms"])],
-            self.expertise,
-            self.config,
+        # Routing began long before these items, so each is routed at its own ready
+        # time; and these declarations, not the configured draft, are what counts.
+        cls.config = replace(
+            config,
+            routing=replace(config.routing, start="2020-01-01"),
+            knows=(
+                ("annevk", frozenset({"label:topic: forms"})),
+                ("domenic", frozenset({"label:topic: navigation"})),
+                ("noamr", frozenset({"label:topic: parser"})),
+                ("zcorpan", frozenset({"label:topic: parser", "label:topic: img", "page:images"})),
+            ),
         )
-        self.assertEqual(decisions["parser"].owner, "zcorpan")
-        self.assertEqual(decisions["forms"].owner, "annevk")
-        self.assertIn("reviewed", decisions["parser"].evidence)
 
-    def test_load_spreads_a_run_of_one_topic(self) -> None:
+    def route(self, candidates, config=None):
+        return route(candidates, config or self.config)
+
+    def test_items_go_to_the_person_who_declares_the_topic(self) -> None:
+        decisions = self.route([candidate("img", 2, ["topic: img"]), candidate("forms", 1, ["topic: forms"])])
+        self.assertEqual(decisions["img"].owner, "zcorpan")
+        self.assertEqual(decisions["forms"].owner, "annevk")
+        self.assertEqual(decisions["img"].evidence, "Declared in dashboard.yml: topic: img")
+
+    def test_a_page_declaration_matches_the_pages_a_diff_touches(self) -> None:
+        decision = self.route([candidate("srcset", 1, pages={"images": 3})])["srcset"]
+        self.assertEqual(decision.owner, "zcorpan")
+        self.assertIn("the images page", decision.evidence)
+
+    def test_load_spreads_a_run_among_those_who_declare_it(self) -> None:
+        # zcorpan and noamr both declare the parser; a run of parser PRs goes to both.
         run = [candidate(f"p{n}", 10 - n, ["topic: parser"]) for n in range(6)]
-        owners = [decision.owner for _key, decision in sorted(route(run, self.expertise, self.config).items())]
-        self.assertGreater(owners.count("zcorpan"), 1)
-        self.assertGreater(len(set(owners)), 1)
+        owners = {decision.owner for decision in self.route(run).values()}
+        self.assertEqual(owners, {"noamr", "zcorpan"})
 
     def test_retired_editors_are_never_routed_to_but_are_named_as_knowing(self) -> None:
-        decision = route([candidate("nav", 1, ["topic: navigation"])], self.expertise, self.config)["nav"]
+        decision = self.route([candidate("nav", 1, ["topic: navigation"])])["nav"]
         self.assertNotEqual(decision.owner, "domenic")
         self.assertIn("domenic", decision.also_knows)
+        self.assertTrue(decision.evidence.startswith("Spread by load"))
 
     def test_helpers_take_prs_but_not_issues(self) -> None:
-        issues = [candidate(f"i{n}", 10 - n, kind="issue") for n in range(12)]
-        owners = {decision.owner for decision in route(issues, self.expertise, self.config).values()}
-        self.assertNotIn("noamr", owners)
-        prs = [candidate(f"p{n}", 10 - n) for n in range(12)]
-        owners = {decision.owner for decision in route(prs, self.expertise, self.config).values()}
-        self.assertIn("noamr", owners)
+        issues = [candidate(f"i{n}", 10 - n, ["topic: parser"], kind="issue") for n in range(6)]
+        self.assertNotIn("noamr", {decision.owner for decision in self.route(issues).values()})
+        prs = [candidate(f"p{n}", 10 - n, ["topic: parser"]) for n in range(6)]
+        self.assertIn("noamr", {decision.owner for decision in self.route(prs).values()})
 
     def test_a_decision_does_not_move_when_later_items_arrive(self) -> None:
-        first = route([candidate("a", 5, ["topic: forms"])], self.expertise, self.config)["a"]
-        later = route(
-            [candidate("a", 5, ["topic: forms"]), *(candidate(f"b{n}", 4 - n * 0.1, ["topic: forms"]) for n in range(5))],
-            self.expertise,
-            self.config,
+        first = self.route([candidate("a", 5, ["topic: forms"])])["a"]
+        later = self.route(
+            [candidate("a", 5, ["topic: forms"]), *(candidate(f"b{n}", 4 - n * 0.1, ["topic: forms"]) for n in range(5))]
         )["a"]
         self.assertEqual(first, later)
 
@@ -104,36 +89,27 @@ class RoutingTests(unittest.TestCase):
         # start date, so the load term applies across them rather than never.
         config = replace(self.config, routing=replace(self.config.routing, start=NOW.date().isoformat()))
         backlog = [candidate(f"old{n}", 3000 - n * 200) for n in range(10)]
-        owners = [decision.owner for decision in route(backlog, self.expertise, config).values()]
+        owners = [decision.owner for decision in self.route(backlog, config).values()]
         self.assertGreaterEqual(len(set(owners)), 4)
 
     def test_items_outside_the_walk_are_not_routed(self) -> None:
-        self.assertEqual(route([candidate("x", 1, routable=False)], self.expertise, self.config), {})
+        self.assertEqual(self.route([candidate("x", 1, routable=False)]), {})
 
     def test_an_answer_does_not_reshuffle_the_others(self) -> None:
         # Answered items stay in the walk, so the load they put on their owner holds.
         items = [candidate(f"i{n}", 10 - n, ["topic: parser"]) for n in range(4)]
-        before = route(items, self.expertise, self.config)
+        before = self.route(items)
         answered = [replace(items[0], unowned=False), *items[1:]]
-        self.assertEqual(route(answered, self.expertise, self.config), before)
+        self.assertEqual(self.route(answered), before)
 
-    def test_expertise_only_counts_work_before_the_item(self) -> None:
-        topics = item_topics(["topic: parser"], self.config)
-        self.assertEqual(self.expertise.affinities(topics, NOW - timedelta(days=400)), {})
-        affinities = self.expertise.affinities(topics, NOW)
-        # The contributor who authored them holds more (authoring weighs 3, reviewing 2),
-        # but among the people routed to, zcorpan leads.
-        self.assertEqual(max(("annevk", "foolip", "zcorpan"), key=lambda login: affinities.get(login, 0)), "zcorpan")
-
-    def test_teams_are_suggested_where_nobody_routed_to_knows_the_topic(self) -> None:
+    def test_teams_are_suggested_where_nobody_routed_to_declares_the_topic(self) -> None:
         media = candidate("m", 1, ["topic: media"])
-        self.assertEqual([value.team for value in suggest_teams(media, self.expertise, self.config, now=NOW)], ["media"])
-        parser = candidate("p", 1, ["topic: parser"])
-        self.assertEqual(suggest_teams(parser, self.expertise, self.config, now=NOW), [])
+        self.assertEqual([value.team for value in suggest_teams(media, self.config)], ["media"])
+        self.assertEqual(suggest_teams(candidate("p", 1, ["topic: parser"]), self.config), [])
         asked = replace(media, mentioned_teams=frozenset({"media"}))
-        self.assertEqual(suggest_teams(asked, self.expertise, self.config, now=NOW), [])
+        self.assertEqual(suggest_teams(asked, self.config), [])
         interest = candidate("q", 1, ["topic: parser", "needs implementer interest"])
-        self.assertEqual([value.team for value in suggest_teams(interest, self.expertise, self.config, now=NOW)], ["html-parser"])
+        self.assertEqual([value.team for value in suggest_teams(interest, self.config)], ["html-parser"])
 
 
 class TopicTests(unittest.TestCase):

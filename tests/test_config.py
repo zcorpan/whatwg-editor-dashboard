@@ -74,3 +74,34 @@ class SuggestedNextConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def config_with_people(people: str):
+    with tempfile.TemporaryDirectory() as temporary:
+        path = Path(temporary) / "dashboard.yml"
+        path.write_text("repository:\n  owner: whatwg\n  name: html\n" + people, encoding="utf-8")
+        return load_config(path)
+
+
+class KnowsConfigTests(unittest.TestCase):
+    def test_labels_and_pages(self) -> None:
+        config = config_with_people(
+            "editors:\n"
+            "  - login: zcorpan\n"
+            "    knows: [\"topic: img\", Images]\n"
+            "  - annevk\n"
+            "helpers:\n"
+            "  - login: noamr\n"
+            "    knows: [parsing]\n"
+        )
+        self.assertEqual(config.knows_of("zcorpan"), frozenset({"label:topic: img", "page:images"}))
+        self.assertEqual(config.knows_of("noamr"), frozenset({"page:parsing"}))
+        self.assertEqual(config.knows_of("annevk"), frozenset())
+
+    def test_rejects_pages_that_say_nothing_and_empty_entries(self) -> None:
+        with self.assertRaisesRegex(ValueError, "ignore_pages"):
+            config_with_people("editors:\n  - login: zcorpan\n    knows: [acknowledgements]\n")
+        with self.assertRaisesRegex(ValueError, "empty entry"):
+            config_with_people("editors:\n  - login: zcorpan\n    knows: [\"\"]\n")
+        with self.assertRaisesRegex(ValueError, "must be a list"):
+            config_with_people("editors:\n  - login: zcorpan\n    knows: images\n")

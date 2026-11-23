@@ -94,6 +94,32 @@ def build_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def expertise_command(args: argparse.Namespace) -> int:
+    """Who knows what according to history: an aid for editing `knows:`, never used by the build."""
+    from editor_dashboard.evaluate import expertise_report
+    from editor_dashboard.models import history_from_nodes
+
+    config = load_config(args.config)
+    snapshot = load_snapshot(args.state)
+    if snapshot is None or not snapshot.history_nodes:
+        raise SystemExit(f"{args.state} has no snapshot with merged-PR history; run a full build with --state first")
+    history = history_from_nodes([*snapshot.history_nodes.values(), *snapshot.closed_nodes.values()])
+    repository = ensure_clone(args.spec_repo, config.repository.slug)
+    try:
+        spec = compute_spec_pages(
+            repository,
+            pull_requests=[],
+            merge_oids=[record.merge_oid for record in history if record.merge_oid],
+            cache=snapshot.spec_pages,
+            fetch=False,
+        )
+    finally:
+        repository.close()
+    for line in expertise_report(history, spec.by_commit or {}, config, as_of=snapshot.fetched_at, top=args.top):
+        print(line)
+    return 0
+
+
 def validate_command(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     print(
@@ -132,6 +158,16 @@ def create_parser() -> argparse.ArgumentParser:
         help="Bare clone of the spec repository (cloned there if missing), used to map PRs to spec pages for routing",
     )
     build.set_defaults(handler=build_command)
+
+    expertise = subparsers.add_parser(
+        "expertise",
+        help="Print who knows what according to merged-PR history, to help edit the knows: lists",
+    )
+    expertise.add_argument("--config", default="dashboard.yml")
+    expertise.add_argument("--state", required=True, help="Directory with a snapshot from a full build")
+    expertise.add_argument("--spec-repo", required=True, help="Bare clone of the spec repository")
+    expertise.add_argument("--top", type=int, default=8, help="Topics to show per person")
+    expertise.set_defaults(handler=expertise_command)
 
     validate = subparsers.add_parser("validate", help="Validate dashboard.yml")
     validate.add_argument("--config", default="dashboard.yml")

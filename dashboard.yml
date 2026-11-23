@@ -7,22 +7,36 @@ repository:
 # metrics. Which one is *you* is chosen in the browser, not here.
 #
 # Each entry is a login, or a mapping with `login`, a `share` of routed work (default
-# 1; 0 never routes anything) and a `status`. A `retired` editor keeps a queue
-# perspective and still counts as an editor response, but only direct requests reach
-# them.
+# 1; 0 never routes anything), a `status`, and `knows`. A `retired` editor keeps a
+# queue perspective and still counts as an editor response, but only direct requests
+# reach them.
+#
+# `knows` is what routing goes by: `topic:` labels, and multipage spec page names
+# (`images` for images.html). It is declared, not computed, because merged-PR history
+# misses design done elsewhere and follows volume.
+#
+# DRAFT: these lists were seeded from `dashboard.py expertise` (merged PRs 2019-2026,
+# share of the topic's credit of at least 10%). Each person should prune and extend
+# their own.
 editors:
-  - annevk
+  - login: annevk
+    knows: ["topic: custom elements", "topic: parser", "topic: select", browsing-the-web, form-elements, nav-history-apis, parsing, webappapis]
   - login: domenic
     status: retired
-  - domfarolino
-  - foolip
-  - zcorpan
+    knows: ["topic: dialog", "topic: navigation", "topic: script", browsing-the-web, interaction, interactive-elements, nav-history-apis, webappapis]
+  - login: domfarolino
+    knows: ["topic: workers"]
+  - login: foolip
+    knows: ["topic: media", media]
+  - login: zcorpan
+    knows: ["topic: img", "topic: navigation", "topic: select", browsing-the-web, images, nav-history-apis, rendering]
 
 # Non-editors who review regularly enough to take routed review work. They get their
 # own queue perspective but are not editors for any metric.
 helpers:
   - login: noamr
     share: 1
+    knows: ["topic: navigation", "topic: parser", "topic: sanitizer", browsing-the-web, dynamic-markup-insertion, links, nav-history-apis, parsing]
 
 response_targets:
   initial_editor_response_days: 7
@@ -112,15 +126,17 @@ issues:
   topic_label_prefix: "topic:"
 
 expertise:
-  # Merged PRs since this date are the evidence of who knows a topic. Fetched by full
-  # builds only.
-  since: "2019-01-01"
-  # A contribution this many days old counts half as much as one today.
+  # Merged PRs since this date (about when whatwg/html moved to PRs) are fetched by
+  # full builds. They teach the topic-label suggester which labels go with which spec
+  # pages, and feed `dashboard.py expertise`, the manual who-knows-what report.
+  # Routing does not read them.
+  since: "2016-01-01"
+  # In that report, a contribution this many days old counts half as much as one today.
   half_life_days: 365
 
 routing:
-  # Unanswered PRs and issues are each routed to one person, by topic expertise and
-  # recent load. The prior keeps an item nobody knows about spread by load alone.
+  # Unanswered PRs and issues are each routed to one person, by the topics they declare
+  # (`knows`) and recent load. The prior keeps an item nobody declares spread by load.
   prior: 0.1
   load_window_days: 28
   # Routed-and-answered figures count from here; earlier items had no owner.

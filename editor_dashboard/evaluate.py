@@ -8,13 +8,17 @@ labeled merged PR is predicted from everybody else's.
 
 from __future__ import annotations
 
-from collections import Counter
+import json
+from collections import Counter, defaultdict
+from datetime import datetime
 from typing import Any
 
 from .config import DashboardConfig
+from .expertise import contributions
 from .github import RepositoryData
+from .models import HistoryRecord
 from .spec_pages import SpecPages
-from .topics import LabelSuggester, page_shares, topic_labels, _top_page
+from .topics import LabelSuggester, _top_page, display_name, page_shares, topic_labels
 
 
 def label_suggestion_precision(data: RepositoryData, spec: SpecPages, config: DashboardConfig) -> dict[str, Any]:
@@ -73,4 +77,81 @@ def report(payload: dict[str, Any], data: RepositoryData, spec: SpecPages, confi
     lines.append("Suggested labels: " + (", ".join(f"{label} {count}" for label, count in suggestions.most_common(12)) or "none"))
     teams = Counter(suggestion["team"] for item in items for suggestion in item.get("suggested_teams") or [])
     lines.append("Suggested teams: " + (", ".join(f"{team} {count}" for team, count in teams.most_common()) or "none"))
+    return lines
+
+
+def expertise_profiles(
+    history: list[HistoryRecord],
+    pages_by_oid: dict[str, dict[str, int]],
+    config: DashboardConfig,
+    *,
+    as_of: datetime,
+) -> dict[str, list[tuple[str, float, float]]]:
+    """Each login's topics as (topic key, decayed score, share of everyone's), best first."""
+    half_life = config.expertise.half_life_days * 86400
+    scores: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    totals: dict[str, float] = defaultdict(float)
+    for contribution in contributions(history, pages_by_oid, config):
+        if contribution.at > as_of:
+            continue
+        decay = 0.5 ** ((as_of - contribution.at).total_seconds() / half_life)
+        for topic, weight in contribution.topics.items():
+            value = contribution.weight * weight * decay
+            scores[contribution.login][topic] += value
+            totals[topic] += value
+    return {
+        login: sorted(
+            ((topic, value, value / totals[topic]) for topic, value in topics.items()),
+            key=lambda entry: (-entry[1], entry[0]),
+        )
+        for login, topics in scores.items()
+    }
+
+
+def knows_entry(topic: str) -> str:
+    """A topic key as it is written in `knows:`."""
+    kind, _, name = topic.partition(":")
+    return name
+
+
+def suggested_knows(profile: list[tuple[str, float, float]], *, top: int, min_share: float) -> list[str]:
+    return sorted(knows_entry(topic) for topic, _score, share in profile[:top] if share >= min_share)
+
+
+def expertise_report(
+    history: list[HistoryRecord],
+    pages_by_oid: dict[str, dict[str, int]],
+    config: DashboardConfig,
+    *,
+    as_of: datetime,
+    top: int = 8,
+    min_share: float = 0.1,
+) -> list[str]:
+    """Who knows what according to merged-PR history, against what `knows:` declares.
+
+    An aid for editing the declarations, never read by the build: history misses
+    design done elsewhere, and follows volume.
+    """
+    profiles = expertise_profiles(history, pages_by_oid, config, as_of=as_of)
+    lines = [
+        f"Merged PRs since {config.expertise.since}, credit halving every {config.expertise.half_life_days} days, "
+        f"as of {as_of.date().isoformat()}. Share is of everyone's credit on the topic."
+    ]
+    snippet = []
+    for login in sorted(config.people):
+        profile = profiles.get(login, [])
+        role = "helper" if login in config.helpers else "retired editor" if login in config.retired_editors else "editor"
+        lines.append(f"\n@{login} ({role}), total {sum(value for _topic, value, _share in profile):.0f}")
+        for topic, value, share in profile[:top]:
+            lines.append(f"  {display_name(topic):40} {value:6.1f}  {100 * share:3.0f}%")
+        suggestion = suggested_knows(profile, top=top, min_share=min_share)
+        declared = sorted(knows_entry(topic) for topic in config.knows_of(login))
+        missing = [entry for entry in suggestion if entry.lower() not in {value.lower() for value in declared}]
+        unsupported = [entry for entry in declared if entry.lower() not in {value.lower() for value in suggestion}]
+        if missing:
+            lines.append("  History suggests, not declared: " + ", ".join(missing))
+        if unsupported:
+            lines.append("  Declared, not in the history's top topics: " + ", ".join(unsupported))
+        snippet.append(f"  - login: {login}\n    knows: [{', '.join(json.dumps(entry) for entry in suggestion)}]")
+    lines.append("\nSuggested knows: lists (merge into the editors: and helpers: entries):\n" + "\n".join(snippet))
     return lines

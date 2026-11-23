@@ -126,9 +126,9 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
                 "a current approval, and finally who acted last; a merge conflict or failing checks never hand a PR back to its author."
             ),
             (
-                "Unanswered contributor items nobody was asked about are routed to one person by topic expertise and recent load. "
-                "Expertise is who authored, reviewed and merged earlier PRs on the same topic labels and spec pages, as of the "
-                "item's own ready time, so a routing decision never changes once made unless the configuration or the item's topics do."
+                "Unanswered contributor items nobody was asked about are routed to one person by the topics each person "
+                "declares in the dashboard configuration and by recent load. A routing decision never changes once made "
+                "unless the configuration or the item's topics do."
             ),
             "Suggested labels and GitHub teams are only suggestions: nothing is ever applied or mentioned automatically.",
             "The generated site contains public GitHub data only.",
