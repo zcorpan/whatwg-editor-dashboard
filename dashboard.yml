@@ -79,6 +79,7 @@ editors:
       - "topic: text-level semantics"
       - "topic: timers and user prompts"
       - "topic: url"
+      - "topic: websockets"
       - "topic: workers and worklets"
   - login: domenic
     status: retired
@@ -126,6 +127,7 @@ editors:
       - "topic: style"
       - "topic: text-level semantics"
       - "topic: user activation"
+      - "topic: websockets"
       - "topic: workers and worklets"
   - login: domfarolino
     knows:
