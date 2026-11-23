@@ -158,7 +158,7 @@ class DashboardConfig:
     expertise: ExpertiseConfig = field(default_factory=ExpertiseConfig)
     routing: RoutingConfig = field(default_factory=RoutingConfig)
     # Spec pages that say nothing about a change's topic: everybody touches them.
-    ignore_pages: frozenset[str] = frozenset({"acknowledgements", "indices", "references", "infrastructure", "index"})
+    ignore_pages: frozenset[str] = frozenset({"acknowledgements", "indices", "references", "infrastructure", "index", "introduction", "iana"})
     # A non-editor, non-helper who reviewed at least this many other people's PRs in
     # the health window gets their own row in the team section.
     min_reviews_of_others: int = 10

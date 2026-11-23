@@ -50,7 +50,9 @@ editors:
       - "topic: img"
       - "topic: javascript: urls"
       - "topic: links"
+      - "topic: mathml"
       - "topic: media"
+      - "topic: messaging"
       - "topic: multiple globals"
       - "topic: navigation"
       - "topic: navigation api"
@@ -69,6 +71,7 @@ editors:
       - "topic: shadow"
       - "topic: storage"
       - "topic: style"
+      - "topic: svg"
       - "topic: table"
       - "topic: timers and user prompts"
       - "topic: url"
@@ -146,7 +149,9 @@ editors:
       - "topic: frames/navigables/browsing contexts"
       - "topic: img"
       - "topic: javascript: urls"
+      - "topic: mathml"
       - "topic: media"
+      - "topic: messaging"
       - "topic: navigation"
       - "topic: navigation api"
       - "topic: origin"
@@ -161,7 +166,7 @@ editors:
       - "topic: semantics"
       - "topic: storage"
       - "topic: style"
-      - "topic: svg"  # fallback: nobody else covers it
+      - "topic: svg"
       - "topic: table"
       - "topic: timers and user prompts"
       - "topic: user activation"
@@ -316,22 +321,26 @@ topics:
   "topic: focus": [interaction]
   "topic: forms": [forms, form-control-infrastructure, input]
   "topic: frames/navigables/browsing contexts": [document-sequences, iframe-embed-object]
-  "topic: img": [images, embedded-content]
+  "topic: img": [images, embedded-content, image-maps]
   "topic: links": [links]
+  "topic: mathml": [embedded-content-other]
   "topic: media": [media]
+  "topic: messaging": [web-messaging, comms]
   "topic: navigation": [nav-history-apis, browsing-the-web, document-lifecycle]
   "topic: origin": [origin]
   "topic: parser": [parsing, xhtml, named-characters]
   "topic: popover": [popover]
   "topic: reflect": [common-dom-interfaces]
+  "topic: resource hints (inc. preload)": [speculative-loading]
   "topic: rendering": [rendering]
   "topic: sanitizer": [dynamic-markup-insertion]
   "topic: script": [webappapis, scripting]
   "topic: select": [form-elements]
   "topic: selectors": [semantics-other]
-  "topic: semantics": [dom, semantics, sections, grouping-content, text-level-semantics, microdata]
-  "topic: serialize and transfer": [structured-data, web-messaging]
+  "topic: semantics": [dom, semantics, sections, grouping-content, text-level-semantics, microdata, common-microsyntaxes]
+  "topic: serialize and transfer": [structured-data]
   "topic: storage": [webstorage]
+  "topic: svg": [embedded-content-other]
   "topic: table": [tables]
   "topic: timers and user prompts": [timers-and-user-prompts]
   "topic: url": [urls-and-fetching]
@@ -350,7 +359,8 @@ topics:
 # Labels proposed to be renamed or merged, under the name that replaces them. An item
 # with an old label counts as the new one, and `knows:` and `teams:` accept either, so
 # the new names work before the labels are changed on GitHub. Suggestions only ever
-# name a label that exists. topic: semantics is new and needs no alias.
+# name a label that exists. topic: semantics, topic: mathml and topic: messaging are new
+# and need no alias.
 topic_aliases:
   "topic: cross-origin isolation": ["topic: cross-origin-opener-policy", "topic: cross-origin-embedder-policy"]
   "topic: links": ["topic: link", "topic: hyperlink"]
@@ -367,6 +377,8 @@ ignore_pages:
   - references
   - infrastructure
   - index
+  - introduction
+  - iana
 
 # GitHub teams (whatwg/meta GITHUB-TEAMS.md) and the labels whose items they are a good
 # audience for. Suggested, never mentioned: the triager decides.
