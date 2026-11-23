@@ -109,5 +109,24 @@ class TimelineSampleCompletenessTests(unittest.TestCase):
         self.assertEqual(snapshot.timeline_sampled_count, 0)
 
 
+class ReadyForReviewTests(unittest.TestCase):
+    def test_a_pr_opened_ready_is_ready_since_creation(self) -> None:
+        snapshot = PullRequestSnapshot.from_graphql(node(total_count=0, first=[], last=[]))
+        self.assertEqual(snapshot.ready_for_review_at, snapshot.created_at)
+        self.assertIsNone(snapshot.ready_for_review_by)
+
+    def test_the_latest_ready_for_review_event_wins(self) -> None:
+        payload = node(total_count=0, first=[], last=[])
+        payload["readyForReview"] = {
+            "nodes": [
+                {"actor": {"login": "Alice"}, "createdAt": "2026-08-05T00:00:00Z"},
+                {"actor": {"login": "bob"}, "createdAt": "2026-08-03T00:00:00Z"},
+            ],
+        }
+        snapshot = PullRequestSnapshot.from_graphql(payload)
+        self.assertEqual(snapshot.ready_for_review_at.isoformat(), "2026-08-05T00:00:00+00:00")
+        self.assertEqual(snapshot.ready_for_review_by, "alice")
+
+
 if __name__ == "__main__":
     unittest.main()

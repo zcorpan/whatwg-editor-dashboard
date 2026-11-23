@@ -102,6 +102,25 @@ def _timeline_sample_complete(
     return window_ids["timelineFirst"] == window_ids["timelineLast"]
 
 
+def _ready_for_review(node: dict[str, Any]) -> tuple[datetime | None, str | None]:
+    """When, and by whom, the PR last switched from draft to ready for review.
+
+    GitHub records no event for a PR opened ready for review, so (None, None) means
+    it has been ready since it was created. Only the latest transition is fetched:
+    a PR converted back to draft and readied again is waiting from the second time.
+    """
+    events = [
+        event
+        for event in ((node.get("readyForReview") or {}).get("nodes") or [])
+        if event and parse_datetime(event.get("createdAt")) is not None
+    ]
+    if not events:
+        return None, None
+    latest = max(events, key=lambda event: parse_datetime(event.get("createdAt")))
+    login = (latest.get("actor") or {}).get("login")
+    return parse_datetime(latest.get("createdAt")), (str(login).lower() if login else None)
+
+
 @dataclass(frozen=True)
 class PullRequestSnapshot:
     number: int
@@ -116,6 +135,11 @@ class PullRequestSnapshot:
     closed_at: datetime | None
     merged_at: datetime | None
     is_draft: bool
+    # When the PR last became ready for review: the latest ready-for-review event,
+    # or creation for a PR that was never a draft. Its age counts from here.
+    ready_for_review_at: datetime
+    # Who marked it ready, or None when it was opened ready (or by a deleted user).
+    ready_for_review_by: str | None
     additions: int
     deletions: int
     changed_files: int
@@ -242,6 +266,7 @@ class PullRequestSnapshot:
 
         status_rollup = node.get("statusCheckRollup") or {}
         author_data = node.get("author") or {}
+        ready_at, ready_by = _ready_for_review(node)
 
         return cls(
             number=int(node["number"]),
@@ -256,6 +281,8 @@ class PullRequestSnapshot:
             closed_at=parse_datetime(node.get("closedAt")),
             merged_at=parse_datetime(node.get("mergedAt")),
             is_draft=bool(node.get("isDraft")),
+            ready_for_review_at=max(created, ready_at) if ready_at else created,
+            ready_for_review_by=ready_by,
             additions=int(node.get("additions") or 0),
             deletions=int(node.get("deletions") or 0),
             changed_files=int(node.get("changedFiles") or 0),

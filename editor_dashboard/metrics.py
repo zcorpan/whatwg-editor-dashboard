@@ -36,11 +36,13 @@ def _percent(numerator: int, denominator: int) -> float | None:
 def _contributor_pr(analysis: PRAnalysis, config: DashboardConfig) -> bool:
     """Whether the PR is one an editor owes a contributor a first response on."""
     pr = analysis.pr
-    return not pr.is_draft and pr.author not in config.editors and not is_bot(pr.author)
+    return pr.author not in config.editors and not is_bot(pr.author)
 
 
 def _open_at(pr: PullRequestSnapshot, moment: datetime) -> bool:
-    return pr.created_at <= moment and (pr.closed_at is None or pr.closed_at > moment)
+    # Open and ready for review: a PR that was a draft joins the backlog when it was
+    # last marked ready, which is also where its first-response clock starts.
+    return pr.ready_for_review_at <= moment and (pr.closed_at is None or pr.closed_at > moment)
 
 
 def _reviewed_before(
@@ -121,7 +123,7 @@ def _backlog_points(
             if response is not None and response.created_at <= moment:
                 continue
             awaiting += 1
-            if (moment - analysis.pr.created_at).total_seconds() / 3600 >= target_hours:
+            if (moment - analysis.pr.ready_for_review_at).total_seconds() / 3600 >= target_hours:
                 overdue += 1
         points.append(
             {
@@ -147,14 +149,14 @@ def _bucket_metrics(
             for analysis in analyses
             if analysis.pr.merged_at and bucket.start < analysis.pr.merged_at <= bucket.end
         ]
-        opened = [
+        readied = [
             analysis
             for analysis in analyses
-            if bucket.start < analysis.pr.created_at <= bucket.end
+            if bucket.start < analysis.pr.ready_for_review_at <= bucket.end
         ]
         eligible = [
             analysis
-            for analysis in opened
+            for analysis in readied
             if _contributor_pr(analysis, config) and analysis.first_editor_response_known
         ]
         within_target = sum(
@@ -172,7 +174,7 @@ def _bucket_metrics(
             {
                 "start": isoformat(bucket.start),
                 "end": isoformat(bucket.end),
-                "opened": len(opened),
+                "ready_for_review": len(readied),
                 "merged": len(merged),
                 "merged_with_editor_review": sum(credited.values()),
                 "merged_by_first_reviewer": dict(sorted(credited.items())),
@@ -480,8 +482,6 @@ def build_metrics(
         "repository": {
             "current": {
                 "open_prs": len(open_values),
-                "draft_prs": sum(analysis.pr.is_draft for analysis in open_values),
-                "ready_for_review_prs": sum(not analysis.pr.is_draft for analysis in open_values),
                 # The four attention lanes are per-editor, so a repository-wide count
                 # takes the whole team's view: how much of the backlog claims *some*
                 # editor's attention.

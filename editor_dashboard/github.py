@@ -60,6 +60,7 @@ class FetchMetadata:
     retry_count: int = 0
     timeout_count: int = 0
     effective_page_size: int | None = None
+    drafts_excluded: int = 0
     warnings: list[str] = field(default_factory=list)
 
     def record_rate_limit(self, value: dict[str, Any] | None) -> None:
@@ -83,6 +84,7 @@ class FetchMetadata:
             "retry_count": self.retry_count,
             "timeout_count": self.timeout_count,
             "effective_page_size": self.effective_page_size,
+            "draft_prs_excluded": self.drafts_excluded,
             "warnings": list(self.warnings),
         }
 
@@ -364,6 +366,18 @@ class GraphQLClient:
         )
 
 
+def _drop_drafts(nodes: list[dict[str, Any]], metadata: FetchMetadata) -> list[dict[str, Any]]:
+    """Leave draft pull requests out of the dashboard entirely.
+
+    A draft is not asking anybody for a review yet, so it belongs in no lane and no
+    health figure. It enters the data when it is marked ready for review, and its
+    age counts from then (models.py ``ready_for_review_at``).
+    """
+    kept = [node for node in nodes if not node.get("isDraft")]
+    metadata.drafts_excluded += len(nodes) - len(kept)
+    return kept
+
+
 def _deduplicate_pr_nodes(
     nodes: list[dict[str, Any]],
     *,
@@ -528,7 +542,9 @@ def fetch_repository_data(
         metadata.warnings.append(
             f"Expected {expected_total} open pull requests but fetched {len(open_nodes)}."
         )
-    open_nodes = _deduplicate_pr_nodes(open_nodes, label="Open", metadata=metadata)
+    open_nodes = _drop_drafts(
+        _deduplicate_pr_nodes(open_nodes, label="Open", metadata=metadata), metadata
+    )
 
     cutoff = now - timedelta(days=config.sampling.history_days)
     search_query = (
@@ -569,7 +585,9 @@ def fetch_repository_data(
         metadata.warnings.append(
             f"Search reported {issue_count} recently closed PRs but fetched {len(closed_nodes)}."
         )
-    closed_nodes = _deduplicate_pr_nodes(closed_nodes, label="Recently closed", metadata=metadata)
+    closed_nodes = _drop_drafts(
+        _deduplicate_pr_nodes(closed_nodes, label="Recently closed", metadata=metadata), metadata
+    )
 
     # A PR can close between the open-connection fetch and the later closed search.
     # Prefer the later closed snapshot so the public dashboard does not show the
@@ -640,8 +658,10 @@ def load_fixture(path: str | Path) -> RepositoryData:
     effective_page_size = metadata_raw.get("effective_page_size")
     metadata.effective_page_size = int(effective_page_size) if effective_page_size else None
     metadata.warnings.extend(str(value) for value in (metadata_raw.get("warnings") or []))
+    open_nodes = _drop_drafts(raw.get("open_pull_requests") or [], metadata)
+    closed_nodes = _drop_drafts(raw.get("recently_closed_pull_requests") or [], metadata)
     return RepositoryData(
-        open_pull_requests=tuple(snapshots_from_nodes(raw.get("open_pull_requests") or [])),
-        recently_closed_pull_requests=tuple(snapshots_from_nodes(raw.get("recently_closed_pull_requests") or [])),
+        open_pull_requests=tuple(snapshots_from_nodes(open_nodes)),
+        recently_closed_pull_requests=tuple(snapshots_from_nodes(closed_nodes)),
         metadata=metadata,
     )

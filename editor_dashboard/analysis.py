@@ -111,9 +111,9 @@ class PRAnalysis:
             "author_association": pr.author_association,
             "first_time_contributor": self.first_time_contributor,
             "created_at": isoformat(pr.created_at),
+            "ready_for_review_at": isoformat(pr.ready_for_review_at),
             "updated_at": isoformat(pr.updated_at),
             "age_hours": round(self.age_hours, 2),
-            "is_draft": pr.is_draft,
             "labels": list(pr.labels),
             "additions": pr.additions,
             "deletions": pr.deletions,
@@ -236,6 +236,11 @@ def _contributor_activity_times(
         if pr.last_edited_at:
             times.append(pr.last_edited_at)
 
+    # Marking a draft ready is a request for review, so it starts the wait again
+    # even when an editor had commented on the draft.
+    if _readied_by(pr, editors) == "contributor":
+        times.append(pr.ready_for_review_at)
+
     head_author = pr.head_author or pr.author
     if pr.head_committed_at and head_author not in editors and not is_bot(head_author):
         times.append(pr.head_committed_at)
@@ -254,7 +259,19 @@ def _editor_activity_times(pr: PullRequestSnapshot, editors: frozenset[str]) -> 
     ]
     if pr.head_committed_at and pr.head_author in editors and not is_bot(pr.head_author):
         times.append(pr.head_committed_at)
+    if _readied_by(pr, editors) == "editor":
+        times.append(pr.ready_for_review_at)
     return times
+
+
+def _readied_by(pr: PullRequestSnapshot, editors: frozenset[str]) -> str | None:
+    """Whose activity marking the PR ready for review was, if it was ever a draft."""
+    if pr.ready_for_review_at == pr.created_at:
+        return None
+    actor = pr.ready_for_review_by
+    if is_bot(actor):
+        return None
+    return "editor" if actor in editors else "contributor"
 
 
 def _direct_reasons(
@@ -404,9 +421,6 @@ def _ready_and_blockers(
     positive: list[Reason] = []
     blockers: list[Reason] = []
 
-    if pr.is_draft:
-        blockers.append(Reason("draft", "Draft pull request", tone="muted"))
-
     matching_labels = sorted(label for label in pr.labels if label.lower() in config.blocking_labels)
     if matching_labels:
         blockers.append(
@@ -513,7 +527,6 @@ def _ready_and_blockers(
         )
 
     hard_blocker_codes = {
-        "draft",
         "blocking-label",
         "merge-conflict",
         "mergeability-unknown",
@@ -536,7 +549,6 @@ def _ready_and_blockers(
 def _waiting_reason(pr: PullRequestSnapshot, blockers: Iterable[Reason], waiting_on_editor: bool) -> str:
     blocker_codes = {blocker.code for blocker in blockers}
     precedence = [
-        ("draft", "Draft"),
         ("blocking-label", "Blocking label"),
         ("merge-conflict", "Merge conflict"),
         ("ci-failing", "Checks failing"),
@@ -582,6 +594,8 @@ def _content_fingerprint(pr: PullRequestSnapshot, editor: str, body_hash: str) -
             "number": pr.number,
             "title": pr.title,
             "body_hash": body_hash,
+            # Always false now that drafts are dropped before analysis, but kept so
+            # that leaving drafts out did not change every stored fingerprint.
             "is_draft": pr.is_draft,
             "head_oid": pr.head_oid,
             "labels": pr.labels,
@@ -759,14 +773,17 @@ def analyze_pull_request(
     current_wait_hours = _hours_between(latest_contributor, now) if waiting_on_editor and latest_contributor else None
 
     first_editor, first_response_known = _first_editor_response(pr, config.editors)
+    # Counted from when the PR became ready for review, like its age. An editor who
+    # already replied to the draft has answered, so that clamps to zero.
     first_response_hours = (
-        _hours_between(pr.created_at, first_editor.created_at)
+        _hours_between(pr.ready_for_review_at, first_editor.created_at)
         if first_editor and first_response_known
         else None
     )
 
     ready_bounded, positive_reasons, blockers = _ready_and_blockers(pr, checklist, config)
-    age_hours = _hours_between(pr.created_at, now)
+    # A PR that was a draft is only asking for review since it was last marked ready.
+    age_hours = _hours_between(pr.ready_for_review_at, now)
     target_hours = _response_target_hours(config)
 
     # "Never received a first editor response", split on the response target into two
@@ -776,15 +793,14 @@ def analyze_pull_request(
     # lane could only ever show successes in progress. Now it moves rather than
     # disappears.
     never_answered = bool(
-        not pr.is_draft
-        and pr.author not in config.editors
+        pr.author not in config.editors
         and not is_bot(pr.author)
         and first_editor is None
         and first_response_known
     )
     in_reply_window = never_answered and age_hours <= target_hours
     first_response_overdue = never_answered and age_hours > target_hours
-    oldest_wait = bool(waiting_on_editor and not pr.is_draft)
+    oldest_wait = waiting_on_editor
 
     # These four lanes are properties of the pull request, not of whoever is asking,
     # so they are computed once and shared by every perspective.
@@ -805,8 +821,8 @@ def analyze_pull_request(
             Reason(
                 "first-response-overdue",
                 "First editor response overdue",
-                detail=f"{age_hours / 24:.1f} days open",
-                timestamp=pr.created_at,
+                detail=f"{age_hours / 24:.1f} days ready for review",
+                timestamp=pr.ready_for_review_at,
                 tone="urgent",
             )
         )
@@ -818,7 +834,7 @@ def analyze_pull_request(
                 "Awaiting a first editor response",
                 detail=f"{(target_hours - age_hours) / 24:.1f} days left of the "
                 f"{config.response_targets.initial_editor_response_days}-day target",
-                timestamp=pr.created_at,
+                timestamp=pr.ready_for_review_at,
                 tone=tone,
             )
         )
@@ -884,11 +900,11 @@ def build_lanes(analyses: Iterable[PRAnalysis], repository_slug: str) -> dict[st
     # every member shares one target.
     reply_window = sorted(
         (analysis for analysis in values if "reply_window" in analysis.shared_lanes),
-        key=lambda analysis: (analysis.pr.created_at, analysis.pr.number),
+        key=lambda analysis: (analysis.pr.ready_for_review_at, analysis.pr.number),
     )
     overdue = sorted(
         (analysis for analysis in values if "overdue" in analysis.shared_lanes),
-        key=lambda analysis: (analysis.pr.created_at, analysis.pr.number),
+        key=lambda analysis: (analysis.pr.ready_for_review_at, analysis.pr.number),
     )
     oldest_wait = sorted(
         (analysis for analysis in values if "oldest_wait" in analysis.shared_lanes),

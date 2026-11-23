@@ -433,6 +433,34 @@ class GitHubFetchTests(unittest.TestCase):
         self.assertEqual(delays, [delay for delay in _MERGEABILITY_RETRY_DELAYS if delay])
         self.assertTrue(any("still answered UNKNOWN" in warning for warning in data.metadata.warnings))
 
+    def test_drafts_are_dropped_before_anything_else_asks_about_them(self) -> None:
+        # A draft is in no lane and no health figure, so it is not worth a
+        # mergeability re-check either.
+        ready = self.fixture["open_pull_requests"][0]
+        draft = {**self.fixture["open_pull_requests"][1], "id": "PR_2", "isDraft": True, "mergeable": "UNKNOWN"}
+        closed_draft = {**self.fixture["recently_closed_pull_requests"][0], "isDraft": True}
+
+        client = FakeClient(
+            open_responses=[self._open_page([ready, draft])],
+            closed_responses=[
+                {
+                    "search": {
+                        "issueCount": 1,
+                        "nodes": [closed_draft],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    },
+                    "rateLimit": rate_limit(1),
+                }
+            ],
+        )
+
+        data = fetch_repository_data(self.config, "unused", now=NOW, client=client, sleep=lambda _: None)
+
+        self.assertEqual([pr.number for pr in data.open_pull_requests], [int(ready["number"])])
+        self.assertEqual(data.recently_closed_pull_requests, ())
+        self.assertEqual(data.metadata.drafts_excluded, 2)
+        self.assertFalse(any("ids" in call for call in client.calls))
+
 
 if __name__ == "__main__":
     unittest.main()

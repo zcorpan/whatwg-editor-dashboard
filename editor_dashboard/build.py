@@ -32,11 +32,11 @@ LANE_DESCRIPTIONS = {
     },
     "reply_window": {
         "title": "Reply window open",
-        "description": "Non-draft contributor PRs that have never received a sampled editor response and are still inside the response target, closest to the deadline first. The only ones where a first reply can still meet the target.",
+        "description": "Contributor PRs that have never received a sampled editor response and are still inside the response target, closest to the deadline first. The only ones where a first reply can still meet the target.",
     },
     "overdue": {
         "title": "First reply overdue",
-        "description": "Non-draft contributor PRs that have never received a sampled editor response and are past the response target, oldest first.",
+        "description": "Contributor PRs that have never received a sampled editor response and are past the response target, oldest first.",
     },
     "oldest_wait": {
         "title": "Longest waits",
@@ -48,7 +48,7 @@ LANE_DESCRIPTIONS = {
     },
     "all": {
         "title": "All open",
-        "description": "Every open pull request ordered by latest public GitHub update.",
+        "description": "Every open pull request that is ready for review, ordered by latest public GitHub update.",
     },
 }
 
@@ -89,6 +89,10 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
             _queue_order_principle(config),
             "The attention lanes are computed for every configured editor, so the queue can be read from any one editor's perspective or from all of them at once.",
             "Which editor you are is chosen in the browser and stored only there; the build has no configured viewer and the published data names nobody as the reader.",
+            (
+                "Draft pull requests are left out of every lane and every health figure. A PR that was "
+                "a draft is counted from when it was last marked ready for review, not from when it was opened."
+            ),
             "The generated site contains public GitHub data only.",
             "Seen, addressed, pinned, snoozed, and opened state is stored only in the browser.",
             "Description checklist completion is descriptive and is not an assessment of test sufficiency or specification readiness.",
@@ -147,11 +151,15 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
             "The configured current editor list is applied to the full sampled history; historical editor-membership changes are not reconstructed.",
             (
                 "The weekly trend replays today's PR data at past moments. Draft state, authorship and "
-                "editor membership are taken as they are now, so a PR that left draft during the window "
-                "counts across the whole of it."
+                "editor membership are taken as they are now: a PR that is a draft today is absent from "
+                "the whole window, and one that was converted back to draft and readied again counts only "
+                "from the latest time it was marked ready."
             ),
             "A PR description edit is attributed to the PR author because the sampled API data does not identify who edited the description.",
-            "First-response clocks use PR creation time for non-draft PRs; this MVP does not reconstruct when a formerly draft PR became ready for review.",
+            (
+                "First-response clocks start when a PR was last marked ready for review. An editor reply "
+                "to the draft still counts as the first response, so it meets the target."
+            ),
             "A ready-and-bounded result is a prioritization hint, not a merge recommendation.",
             "No claim is made about actual test coverage, implementer interest, web compatibility, or consensus quality.",
         ],

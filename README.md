@@ -16,7 +16,7 @@ The review dashboard contains these explainable lanes:
 2. **Direct requests** — review requests and assignments the selected editor currently holds, plus sampled public mentions of them inside the activity window.
 3. **Stale mentions** — mentions older than the activity window, kept findable without leading the queue.
 4. **Re-review owed** — a head commit, PR description, or sampled author activity changed after the selected editor's latest sampled review.
-5. **Reply window open** — non-draft contributor PRs that have never received a sampled editor response and are still inside the seven-day target, closest to the deadline first. The only PRs where a first reply can still meet the target.
+5. **Reply window open** — contributor PRs that have never received a sampled editor response and are still inside the seven-day target, closest to the deadline first. The only PRs where a first reply can still meet the target.
 6. **First reply overdue** — the same population past the target, oldest first. A PR that misses the target moves here rather than leaving the pair.
 7. **Longest waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
 8. **Ready** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
@@ -171,7 +171,7 @@ A first-time contributor is detected from an author with no GitHub association t
 
 For long discussions, only the beginning and end of the comment/review timeline are sampled. First-response metrics are reported only when the beginning sample establishes the response or the sampled timeline is complete. Later response-interval metrics require a complete sampled timeline.
 The configured current editor list is applied retroactively to the 90-day sample; historical editor-membership changes are not reconstructed. Description edits are attributed to the PR author because the sampled API fields do not identify the editor of the description.
-Current drafts are excluded from response-target and contributor-wait counts. For a non-draft PR that used to be a draft, the MVP still uses PR creation time because it does not fetch the ready-for-review transition history.
+Draft PRs are left out of the dashboard entirely, queue and health view alike. A PR that used to be a draft is dated from the latest time it was marked ready for review: that is where its age, its first-response clock and its place in the weekly backlog start, and marking it ready counts as contributor activity for the editor wait.
 
 ## Repository layout
 

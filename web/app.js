@@ -305,7 +305,6 @@ function chip(reason) {
 }
 
 function statusLabel(item) {
-  if (item.is_draft) return "Draft";
   if (item.status_state === "SUCCESS") return "Checks pass";
   if (item.status_state === "FAILURE" || item.status_state === "ERROR") return "Checks fail";
   if (item.status_state === "PENDING") return "Checks pending";
@@ -399,14 +398,17 @@ function createPRCard(item) {
 
   const meta = element("p", {className: "pr-meta"});
   meta.append(element("span", {text: `by @${item.author || "ghost"}`}));
-  const opened = element("span", {text: `opened ${relativeTime(item.created_at)}`});
-  opened.title = localDate(item.created_at);
+  // A PR that was a draft is dated from when it was last marked ready, which is
+  // where its age and first-response clock start.
+  const wasDraft = Boolean(item.ready_for_review_at) && item.ready_for_review_at !== item.created_at;
+  const since = wasDraft ? item.ready_for_review_at : item.created_at;
+  const opened = element("span", {text: `${wasDraft ? "ready for review" : "opened"} ${relativeTime(since)}`});
+  opened.title = wasDraft ? `${localDate(since)} (opened ${localDate(item.created_at)})` : localDate(since);
   meta.append(opened);
   if (item.current_wait_hours !== null) {
     meta.append(element("span", {}, ["editor wait ", element("strong", {text: duration(item.current_wait_hours)})]));
   }
   if (item.first_time_contributor) meta.append(element("span", {text: "first-time contributor"}));
-  if (item.is_draft) meta.append(element("span", {text: "draft"}));
   heading.append(meta);
 
   const reasonList = element("div", {className: "reason-list"});
@@ -1011,7 +1013,7 @@ function renderHealth() {
         scale: {min: 0, max: 100, step: 50},
         formatValue: percentText,
         formatTick: value => `${Math.round(value)}%`,
-        description: `Share of contributor pull requests answered within ${targetDays} days, by week opened; ${percentText(rate.percent)} across the window.`,
+        description: `Share of contributor pull requests answered within ${targetDays} days, by week ready for review; ${percentText(rate.percent)} across the window.`,
       }),
     }),
   );
@@ -1042,7 +1044,7 @@ function renderHealth() {
       numberFormat(point.open_prs),
       numberFormat(point.awaiting_first_response),
       numberFormat(point.overdue_first_response),
-      numberFormat(bucket.opened),
+      numberFormat(bucket.ready_for_review),
       numberFormat(bucket.merged),
       bucket.first_response_eligible
         ? `${bucket.first_response_within_target}/${bucket.first_response_eligible}${bucket.first_response_mature ? "" : " (partial week)"}`
