@@ -18,38 +18,41 @@ from .expertise import contributions
 from .github import RepositoryData
 from .models import HistoryRecord
 from .spec_pages import SpecPages
-from .topics import LabelSuggester, _top_page, display_name, page_shares, topic_labels
+from .topics import LabelSuggester, display_name, page_shares, top_page, topic_labels
 
 
 def label_suggestion_precision(data: RepositoryData, spec: SpecPages, config: DashboardConfig) -> dict[str, Any]:
+    """How often the `topics:` map's label for a merged PR's main page is one it carried."""
     by_commit = spec.by_commit or {}
-    examples = [
-        (tuple(topic_labels((*record.labels, *record.issue_labels), config)), by_commit.get(record.merge_oid or ""))
-        for record in data.history
-    ]
-    labeled = [(labels, pages) for labels, pages in examples if labels and pages]
-    full = LabelSuggester.learn(labeled, config, ())
-    suggested = correct = 0
-    for labels, pages in labeled:
-        top = _top_page(page_shares(pages, config))
-        if top is None:
+    suggester = LabelSuggester.from_config(config, ())
+    labeled = suggested = correct = 0
+    for record in data.history:
+        labels = {label.lower() for label in topic_labels((*record.labels, *record.issue_labels), config)}
+        pages = by_commit.get(record.merge_oid or "")
+        if not labels or not pages:
             continue
-        # Leave this example out of the counts it is judged by.
-        counts = Counter(full.by_page.get(top, {}))
-        for label in labels:
-            counts[label] -= 1
-        held_out = LabelSuggester({top: +counts}, ())
-        suggestion = held_out.from_pages(pages, config)
+        labeled += 1
+        suggestion = suggester.from_pages(pages, config)
         if suggestion is not None:
             suggested += 1
             correct += suggestion[0] in labels
     return {
-        "labeled_with_pages": len(labeled),
+        "labeled_with_pages": labeled,
         "suggested": suggested,
         "correct": correct,
         "precision_percent": round(100 * correct / suggested, 1) if suggested else None,
-        "coverage_percent": round(100 * suggested / len(labeled), 1) if labeled else None,
+        "coverage_percent": round(100 * suggested / labeled, 1) if labeled else None,
     }
+
+
+def uncovered_pages(data: RepositoryData, spec: SpecPages, config: DashboardConfig) -> list[tuple[str, int]]:
+    """Pages merged PRs are mostly about that no label in `topics:` covers, busiest first."""
+    counts: Counter[str] = Counter()
+    for record in data.history:
+        page = top_page(page_shares((spec.by_commit or {}).get(record.merge_oid or ""), config))
+        if page and not config.labels_for_page(page):
+            counts[page] += 1
+    return sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))
 
 
 def report(payload: dict[str, Any], data: RepositoryData, spec: SpecPages, config: DashboardConfig) -> list[str]:
@@ -68,8 +71,13 @@ def report(payload: dict[str, Any], data: RepositoryData, spec: SpecPages, confi
         mapped_history = sum(bool(page_shares((spec.by_commit or {}).get(record.merge_oid or ""), config)) for record in data.history)
         lines.append(f"Merged PRs with a spec page: {mapped_history} of {len(data.history)}")
         precision = label_suggestion_precision(data, spec, config)
+        gaps = uncovered_pages(data, spec, config)
         lines.append(
-            "Topic label from spec page, leave-one-out: "
+            "Pages no label covers (merged PRs mostly about them): "
+            + (", ".join(f"{page} {count}" for page, count in gaps[:15]) or "none")
+        )
+        lines.append(
+            "Topic label from the topics: map, against merged PRs' own labels: "
             f"{precision['correct']} of {precision['suggested']} right ({precision['precision_percent']}%), "
             f"suggested for {precision['coverage_percent']}% of {precision['labeled_with_pages']} labeled PRs"
         )
@@ -152,6 +160,19 @@ def expertise_report(
             lines.append("  History suggests, not declared: " + ", ".join(missing))
         if unsupported:
             lines.append("  Declared, not in the history's top topics: " + ", ".join(unsupported))
-        snippet.append(f"  - login: {login}\n    knows: [{', '.join(json.dumps(entry) for entry in suggestion)}]")
+        # One entry per line, as in dashboard.yml, so edits diff line by line.
+        snippet.append(
+            f"  - login: {login}\n    knows:" + "".join(f"\n      - {json.dumps(entry)}" for entry in suggestion)
+        )
     lines.append("\nSuggested knows: lists (merge into the editors: and helpers: entries):\n" + "\n".join(snippet))
+    uncovered: Counter[str] = Counter()
+    for record in history:
+        page = top_page(page_shares(pages_by_oid.get(record.merge_oid or ""), config))
+        if page and not config.labels_for_page(page):
+            uncovered[page] += 1
+    if uncovered:
+        lines.append(
+            "\nPages no label in topics: covers, by merged PRs mostly about them (a label for these makes them declarable):\n  "
+            + ", ".join(f"{page} {count}" for page, count in sorted(uncovered.items(), key=lambda pair: (-pair[1], pair[0])))
+        )
     return lines

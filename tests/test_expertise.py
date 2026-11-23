@@ -44,7 +44,8 @@ class ExpertiseReportTests(unittest.TestCase):
     def test_profiles_credit_authors_and_reviewers_and_pages(self) -> None:
         profiles = expertise_profiles(self.history, self.pages, self.config, as_of=NOW)
         annevk = {topic for topic, _score, _share in profiles["annevk"]}
-        self.assertEqual(annevk, {"label:topic: forms", "page:forms", "label:topic: parser"})
+        # The forms page is covered by topic: forms, so it adds to that label.
+        self.assertEqual(annevk, {"label:topic: forms", "label:topic: parser"})
         self.assertEqual(profiles["zcorpan"][0][0], "label:topic: parser")
         # Only work before the report date counts.
         self.assertNotIn("annevk", expertise_profiles(self.history, self.pages, self.config, as_of=NOW - timedelta(days=90)))
@@ -54,7 +55,7 @@ class ExpertiseReportTests(unittest.TestCase):
         self.assertIn("History suggests, not declared: topic: parser", text)
         self.assertIn("Declared, not in the history's top topics: topic: img", text)
         # annevk's one parser PR is 9% of the parser credit, under the 10% cut.
-        self.assertIn('  - login: annevk\n    knows: ["forms", "topic: forms"]', text)
+        self.assertIn('  - login: annevk\n    knows:\n      - "topic: forms"\n', text)
 
 
 if __name__ == "__main__":

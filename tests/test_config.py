@@ -105,3 +105,18 @@ class KnowsConfigTests(unittest.TestCase):
             config_with_people("editors:\n  - login: zcorpan\n    knows: [\"\"]\n")
         with self.assertRaisesRegex(ValueError, "must be a list"):
             config_with_people("editors:\n  - login: zcorpan\n    knows: images\n")
+
+
+class TopicPagesConfigTests(unittest.TestCase):
+    def test_a_mapped_label_is_declarable_and_covers_its_pages(self) -> None:
+        config = config_with_people(
+            "editors:\n  - login: zcorpan\n    knows: [\"removal/deprecation\", accessibility]\n"
+            "topics:\n  \"topic: img\": [images, Embedded-Content]\n  removal/deprecation: [obsolete]\n  accessibility: []\n"
+        )
+        self.assertEqual(config.labels_for_page("embedded-content"), ("topic: img",))
+        self.assertTrue(config.is_topic_label("Accessibility"))
+        self.assertEqual(config.knows_of("zcorpan"), frozenset({"label:removal/deprecation", "label:accessibility"}))
+
+    def test_rejects_ignored_pages(self) -> None:
+        with self.assertRaisesRegex(ValueError, "ignore_pages"):
+            config_with_people("editors: [zcorpan]\ntopics:\n  \"topic: x\": [indices]\n")

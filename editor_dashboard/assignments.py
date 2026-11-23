@@ -117,11 +117,7 @@ def apply_assignments(
             issue.title,
         )
 
-    suggester = LabelSuggester.learn(
-        (((*record.labels, *record.issue_labels), by_commit.get(record.merge_oid or "")) for record in history),
-        config,
-        known_labels,
-    )
+    suggester = LabelSuggester.from_config(config, known_labels)
 
     decisions = route(candidates.values(), config)
     for key, decision in decisions.items():

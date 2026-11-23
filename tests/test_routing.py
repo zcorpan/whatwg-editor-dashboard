@@ -41,7 +41,7 @@ class RoutingTests(unittest.TestCase):
                 ("annevk", frozenset({"label:topic: forms"})),
                 ("domenic", frozenset({"label:topic: navigation"})),
                 ("noamr", frozenset({"label:topic: parser"})),
-                ("zcorpan", frozenset({"label:topic: parser", "label:topic: img", "page:images"})),
+                ("zcorpan", frozenset({"label:topic: parser", "label:topic: img", "page:sections"})),
             ),
         )
 
@@ -54,10 +54,16 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(decisions["forms"].owner, "annevk")
         self.assertEqual(decisions["img"].evidence, "Declared in dashboard.yml: topic: img")
 
-    def test_a_page_declaration_matches_the_pages_a_diff_touches(self) -> None:
+    def test_a_diff_matches_the_labels_that_cover_its_pages(self) -> None:
+        # images.html is covered by topic: img, which zcorpan declares.
         decision = self.route([candidate("srcset", 1, pages={"images": 3})])["srcset"]
         self.assertEqual(decision.owner, "zcorpan")
-        self.assertIn("the images page", decision.evidence)
+        self.assertEqual(decision.evidence, "Declared in dashboard.yml: topic: img")
+
+    def test_a_page_no_label_covers_can_be_declared_directly(self) -> None:
+        decision = self.route([candidate("outline", 1, pages={"sections": 2})])["outline"]
+        self.assertEqual(decision.owner, "zcorpan")
+        self.assertIn("the sections page", decision.evidence)
 
     def test_load_spreads_a_run_among_those_who_declare_it(self) -> None:
         # zcorpan and noamr both declare the parser; a run of parser PRs goes to both.
@@ -117,17 +123,34 @@ class TopicTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.config = load_config(ROOT / "dashboard.yml")
 
-    def test_cross_cutting_pages_say_nothing(self) -> None:
+    def test_pages_become_the_labels_that_cover_them(self) -> None:
+        # Cross-cutting pages say nothing; parsing is covered by topic: parser.
         topics = item_topics([], self.config, pages={"acknowledgements": 3, "parsing": 1})
-        self.assertEqual(topics, {"page:parsing": 1.0})
+        self.assertEqual(topics, {"label:topic: parser": 1.0})
+        # A page two labels cover splits its share; one no label covers stays a page.
+        topics = item_topics([], self.config, pages={"iframe-embed-object": 1, "sections": 1})
+        self.assertEqual(
+            topics,
+            {
+                "label:topic: embed and object": 0.25,
+                "label:topic: frames/navigables/browsing contexts": 0.25,
+                "page:sections": 0.5,
+            },
+        )
 
-    def test_a_page_suggests_the_label_its_history_carries(self) -> None:
-        examples = [(["topic: parser"], {"parsing": 2})] * 6 + [(["topic: forms"], {"parsing": 1})]
-        suggester = LabelSuggester.learn(examples, self.config, ["topic: parser", "topic: dialog"])
-        label, reason = suggester.from_pages({"parsing": 3}, self.config)
+    def test_mapped_labels_without_the_prefix_are_topic_labels(self) -> None:
+        self.assertIn("label:accessibility", item_topics(["accessibility", "clarification"], self.config))
+        self.assertNotIn("label:clarification", item_topics(["accessibility", "clarification"], self.config))
+
+    def test_the_label_covering_the_main_page_is_suggested(self) -> None:
+        suggester = LabelSuggester.from_config(self.config, ["topic: parser", "topic: dialog"])
+        label, reason = suggester.from_pages({"parsing": 3, "rendering": 1}, self.config)
         self.assertEqual(label, "topic: parser")
-        self.assertIn("6 of 7", reason)
-        self.assertIsNone(suggester.from_pages({"forms": 3}, self.config))
+        self.assertIn("parsing page", reason)
+        self.assertEqual(suggester.from_pages({"obsolete": 1}, self.config)[0], "removal/deprecation")
+        # Two labels cover it, or none does: no suggestion.
+        self.assertIsNone(suggester.from_pages({"iframe-embed-object": 3}, self.config))
+        self.assertIsNone(suggester.from_pages({"sections": 3}, self.config))
         self.assertEqual(suggester.from_title("The <dialog> element closes twice")[0], "topic: dialog")
 
 
