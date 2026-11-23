@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import re
 import logging
 import ssl
 import time
@@ -9,15 +10,17 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from .config import DashboardConfig
 from .models import (
     DependencyState,
+    HistoryRecord,
     IssueSnapshot,
     PullRequestSnapshot,
+    history_from_nodes,
     isoformat,
     issues_from_nodes,
     snapshots_from_nodes,
@@ -124,6 +127,8 @@ class RepositoryData:
     metadata: FetchMetadata
     open_issues: tuple[IssueSnapshot, ...] = ()
     recently_closed_issues: tuple[IssueSnapshot, ...] = ()
+    # Every PR merged since `expertise.since`, for routing by expertise.
+    history: tuple[HistoryRecord, ...] = ()
     # What held open PRs say they depend on, by canonical URL (see references.py).
     # Fetched fresh on every build: it is other repositories' state.
     dependency_states: dict[str, DependencyState] = field(default_factory=dict)
@@ -193,7 +198,9 @@ class GraphQLClient:
         self.timeout_seconds = timeout_seconds
         self._urlopen = urlopen or urllib.request.urlopen
         self._sleep = sleep or time.sleep
-        self._page_size_cap: int | None = None
+        # Per operation: a timeout on the heavy PR query says nothing about how large
+        # a page of the light history query can be.
+        self._page_size_caps: dict[str, int] = {}
 
         self.request_attempts = 0
         self.retry_count = 0
@@ -202,7 +209,16 @@ class GraphQLClient:
 
     @property
     def page_size_cap(self) -> int | None:
-        return self._page_size_cap
+        """The smallest page size any query has been reduced to, if any."""
+        return min(self._page_size_caps.values(), default=None)
+
+    def cap_for(self, operation: str) -> int | None:
+        return self._page_size_caps.get(operation)
+
+    @staticmethod
+    def _operation(query: str) -> str:
+        match = re.search(r"\bquery\s+(\w+)", query)
+        return match.group(1) if match else ""
 
     def _make_request(self, query: str, variables: dict[str, Any]) -> urllib.request.Request:
         payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
@@ -239,7 +255,7 @@ class GraphQLClient:
             return None
         return error.headers.get("X-GitHub-Request-Id")
 
-    def _reduce_page_size_after_timeout(self, variables: dict[str, Any]) -> tuple[int, int] | None:
+    def _reduce_page_size_after_timeout(self, operation: str, variables: dict[str, Any]) -> tuple[int, int] | None:
         value = variables.get("pageSize")
         try:
             current = int(value)
@@ -250,15 +266,17 @@ class GraphQLClient:
 
         reduced = max(1, current // 2)
         variables["pageSize"] = reduced
-        if self._page_size_cap is None or reduced < self._page_size_cap:
-            self._page_size_cap = reduced
+        if operation not in self._page_size_caps or reduced < self._page_size_caps[operation]:
+            self._page_size_caps[operation] = reduced
         return current, reduced
 
     def execute(self, query: str, variables: dict[str, Any]) -> dict[str, Any]:
         request_variables = dict(variables)
+        operation = self._operation(query)
         page_size = request_variables.get("pageSize")
-        if self._page_size_cap is not None and page_size is not None:
-            request_variables["pageSize"] = min(int(page_size), self._page_size_cap)
+        cap = self._page_size_caps.get(operation)
+        if cap is not None and page_size is not None:
+            request_variables["pageSize"] = min(int(page_size), cap)
 
         attempt = 0
         while True:
@@ -275,7 +293,7 @@ class GraphQLClient:
                 if isinstance(ids, list) and len(ids) > 1:
                     LOGGER.warning("%s for %d node ids; splitting the batch", outcome.summary, len(ids))
                     raise BatchTooLarge(str(outcome.error)) from outcome.cause
-                page_change = self._reduce_page_size_after_timeout(request_variables)
+                page_change = self._reduce_page_size_after_timeout(operation, request_variables)
 
             remaining = self.retry_budget_remaining
             if attempt >= self.max_retries or remaining <= 0:
@@ -409,6 +427,12 @@ class GraphQLClient:
             timeout=timeout,
             delay=delay,
         )
+
+
+def _cap(graphql: Any, operation: str) -> int | None:
+    """The reduced page size of one query, for clients that track it."""
+    cap_for = getattr(graphql, "cap_for", None)
+    return cap_for(operation) if cap_for else None
 
 
 def _drop_drafts(nodes: list[dict[str, Any]], metadata: FetchMetadata) -> list[dict[str, Any]]:
@@ -765,7 +789,7 @@ def _apply_incremental_issue_changes(
         sorted(stale),
         {"timelineEachEnd": config.sampling.timeline_each_end},
         metadata,
-        batch_size=int(getattr(graphql, "page_size_cap", None) or config.sampling.issue_page_size),
+        batch_size=int(_cap(graphql, "OpenIssues") or config.sampling.issue_page_size),
     )
     for node in refreshed:
         number = int(node["number"])
@@ -794,6 +818,35 @@ def _closed_pr_query(name: str) -> str:
     if name != "recent_closed_pull_requests.graphql":
         query += "\n" + _fragments("recent_closed_pull_requests.graphql")
     return query + "\n" + _fragments("history_pull_requests.graphql")
+
+
+def _fetch_history_nodes(
+    config: DashboardConfig, graphql: GraphQLClient, metadata: FetchMetadata, now: datetime
+) -> list[dict[str, Any]]:
+    """Every PR merged since `expertise.since`, walked in date slices.
+
+    Search returns at most 1,000 results, so a slice that reports more is halved.
+    """
+    query = _read_query("history_pull_requests.graphql")
+    nodes: list[dict[str, Any]] = []
+    pending = [(date.fromisoformat(config.expertise.since), now.date())]
+    while pending:
+        start, end = pending.pop(0)
+        search = f"repo:{config.repository.slug} is:pr is:merged merged:{start.isoformat()}..{end.isoformat()}"
+        found, total = _paginate(
+            graphql,
+            query,
+            {"query": search, "pageSize": 50},
+            metadata,
+            lambda data: data.get("search"),
+            "merged-PR history search",
+        )
+        if total > 1000 and end > start:
+            middle = start + (end - start) / 2
+            pending[:0] = [(start, middle), (middle + timedelta(days=1), end)]
+            continue
+        nodes.extend(found)
+    return _deduplicate_by_number(nodes)
 
 
 def _query_with_fragments(query_name: str, fragments_from: str) -> str:
@@ -918,7 +971,7 @@ def _apply_incremental_changes(
         "timelineEachEnd": config.sampling.timeline_each_end,
         "reviewCount": config.sampling.reviews_per_pr,
     }
-    batch_size = int(getattr(graphql, "page_size_cap", None) or config.sampling.graphql_page_size)
+    batch_size = int(_cap(graphql, "OpenPullRequests") or config.sampling.graphql_page_size)
     open_ids = sorted(identifier for identifier, state in stale.items() if state == "OPEN")
     closed_ids = sorted(identifier for identifier, state in stale.items() if state != "OPEN")
     refreshed_open = _fetch_nodes_by_id(
@@ -994,8 +1047,7 @@ def _finish(
     metadata.request_attempts = int(getattr(graphql, "request_attempts", metadata.query_count))
     metadata.retry_count = int(getattr(graphql, "retry_count", 0))
     metadata.timeout_count = int(getattr(graphql, "timeout_count", 0))
-    page_size_cap = getattr(graphql, "page_size_cap", None)
-    metadata.effective_page_size = int(page_size_cap or config.sampling.graphql_page_size)
+    metadata.effective_page_size = int(_cap(graphql, "OpenPullRequests") or config.sampling.graphql_page_size)
     if metadata.timeout_count:
         metadata.warnings.append(
             f"GitHub timed out {metadata.timeout_count} GraphQL request"
@@ -1073,10 +1125,13 @@ def _repository_data(
     dependency_states: dict[str, DependencyState] | None = None,
     open_issue_nodes: Iterable[dict[str, Any]] = (),
     closed_issue_nodes: Iterable[dict[str, Any]] = (),
+    history_nodes: Iterable[dict[str, Any]] = (),
 ) -> RepositoryData:
     """Snapshots in PR-number order, so a build's output never depends on fetch order."""
     ordered_open = sorted(open_nodes, key=lambda node: int(node["number"]))
     ordered_closed = sorted(closed_nodes, key=lambda node: int(node["number"]))
+    # The stored history, then recent merges, which carry the same fields and win.
+    history = history_from_nodes([*sorted(history_nodes, key=lambda node: int(node["number"])), *ordered_closed])
     return RepositoryData(
         open_pull_requests=tuple(snapshots_from_nodes(_drop_drafts(ordered_open, metadata))),
         recently_closed_pull_requests=tuple(snapshots_from_nodes(_drop_drafts(ordered_closed, metadata))),
@@ -1086,6 +1141,7 @@ def _repository_data(
         recently_closed_issues=tuple(
             issues_from_nodes(sorted(closed_issue_nodes, key=lambda node: int(node["number"])))
         ),
+        history=tuple(history),
     )
 
 
@@ -1140,6 +1196,10 @@ def fetch_with_snapshot(
                 closed_nodes={int(node["number"]): node for node in closed_nodes},
                 open_issue_nodes=open_issue_map,
                 closed_issue_nodes=closed_issue_map,
+                history_nodes=dict(previous.history_nodes),
+                # Page maps are per head commit and per merge commit, so they stay
+                # valid; a full fetch starts them afresh against the current headings.
+                spec_pages=dict(previous.spec_pages),
             )
             metadata.last_full_fetch_at = isoformat(previous.last_full_at)
             return (
@@ -1150,6 +1210,7 @@ def fetch_with_snapshot(
                     dependencies,
                     open_issue_map.values(),
                     closed_issue_map.values(),
+                    previous.history_nodes.values(),
                 ),
                 snapshot,
             )
@@ -1159,6 +1220,7 @@ def fetch_with_snapshot(
     closed_nodes = _fetch_closed_nodes(config, graphql, metadata, now)
     open_issue_nodes = _fetch_open_issue_nodes(config, graphql, metadata)
     closed_issue_nodes = _fetch_closed_issue_nodes(config, graphql, metadata, now)
+    history_nodes = _fetch_history_nodes(config, graphql, metadata, now)
     # An issue can close between the two fetches; the later snapshot wins, as for PRs.
     closed_issue_numbers = {int(node["number"]) for node in closed_issue_nodes}
     open_issue_nodes = [node for node in open_issue_nodes if int(node["number"]) not in closed_issue_numbers]
@@ -1185,10 +1247,11 @@ def fetch_with_snapshot(
         closed_nodes={int(node["number"]): node for node in closed_nodes},
         open_issue_nodes={int(node["number"]): node for node in open_issue_nodes},
         closed_issue_nodes={int(node["number"]): node for node in closed_issue_nodes},
+        history_nodes={int(node["number"]): node for node in history_nodes},
     )
     return (
         _repository_data(
-            open_nodes, closed_nodes, metadata, dependencies, open_issue_nodes, closed_issue_nodes
+            open_nodes, closed_nodes, metadata, dependencies, open_issue_nodes, closed_issue_nodes, history_nodes
         ),
         snapshot,
     )
@@ -1235,4 +1298,5 @@ def load_fixture(path: str | Path) -> RepositoryData:
         },
         raw.get("open_issues") or [],
         raw.get("recently_closed_issues") or [],
+        raw.get("history_pull_requests") or [],
     )

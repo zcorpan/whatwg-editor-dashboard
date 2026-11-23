@@ -6,11 +6,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .assignments import apply_assignments
 from .issue_analysis import analyze_issues, linked_issues_by_pr
+from .spec_pages import SpecPages
 from .analysis import ALL_EDITORS, analyze_all, build_lanes, build_perspective_lanes, perspective_keys
 from .config import DashboardConfig
 from .github import RepositoryData
-from .metrics import build_metrics
+from .accountability import build_people
+from .metrics import TREND_BUCKET_DAYS, TREND_WINDOW_DAYS, build_metrics
 from .models import isoformat
 
 
@@ -58,6 +61,10 @@ LANE_DESCRIPTIONS = {
     "triage": {
         "title": "Needs triage",
         "description": "Issues opened inside the issue window that have no topic label yet, oldest first. Labeling one is a first response.",
+    },
+    "routed": {
+        "title": "Routed to you",
+        "description": "Unanswered PRs and issues nobody was asked about directly, each routed to one person by topic expertise and recent load, oldest first. The card says why.",
     },
     "all": {
         "title": "All open",
@@ -114,6 +121,16 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
                 "Draft pull requests are left out of every lane and every health figure. A PR that was "
                 "a draft is counted from when it was last marked ready for review, not from when it was opened."
             ),
+            (
+                "Every item says whose move it is. Labels decide first, then an unaddressed change request, "
+                "a current approval, and finally who acted last; a merge conflict or failing checks never hand a PR back to its author."
+            ),
+            (
+                "Unanswered contributor items nobody was asked about are routed to one person by topic expertise and recent load. "
+                "Expertise is who authored, reviewed and merged earlier PRs on the same topic labels and spec pages, as of the "
+                "item's own ready time, so a routing decision never changes once made unless the configuration or the item's topics do."
+            ),
+            "Suggested labels and GitHub teams are only suggestions: nothing is ever applied or mentioned automatically.",
             "The generated site contains public GitHub data only.",
             "Seen, addressed, pinned, snoozed, and opened state is stored only in the browser.",
             "Description checklist completion is descriptive and is not an assessment of test sufficiency or specification readiness.",
@@ -183,6 +200,14 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
             ),
             "A ready-and-bounded result is a prioritization hint, not a merge recommendation.",
             "No claim is made about actual test coverage, implementer interest, web compatibility, or consensus quality.",
+            (
+                "Spec pages come from the heading that precedes each changed line in the current HTML source; a change under "
+                "a heading renamed since is not attributed to any page."
+            ),
+            (
+                "The team section counts public events per person. It says nothing about work that leaves no public trace on "
+                "this repository, such as reviews elsewhere, meetings, or implementation work."
+            ),
         ],
     }
 
@@ -193,6 +218,7 @@ def build_site(
     *,
     output_dir: str | Path,
     now: datetime | None = None,
+    spec: SpecPages | None = None,
 ) -> dict[str, Any]:
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     output = Path(output_dir)
@@ -212,18 +238,49 @@ def build_site(
         linked_issues=linked_issues_by_pr(issue_analyses, config, now=now),
     )
     closed_analyses = analyze_all(repository_data.recently_closed_pull_requests, config, now=now)
+    closed_issue_analyses = analyze_issues(repository_data.recently_closed_issues, config, now=now)
     # Only issues something asks about are published; the rest of the open issues
     # would multiply data.json for nothing a lane shows.
     published_issues = [analysis for analysis in issue_analyses if analysis.in_any_lane()]
     queued = [*open_analyses, *published_issues]
     lanes = build_lanes(queued, config.repository.slug)
     perspective_lanes = build_perspective_lanes(queued, config)
-    metrics = build_metrics(open_analyses, closed_analyses, config, now=now)
+    metrics = build_metrics(
+        open_analyses,
+        closed_analyses,
+        config,
+        now=now,
+        issue_analyses=[*issue_analyses, *closed_issue_analyses],
+    )
 
     items = [
         analysis.to_public_dict(config.repository.slug)
         for analysis in sorted(queued, key=lambda value: value.number)
     ]
+    assignments = apply_assignments(
+        items={item["key"]: item for item in items},
+        open_prs=open_analyses,
+        closed_prs=closed_analyses,
+        open_issues=issue_analyses,
+        closed_issues=closed_issue_analyses,
+        history=repository_data.history,
+        spec=spec or SpecPages(),
+        perspective_lanes=perspective_lanes,
+        config=config,
+        now=now,
+    )
+    metrics["people"] = build_people(
+        prs=[*open_analyses, *closed_analyses],
+        issues=[*issue_analyses, *closed_issue_analyses],
+        history=repository_data.history,
+        items=items,
+        decisions=assignments.decisions,
+        candidates=assignments.candidates,
+        config=config,
+        now=now,
+        window_days=TREND_WINDOW_DAYS,
+        bucket_days=TREND_BUCKET_DAYS,
+    )
 
     payload: dict[str, Any] = {
         "schema_version": 2,

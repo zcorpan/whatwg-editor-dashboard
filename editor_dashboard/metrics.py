@@ -188,6 +188,44 @@ def _bucket_metrics(
     return results
 
 
+def _issue_buckets(issues: list[Any], config: DashboardConfig, now: datetime) -> list[dict[str, Any]]:
+    """New contributor issues per week, and how many got a first response in time.
+
+    A response is an editor's or helper's comment, label or close: applying a label
+    is how most whatwg/html issues are triaged. Exact over the window, because every
+    open issue and every issue closed inside ``history_days`` is in the sample.
+    """
+    target_hours = config.response_targets.initial_editor_response_days * 24
+    results = []
+    for bucket in _buckets(now):
+        opened = [
+            analysis
+            for analysis in issues
+            if bucket.start < analysis.issue.created_at <= bucket.end
+            and analysis.issue.author not in config.people
+            and not is_bot(analysis.issue.author)
+        ]
+        eligible = [analysis for analysis in opened if analysis.first_response_known]
+        within = [
+            analysis
+            for analysis in eligible
+            if analysis.first_response_hours is not None and analysis.first_response_hours <= target_hours
+        ]
+        by_editors = sum(analysis.first_response.author in config.editors for analysis in within)
+        results.append(
+            {
+                "start": isoformat(bucket.start),
+                "end": isoformat(bucket.end),
+                "opened": len(opened),
+                "first_response_eligible": len(eligible),
+                "first_response_within_target": len(within),
+                "first_response_within_target_by_editors": by_editors,
+                "first_response_mature": bucket.end <= now - timedelta(hours=target_hours),
+            }
+        )
+    return results
+
+
 def _status(on_track: bool, watch: bool = False) -> str:
     if on_track:
         return "on_track"
@@ -199,6 +237,7 @@ def _health(
     buckets: list[dict[str, Any]],
     config: DashboardConfig,
     now: datetime,
+    issue_buckets: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Reduce the trend to three judgements, each with an unambiguous good direction."""
     first, last = points[0], points[-1]
@@ -267,6 +306,27 @@ def _health(
             "status": response_status,
         },
     }
+
+    if issue_buckets:
+        mature_issues = [bucket for bucket in issue_buckets if bucket["first_response_mature"]]
+        issue_eligible = sum(bucket["first_response_eligible"] for bucket in mature_issues)
+        issue_within = sum(bucket["first_response_within_target"] for bucket in mature_issues)
+        issue_by_editors = sum(bucket["first_response_within_target_by_editors"] for bucket in mature_issues)
+        issue_percent = _percent(issue_within, issue_eligible)
+        indicators["issue_first_response_rate"] = {
+            "label": f"New issues answered within {config.response_targets.initial_editor_response_days} days",
+            "percent": issue_percent,
+            "within_target": issue_within,
+            "within_target_by_editors": issue_by_editors,
+            "eligible": issue_eligible,
+            "target_percent": target_percent,
+            "lower_is_better": False,
+            "status": (
+                "unknown"
+                if issue_percent is None
+                else _status(issue_percent >= target_percent, issue_percent >= target_percent - 20)
+            ),
+        }
 
     ranking = {"off_track": 0, "watch": 1, "unknown": 2, "on_track": 3}
     overall = min(
@@ -456,8 +516,10 @@ def build_metrics(
     config: DashboardConfig,
     *,
     now: datetime,
+    issue_analyses: Iterable[Any] = (),
 ) -> dict[str, Any]:
     now = now.astimezone(timezone.utc)
+    issue_values = list(issue_analyses)
     open_values = list(open_analyses)
     closed_values = list(closed_analyses)
     all_values = [*open_values, *closed_values]
@@ -476,6 +538,10 @@ def build_metrics(
 
     points = _backlog_points(all_values, config, now)
     buckets = _bucket_metrics(all_values, config, now)
+    issue_buckets = _issue_buckets(issue_values, config, now) if issue_values else []
+    parties: dict[str, int] = {}
+    for analysis in open_values:
+        parties[analysis.waiting_on.party] = parties.get(analysis.waiting_on.party, 0) + 1
 
     return {
         "generated_at": isoformat(now),
@@ -498,6 +564,8 @@ def build_metrics(
                     for analysis in open_values
                 ),
                 "ready_and_bounded": sum("ready_bounded" in analysis.shared_lanes for analysis in open_values),
+                # Whose move each open PR is: the honest backlog is the editors' share.
+                "waiting_on_parties": dict(sorted(parties.items())),
             },
         },
         "trends": {
@@ -505,8 +573,9 @@ def build_metrics(
             "bucket_days": TREND_BUCKET_DAYS,
             "points": points,
             "buckets": buckets,
+            "issue_buckets": issue_buckets,
         },
-        "health": _health(points, buckets, config, now),
+        "health": _health(points, buckets, config, now, issue_buckets),
         "editors": _editor_impact(all_values, config, now),
         "coverage": {
             "open_timeline_complete": sum(analysis.pr.timeline_sample_complete for analysis in open_values),

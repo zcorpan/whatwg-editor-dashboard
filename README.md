@@ -25,6 +25,10 @@ The review dashboard contains these explainable lanes:
 
 Open issues are queued too, with the same lanes where the meaning carries over: mentions and assignments, first response (a comment, a label or a close by an editor, within the 7-day target), and longest waits. There's also **Needs triage**, for issues without a `topic:` label. Only issues opened, or last answered by a contributor, inside `issues.window_days` are queued, because most open issues are dormant. An issue an open PR says it fixes is shown on that PR's card ("Fixes #N") instead of on its own. The **Show** control filters PRs and issues.
 
+Unanswered contributor PRs and issues nobody was asked about directly are **routed** to one person, shown on the card with the evidence ("12 reviewed on the parsing page and related topics in two years"). Routing weighs topic expertise against recent load. Expertise comes from who authored, reviewed and merged earlier PRs on the same `topic:` labels and spec pages, with the spec pages a PR touches found by mapping its diff onto the multipage spec. Each person's routed items are in their **Routed to you** lane and lead their Suggested next. `dashboard.yml` gives each editor a `share` of routed work, marks retired editors (never routed, direct requests only), and lists non-editor helpers who take routed PR reviews. Cards can also suggest a `topic:` label from the spec pages, and a GitHub team to ask, with a copy button. Nothing is ever applied or mentioned automatically.
+
+The health view's **Who did what** table has one row per active editor and helper, plus anyone else who reviewed at least ten other people's PRs in twelve weeks. Each row shows reviews, first replies, issues triaged, merges, own normative PRs merged, issues closed, a twelve-week activity line, how the items routed to them did against the response target, and what is waiting on them now.
+
 Every card leads with whose move it is: the editors (named when a review is requested or an editor is already in the conversation), the author, implementers, tests, compat analysis, the WHATNOT meeting, a dependency, or "approved, ready to land". Labels decide first, then an unaddressed change request, a current approval, and finally who acted last. A merge conflict or failing checks never hands a PR back to its author. Re-review owed, Stale mentions, Longest waits and Active now only hold a PR while the move is the editors'. Cards can also suggest a label, with a button that copies the `gh` command to apply it.
 
 The first four lanes are computed for every editor in `dashboard.yml`, and the **Editor** control in the queue controls picks whose queue is on screen. It defaults to **All editors** — the union, so a PR is in a lane if it is in that lane for anybody — and the other options are the individual editors. The remaining lanes are properties of the pull request rather than of any editor, so they read the same from every perspective. The choice is stored per browser, and somebody else’s login is repeated next to the “Suggested next” heading, because the controls panel starts collapsed.
@@ -119,6 +123,12 @@ With `--state DIR`, the build stores the raw GitHub data it fetched in `DIR/snap
 GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site --state .state
 ```
 
+Routing by spec page needs a bare clone of whatwg/html: `--spec-repo DIR` clones one there on first use (about 850 MB) and only fetches into it afterwards. Without it, topics come from labels alone. `--evaluate` also prints how the rules did on the data: whose move, routing spread, and the measured precision of the topic-label suggestion.
+
+```bash
+GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site --state .state --spec-repo .spec-repo --evaluate
+```
+
 Validate configuration and run tests:
 
 ```bash
@@ -130,7 +140,7 @@ python -m unittest discover -s tests -v
 
 For GraphQL, GitHub uses HTTP 502 and 504 when a request exceeds its processing-time limit. The client automatically retries and reduces `sampling.graphql_page_size`; the checked-in default is already a conservative 10 rather than 50. Retry messages show the attempt number, request ID when GitHub supplies one, delay, any page-size reduction, and how much of the build's retry budget is left.
 
-The delay starts at 37.5 seconds and doubles up to 5 minutes, and the build keeps retrying until it has waited an hour in total across all of its requests, so a GitHub incident of ordinary length is waited out rather than failing the day's build. The workflow's build job is allowed 90 minutes for that reason. A build that still fails after spending the budget, or a persistent failure at page size 1, is more likely to be a longer GitHub API incident or a pathological single item. Check GitHub Status and rerun the workflow. Do not add a PAT merely to address a 502/504; these status codes do not indicate missing permissions.
+The delay starts at 37.5 seconds and doubles up to 5 minutes, and the build keeps retrying until it has waited an hour in total across all of its requests, so a GitHub incident of ordinary length is waited out rather than failing the day's build. The workflow's build job is allowed 120 minutes for that reason: the retry budget plus a weekly full build. A build that still fails after spending the budget, or a persistent failure at page size 1, is more likely to be a longer GitHub API incident or a pathological single item. Check GitHub Status and rerun the workflow. Do not add a PAT merely to address a 502/504; these status codes do not indicate missing permissions.
 
 ## Configuration
 

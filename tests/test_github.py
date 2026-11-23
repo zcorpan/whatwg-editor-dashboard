@@ -54,7 +54,7 @@ class FakeClient:
                 },
                 "rateLimit": rate_limit(1),
             }
-        if "query RecentClosedIssues" in query:
+        if "query RecentClosedIssues" in query or "query HistoryPullRequests" in query:
             return {
                 "search": {"issueCount": 0, "nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}},
                 "rateLimit": rate_limit(1),
@@ -131,6 +131,26 @@ class GraphQLClientTests(unittest.TestCase):
         self.assertEqual(client.retry_count, 1)
         self.assertEqual(client.timeout_count, 1)
         self.assertEqual(delays, [0.0])
+
+    def test_a_timeout_only_caps_the_query_that_timed_out(self) -> None:
+        responses = [http_error(502, "Bad Gateway"), *[FakeHTTPResponse({"data": {"ok": True}})] * 3]
+        page_sizes: list[tuple[str, int]] = []
+
+        def urlopen(request, *, timeout):
+            payload = json.loads(request.data.decode("utf-8"))
+            page_sizes.append((payload["query"].split()[1], int(payload["variables"]["pageSize"])))
+            response = responses.pop(0)
+            if isinstance(response, Exception):
+                raise response
+            return response
+
+        client = GraphQLClient("token", retry_base_seconds=0, urlopen=urlopen, sleep=lambda _: None)
+        client.execute("query Heavy { x }", {"pageSize": 10})
+        client.execute("query Light { x }", {"pageSize": 50})
+        client.execute("query Heavy { x }", {"pageSize": 10})
+        self.assertEqual(page_sizes, [("Heavy", 10), ("Heavy", 5), ("Light", 50), ("Heavy", 5)])
+        self.assertEqual(client.cap_for("Heavy"), 5)
+        self.assertIsNone(client.cap_for("Light"))
 
     def test_nonretryable_http_error_fails_without_sleeping(self) -> None:
         delays: list[float] = []
@@ -239,7 +259,9 @@ class GraphQLClientTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "dashboard.yml").read_text(encoding="utf-8")
         build_job = workflow.split("  build:", 1)[1].split("  deploy:", 1)[0]
         timeout_minutes = int(build_job.split("timeout-minutes:", 1)[1].split()[0])
-        self.assertLessEqual(worst_case_minutes + 10, timeout_minutes)
+        # A weekly full build, cold clone included, measured at about 25 minutes.
+        full_build_minutes = 30
+        self.assertLessEqual(worst_case_minutes + full_build_minutes, timeout_minutes)
 
     def test_graphql_timeout_reported_in_a_200_is_retried_like_a_502(self) -> None:
         client, delays, page_sizes = self._client_with_failures(
@@ -397,9 +419,10 @@ class GitHubFetchTests(unittest.TestCase):
             {pr.number for pr in data.recently_closed_pull_requests},
             {int(closes_during_build["number"]), int(already_closed["number"])},
         )
-        # Three PR pages, plus one page each of open and recently closed issues.
-        self.assertEqual(data.metadata.query_count, 5)
-        self.assertEqual(data.metadata.total_cost, 27)
+        # Three PR pages, one page each of open and recently closed issues, and one of
+        # merged-PR history.
+        self.assertEqual(data.metadata.query_count, 6)
+        self.assertEqual(data.metadata.total_cost, 28)
         self.assertEqual(data.metadata.effective_page_size, 10)
         self.assertTrue(all(call["pageSize"] == 10 for call in client.calls if "reviewCount" in call))
         self.assertTrue(any("Deduplicated open" in warning for warning in data.metadata.warnings))

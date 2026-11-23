@@ -88,6 +88,15 @@ class FakeGitHub:
                 if parse_datetime(node["updatedAt"]) >= since
             ]
             return self._search(nodes)
+        if name == "HistoryPullRequests":
+            start, end = re.search(r"merged:(\S+)\.\.(\S+)", variables["query"]).groups()
+            return self._search(
+                [
+                    copy.deepcopy(node)
+                    for state, node in self.prs.values()
+                    if state == "MERGED" and start <= node["mergedAt"][:10] <= end
+                ]
+            )
         if name == "OpenIssues":
             nodes = [copy.deepcopy(node) for node in self.issues.values() if node["state"] == "OPEN"]
             return {

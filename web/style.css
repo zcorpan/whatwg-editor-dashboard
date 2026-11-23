@@ -448,7 +448,8 @@ main {
 .chip.warning { background: var(--warning-soft); color: var(--warning); }
 .chip.muted { background: var(--surface-subtle); color: var(--muted); }
 .label-chip { border: 1px solid var(--border); background: transparent; }
-.linked-issue { margin: .5rem 0 0; color: var(--muted); font-size: .82rem; }
+.linked-issue, .routing { margin: .5rem 0 0; color: var(--muted); font-size: .82rem; }
+.routing strong { color: var(--text); }
 /* A label the rules argue for: dashed, because it is not on the PR. */
 .suggested-labels { align-items: center; }
 .suggested-heading { color: var(--muted); font-size: .71rem; }
@@ -781,3 +782,8 @@ tbody th { font-weight: 730; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+.whose-move { margin-top: 1.5rem; }
+.whose-move h2 { font-size: 1rem; margin: 0 0 .5rem; }
+.sparkline { display: block; color: var(--text); }
+.role-note { color: var(--muted); font-weight: 400; font-size: .8em; }

@@ -110,3 +110,50 @@ issues:
   window_days: 90
   # An issue without a label starting with this is in the triage lane.
   topic_label_prefix: "topic:"
+
+expertise:
+  # Merged PRs since this date are the evidence of who knows a topic. Fetched by full
+  # builds only.
+  since: "2019-01-01"
+  # A contribution this many days old counts half as much as one today.
+  half_life_days: 365
+
+routing:
+  # Unanswered PRs and issues are each routed to one person, by topic expertise and
+  # recent load. The prior keeps an item nobody knows about spread by load alone.
+  prior: 0.1
+  load_window_days: 28
+  # Routed-and-answered figures count from here; earlier items had no owner.
+  start: "2026-11-23"
+
+# Spec pages every change touches, which say nothing about its topic.
+ignore_pages:
+  - acknowledgements
+  - indices
+  - references
+  - infrastructure
+  - index
+
+# GitHub teams (whatwg/meta GITHUB-TEAMS.md) and the labels whose items they are a good
+# audience for. Suggested, never mentioned: the triager decides.
+teams:
+  html-parser: ["topic: parser"]
+  forms: ["topic: forms", "topic: select", "topic: fieldset", "topic: button"]
+  media: ["topic: media"]
+  canvas: ["topic: canvas"]
+  rendering: ["topic: rendering"]
+  components: ["topic: custom elements", "topic: shadow"]
+  cross-origin-isolation: ["topic: cross-origin-opener-policy", "topic: cross-origin-embedder-policy"]
+  modules: ["topic: script", "topic: imports/exports"]
+  css: ["topic: style", "topic: selectors"]
+  storage: ["topic: storage"]
+  a11y: ["accessibility", "a11y-tracker", "a11y-needs-resolution"]
+  i18n: ["i18n-tracker", "i18n-needs-resolution"]
+  security: ["security/privacy", "security-tracker", "security-needs-resolution"]
+  documentation: ["impacts documentation"]
+
+contributors:
+  # Anyone who isn't an editor or helper but reviewed at least this many other
+  # people's PRs in the twelve-week health window gets their own row, named, with the
+  # numbers that qualified them.
+  min_reviews_of_others: 10

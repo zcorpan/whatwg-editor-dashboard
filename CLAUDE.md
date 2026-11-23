@@ -29,6 +29,7 @@ Build from live public GitHub data:
 ```bash
 GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site
 GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site --state .state   # incremental after the first run; --full forces a full fetch
+GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site --state .state --spec-repo .spec-repo --evaluate   # spec pages for routing, plus a rule report
 ```
 
 Validate `dashboard.yml`, and run tests:
@@ -58,7 +59,7 @@ The pipeline is a strict one-way chain; keep the layer boundaries intact when ex
 
 [checklist.py](editor_dashboard/checklist.py) sits outside the chain as a leaf called from `analysis.py`: it parses GitHub task-list items out of a PR description while skipping fenced code blocks, then reduces each label to plain text and drops the author's answer after the `: ` so the list reads as the questions it is. The label is Markdown and the page can only show it as text, so `clean_label` unwraps links, emphasis and code spans; it deliberately leaves `_underscore_` emphasis alone, because these labels are full of URLs. Only the constructs that occur in real `whatwg/html` descriptions are handled — check a live `data.json` before adding more. PR bodies stay on the in-memory snapshot; `analysis.py` reduces each one to a mention match, a sha256 for the content fingerprint, and a `Checklist`, and only the checklist's counts plus its short labels cross into `data.json`.
 
-Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `land`, `reply_window`, `overdue`, `oldest_wait`, `ready_bounded`, `stale_author`, `triage`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four. `analysis.py` also splits them into `PERSPECTIVE_LANES` and `SHARED_LANES`, and a new lane has to join one of the two.
+Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `land`, `routed`, `reply_window`, `overdue`, `oldest_wait`, `ready_bounded`, `stale_author`, `triage`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four. `analysis.py` also splits them into `PERSPECTIVE_LANES` and `SHARED_LANES`, and a new lane has to join one of the two.
 
 ### Issues
 
@@ -84,6 +85,19 @@ An issue's first response is the earliest editor comment, label or close. Applyi
 
 `suggested_labels` are never applied. `needs tests`/`needs implementer interest` are suggested only when that unticked item is what holds an approved PR up. Merely unticked is about half of all normative PRs, and that was noise. The browser copies a `gh issue edit` command for each suggestion, because the build has no write access and the page holds no token.
 
+### Routing, expertise and the team section
+
+[assignments.py](editor_dashboard/assignments.py) runs after every item is analysed, since routing is a walk over all of them, and writes only into the public item dicts and the `routed` lane. Its leaves:
+
+- [spec_pages.py](editor_dashboard/spec_pages.py) attributes diff hunks to multipage pages. git puts each hunk's preceding heading in the hunk header (an `xfuncname` diff driver), and a `PageIndex` built from `source` at main says which `split-filename` page that heading is on. Two git details are load-bearing: the pattern needs a capture group, or git shows only the matched `<h4`, and git truncates hunk headers to 80 bytes, so headings are keyed by their first 80 bytes. About 78% of hunks attribute; renamed headings don't, and are dropped rather than guessed. Issues attribute through spec links instead. `--spec-repo` points at a bare clone (CI caches one per ISO week), and page maps are cached in the snapshot by head and merge oid.
+- [topics.py](editor_dashboard/topics.py): `label:` and `page:` topic keys. Cross-cutting pages (`ignore_pages`) say nothing. `LabelSuggester` learns page → `topic:` label from labeled history; `--evaluate` reports its leave-one-out precision.
+- [expertise.py](editor_dashboard/expertise.py): author 3, reviewer 2, merger 1, spread over the PR's topics, halving every `half_life_days`, always **as of** a time, from earlier work only.
+- [routing.py](editor_dashboard/routing.py): `(affinity + prior) × share / (1 + load)`, walked oldest ready first.
+
+**The walk includes every recent contributor item, answered or not.** Only unanswered, unnamed items *show* their routing, but if answering one removed it from the walk, every later decision in its load window would move. Retired editors (share 0) are never routed to but are named in "also knows"; helpers take PRs only. A GitHub team is suggested by **absolute** decayed expertise (`TEAM_SCORE_FLOOR`), not by affinity share, because whoever touched a topic once years ago holds all of its share.
+
+[accountability.py](editor_dashboard/accountability.py) builds `metrics.people`, one row per active editor, helper, and non-editor who reviewed at least `contributors.min_reviews_of_others` others' PRs in the window. A retired editor is shown only while active. Rows have twelve weekly columns, "routed since `routing.start`: answered in time", and what waits on them now. The wording rule of the health view applies: counts of public events, never causes.
+
 ### Queue perspectives
 
 The four attention lanes depend on *which editor is asking*; the other five are properties of the pull request. `analyze_pull_request` therefore computes `_direct_reasons` and `_rereview_reasons` once per configured editor and stores each result as a `PerspectiveView` in `PRAnalysis.perspectives`, alongside `shared_lanes` and `shared_reasons` which every perspective agrees on. `ALL_EDITORS` (`"all-editors"`, deliberately not `"all"`, which is a lane name) is the union, built from the *merged* signal lists rather than from the per-editor lane sets so that the direct/stale-mention `elif` stays one decision.
@@ -96,7 +110,7 @@ Collapsing the two into one control was considered and rejected. If the perspect
 
 The identity starts unset, and `createPRCard` omits the Address button while it is. That is not a degraded mode to be fixed: the site is public, most readers are not editors, and "addressed until somebody else changes it" has no meaning without a somebody. Pins and snoozes are not fingerprint-derived, so they keep working; only seen and addressed need to know whose footprint to exclude.
 
-Health indicator statuses (`on_track`, `watch`, `off_track`, `unknown`) are decided in `metrics.py` `_status` and only styled in the browser; the page never re-judges a number it was handed.
+Health indicator statuses (`on_track`, `watch`, `off_track`, `unknown`) are decided in `metrics.py` `_status` and only styled in the browser; the page never re-judges a number it was handed. The fourth indicator, the issue first-response rate, counts a helper's response but publishes `within_target_by_editors`, so the editors' own share stays visible.
 
 Both queue `<select>`s are populated from `perspectives.options`, so no lane or option vocabulary has to be kept in step between the two languages. A `Reason`'s `tone` becomes a `chip <tone>` class, so it has to be one of the `.chip.*` rules in [web/style.css](web/style.css) (`urgent`, `attention`, `positive`, `warning`, `muted`) — `neutral` is the JS default and is deliberately unstyled.
 

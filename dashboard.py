@@ -12,6 +12,7 @@ from editor_dashboard.build import build_site
 from editor_dashboard.config import load_config
 from editor_dashboard.github import fetch_with_snapshot, load_fixture
 from editor_dashboard.models import parse_datetime
+from editor_dashboard.spec_pages import SpecPages, compute_spec_pages, ensure_clone
 from editor_dashboard.state import full_fetch_reason, load_snapshot, save_snapshot
 
 
@@ -28,6 +29,7 @@ def build_command(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     now = _parse_now(args.now)
 
+    snapshot = None
     if args.fixture:
         if args.state or args.full:
             raise SystemExit("--state and --full apply to GitHub fetches, not to --fixture")
@@ -52,8 +54,6 @@ def build_command(args: argparse.Namespace) -> int:
         repository_data, snapshot = fetch_with_snapshot(
             config, token, now=now, previous=previous, full_reason=reason
         )
-        if args.state:
-            save_snapshot(args.state, snapshot)
         metadata = repository_data.metadata
         print(
             f"Fetched {metadata.fetch_mode}"
@@ -61,7 +61,29 @@ def build_command(args: argparse.Namespace) -> int:
             + f": {metadata.query_count} GraphQL queries, cost {metadata.total_cost}."
         )
 
-    payload = build_site(config, repository_data, output_dir=args.output, now=now)
+    spec = SpecPages()
+    if args.spec_repo:
+        repository = ensure_clone(args.spec_repo, config.repository.slug)
+        try:
+            spec = compute_spec_pages(
+                repository,
+                pull_requests=[(pr.number, pr.head_oid) for pr in repository_data.open_pull_requests],
+                merge_oids=[record.merge_oid for record in repository_data.history if record.merge_oid],
+                cache=snapshot.spec_pages if snapshot is not None else {},
+                fetch=not args.fixture,
+            )
+        finally:
+            repository.close()
+        print(f"Mapped {len(spec.by_pr or {})} open PRs and {len(spec.by_commit or {})} merged PRs to spec pages.")
+    if snapshot is not None and args.state:
+        save_snapshot(args.state, snapshot)
+
+    payload = build_site(config, repository_data, output_dir=args.output, now=now, spec=spec)
+    if getattr(args, "evaluate", False):
+        from editor_dashboard.evaluate import report
+
+        for line in report(payload, repository_data, spec, config):
+            print(line)
     current = payload["metrics"]["repository"]["current"]
     print(
         f"Built {args.output}: {current['open_prs']} open PRs, "
@@ -76,7 +98,9 @@ def validate_command(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     print(
         f"Configuration is valid for {config.repository.slug}; "
-        f"editors={len(config.editors)} ({', '.join('@' + login for login in sorted(config.editors))})."
+        f"editors={len(config.editors)} ({', '.join('@' + login for login in sorted(config.editors))}); "
+        f"retired: {', '.join('@' + login for login in sorted(config.retired_editors)) or 'none'}; "
+        f"helpers: {', '.join('@' + login for login in sorted(config.helpers)) or 'none'}."
     )
     return 0
 
@@ -98,6 +122,15 @@ def create_parser() -> argparse.ArgumentParser:
         help="Directory holding the previous build's raw snapshot; fetch only what changed since it, then update it",
     )
     build.add_argument("--full", action="store_true", help="Fetch everything even if --state has a usable snapshot")
+    build.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="Also print how the rules did on this data (whose move, routing spread, label-suggestion precision)",
+    )
+    build.add_argument(
+        "--spec-repo",
+        help="Bare clone of the spec repository (cloned there if missing), used to map PRs to spec pages for routing",
+    )
     build.set_defaults(handler=build_command)
 
     validate = subparsers.add_parser("validate", help="Validate dashboard.yml")

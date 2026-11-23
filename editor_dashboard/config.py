@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -106,6 +107,27 @@ class IssuesConfig:
 
 
 @dataclass(frozen=True)
+class ExpertiseConfig:
+    # How far back merged PRs count as evidence of who knows a topic.
+    since: str = "2019-01-01"
+    # Older work counts for less: a contribution this many days old counts half.
+    half_life_days: int = 365
+
+
+@dataclass(frozen=True)
+class RoutingConfig:
+    # Added to everybody's affinity, so an item nobody has expertise for is still
+    # spread by load, and a small expertise edge cannot pile everything on one person.
+    prior: float = 0.1
+    # Routing counts how much each person was routed in this many days before an
+    # item, to balance the load.
+    load_window_days: int = 28
+    # Accountability figures count routed items from this date: earlier ones were
+    # never routed to anybody at the time.
+    start: str = "2026-11-23"
+
+
+@dataclass(frozen=True)
 class IncrementalConfig:
     # A build with a stored snapshot only asks GitHub for what changed since it. Some
     # changes never move a PR's `updatedAt` (an edited comment, a deleted one), so a
@@ -132,6 +154,15 @@ class DashboardConfig:
     incremental: IncrementalConfig = field(default_factory=IncrementalConfig)
     waiting_on: WaitingOnConfig = field(default_factory=WaitingOnConfig)
     issues: IssuesConfig = field(default_factory=IssuesConfig)
+    expertise: ExpertiseConfig = field(default_factory=ExpertiseConfig)
+    routing: RoutingConfig = field(default_factory=RoutingConfig)
+    # Spec pages that say nothing about a change's topic: everybody touches them.
+    ignore_pages: frozenset[str] = frozenset({"acknowledgements", "indices", "references", "infrastructure", "index"})
+    # A non-editor, non-helper who reviewed at least this many other people's PRs in
+    # the health window gets their own row in the team section.
+    min_reviews_of_others: int = 10
+    # Team slug -> labels whose items the team is a good audience for.
+    teams: tuple[tuple[str, tuple[str, ...]], ...] = ()
     # Editors who no longer take routed work. They keep a queue perspective, their
     # replies still count as editor responses, and only direct requests reach them.
     retired_editors: frozenset[str] = frozenset()
@@ -172,6 +203,15 @@ def _non_negative_int(value: Any, name: str, *, maximum: int | None = None) -> i
     if maximum is not None and result > maximum:
         raise ValueError(f"{name} must be at most {maximum}")
     return result
+
+
+def _iso_date(value: Any, name: str) -> str:
+    text = str(value).strip()
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        raise ValueError(f"{name} must be a YYYY-MM-DD date") from None
+    return text
 
 
 def load_config(path: str | Path) -> DashboardConfig:
@@ -375,6 +415,30 @@ def load_config(path: str | Path) -> DashboardConfig:
     if not issues.topic_label_prefix:
         raise ValueError("issues.topic_label_prefix must not be empty")
 
+    expertise_raw = _mapping(raw.get("expertise", {}), "expertise")
+    expertise = ExpertiseConfig(
+        since=_iso_date(expertise_raw.get("since", "2019-01-01"), "expertise.since"),
+        half_life_days=_positive_int(expertise_raw.get("half_life_days", 365), "expertise.half_life_days"),
+    )
+    routing_raw = _mapping(raw.get("routing", {}), "routing")
+    prior = float(routing_raw.get("prior", 0.1))
+    if not 0 < prior <= 1:
+        raise ValueError("routing.prior must be greater than 0 and at most 1")
+    routing = RoutingConfig(
+        prior=prior,
+        load_window_days=_positive_int(routing_raw.get("load_window_days", 28), "routing.load_window_days"),
+        start=_iso_date(routing_raw.get("start", "2026-11-23"), "routing.start"),
+    )
+    ignore_raw = raw.get("ignore_pages")
+    if ignore_raw is not None and not isinstance(ignore_raw, list):
+        raise ValueError("ignore_pages must be a list")
+    teams_raw = _mapping(raw.get("teams", {}), "teams")
+    teams = []
+    for slug, labels in teams_raw.items():
+        if not isinstance(labels, list) or not labels:
+            raise ValueError(f"teams.{slug} must be a non-empty list of labels")
+        teams.append((str(slug).strip(), tuple(sorted(str(label).strip().lower() for label in labels))))
+
     blocking_labels_raw = raw.get("blocking_labels", [])
     if not isinstance(blocking_labels_raw, list):
         raise ValueError("blocking_labels must be a list")
@@ -394,4 +458,16 @@ def load_config(path: str | Path) -> DashboardConfig:
         incremental=incremental,
         waiting_on=waiting_on,
         issues=issues,
+        expertise=expertise,
+        routing=routing,
+        ignore_pages=(
+            frozenset(str(value).strip() for value in ignore_raw)
+            if ignore_raw is not None
+            else DashboardConfig.__dataclass_fields__["ignore_pages"].default
+        ),
+        teams=tuple(sorted(teams)),
+        min_reviews_of_others=_positive_int(
+            _mapping(raw.get("contributors", {}), "contributors").get("min_reviews_of_others", 10),
+            "contributors.min_reviews_of_others",
+        ),
     )

@@ -26,7 +26,7 @@ from .models import isoformat, parse_datetime
 SNAPSHOT_FILENAME = "snapshot.json.gz"
 # Bump when the snapshot's own layout changes. Query changes are caught by the
 # fingerprint without a bump.
-SNAPSHOT_FORMAT = 2
+SNAPSHOT_FORMAT = 3
 
 _GRAPHQL_DIR = Path(__file__).resolve().parent.parent / "graphql"
 
@@ -47,6 +47,7 @@ def fetch_fingerprint(config: DashboardConfig) -> str:
         "review_threads": config.sampling.review_threads,
         "history_days": config.sampling.history_days,
         "issue_page_size": config.sampling.issue_page_size,
+        "expertise_since": config.expertise.since,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -66,6 +67,11 @@ class Snapshot:
     closed_nodes: dict[int, dict[str, Any]] = field(default_factory=dict)
     open_issue_nodes: dict[int, dict[str, Any]] = field(default_factory=dict)
     closed_issue_nodes: dict[int, dict[str, Any]] = field(default_factory=dict)
+    # Merged PRs since `expertise.since`, refreshed by full fetches only: recent
+    # merges are in `closed_nodes` with the same fields.
+    history_nodes: dict[int, dict[str, Any]] = field(default_factory=dict)
+    # Spec pages per merge commit and per PR head, so git only runs on what is new.
+    spec_pages: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -76,6 +82,8 @@ class Snapshot:
             "recently_closed_pull_requests": [self.closed_nodes[number] for number in sorted(self.closed_nodes)],
             "open_issues": [self.open_issue_nodes[number] for number in sorted(self.open_issue_nodes)],
             "recently_closed_issues": [self.closed_issue_nodes[number] for number in sorted(self.closed_issue_nodes)],
+            "history_pull_requests": [self.history_nodes[number] for number in sorted(self.history_nodes)],
+            "spec_pages": {key: self.spec_pages[key] for key in sorted(self.spec_pages)},
         }
 
     @classmethod
@@ -92,6 +100,8 @@ class Snapshot:
             closed_nodes={int(node["number"]): node for node in raw.get("recently_closed_pull_requests") or []},
             open_issue_nodes={int(node["number"]): node for node in raw.get("open_issues") or []},
             closed_issue_nodes={int(node["number"]): node for node in raw.get("recently_closed_issues") or []},
+            history_nodes={int(node["number"]): node for node in raw.get("history_pull_requests") or []},
+            spec_pages=dict(raw.get("spec_pages") or {}),
         )
 
 

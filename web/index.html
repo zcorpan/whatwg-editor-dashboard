@@ -88,6 +88,11 @@
 
       <div class="trend-cards" id="trend-cards"></div>
 
+      <section class="whose-move" aria-labelledby="whose-move-heading">
+        <h2 id="whose-move-heading">Whose move the open pull requests are</h2>
+        <div class="stat-row" id="whose-move"></div>
+      </section>
+
       <details class="chart-data">
         <summary>Weekly numbers behind these charts</summary>
         <div class="table-wrap">
@@ -165,6 +170,34 @@
         </details>
 
         <p class="fine-print" id="impact-note"></p>
+      </section>
+
+      <section class="impact-section" aria-labelledby="team-heading">
+        <div class="section-heading">
+          <h2 id="team-heading">Who did what</h2>
+          <p class="section-note" id="team-window"></p>
+        </div>
+        <div class="table-wrap">
+          <table id="team-table">
+            <caption>Public events attributed to each person over the window, and what waits on them now</caption>
+            <thead>
+              <tr>
+                <th scope="col">Person</th>
+                <th scope="col">Activity by week</th>
+                <th scope="col">Reviews</th>
+                <th scope="col">First replies</th>
+                <th scope="col">Issues triaged</th>
+                <th scope="col">Merged</th>
+                <th scope="col">Own normative PRs merged</th>
+                <th scope="col">Issues closed</th>
+                <th scope="col">Routed, answered in time</th>
+                <th scope="col">Waiting on them now</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="fine-print" id="team-note"></p>
       </section>
 
       <p class="fine-print" id="health-coverage"></p>

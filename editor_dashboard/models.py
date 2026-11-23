@@ -463,6 +463,7 @@ class HistoryRecord:
     """One merged PR, reduced to who did what on it, for routing by expertise."""
 
     number: int
+    title: str
     author: str | None
     merged_at: datetime
     merged_by: str | None
@@ -485,7 +486,9 @@ class HistoryRecord:
 
         author = login(node.get("author"))
         reviews = []
-        for review in ((node.get("historyReviews") or {}).get("nodes") or []):
+        # Closed-PR nodes from older fixtures carry only the dashboard's own `reviews`.
+        review_nodes = (node.get("historyReviews") or node.get("reviews") or {}).get("nodes") or []
+        for review in review_nodes:
             reviewer = login((review or {}).get("author"))
             at = parse_datetime((review or {}).get("submittedAt"))
             if reviewer and at and reviewer != author and review.get("state") != "PENDING":
@@ -500,6 +503,7 @@ class HistoryRecord:
         )
         return cls(
             number=int(node["number"]),
+            title=str(node.get("title") or ""),
             author=author,
             merged_at=merged_at,
             merged_by=login(node.get("mergedBy")),

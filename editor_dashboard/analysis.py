@@ -40,7 +40,7 @@ ALL_EDITORS = "all-editors"
 # `_direct_reasons` and `_rereview_reasons` are per-editor; everything else — the
 # first-response pair, the contributor wait, the ready heuristic — is a property of
 # the pull request, so it is computed once and shared by every perspective.
-PERSPECTIVE_LANES = ("active", "direct", "stale_direct", "rereview", "land")
+PERSPECTIVE_LANES = ("active", "direct", "stale_direct", "rereview", "land", "routed")
 SHARED_LANES = ("reply_window", "overdue", "oldest_wait", "ready_bounded", "stale_author", "triage", "all")
 
 
@@ -1323,6 +1323,8 @@ def build_perspective_lanes(
             "stale_direct": ordered(perspective, "stale_direct", lambda view: view.stale_direct_at),
             "rereview": ordered(perspective, "rereview", lambda view: view.rereview_trigger_at),
             "land": ordered(perspective, "land", lambda view: view.land_at),
+            # Filled in by build.py once routing has run over every item.
+            "routed": [],
         }
         for perspective in perspective_keys(config)
     }

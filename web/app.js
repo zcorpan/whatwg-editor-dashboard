@@ -1,7 +1,7 @@
 const STATE_VERSION = 1;
 const STATE_NAMESPACE = location.pathname.replace(/\/+$/, "") || "/";
 const STATE_KEY = `whatwg-editor-dashboard:v${STATE_VERSION}:${STATE_NAMESPACE}`;
-const LANE_ORDER = ["reply_window", "active", "direct", "land", "rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct", "stale_author", "triage", "all"];
+const LANE_ORDER = ["reply_window", "routed", "active", "direct", "land", "rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct", "stale_author", "triage", "all"];
 const SUGGESTED_LIMIT_AFTER_ACTIVE = 12;
 
 const DATA_URL = "data.json";
@@ -400,6 +400,26 @@ function suggestedLabelList(item) {
   return list;
 }
 
+// A GitHub team that would be a good audience. Never mentioned automatically: the
+// person triaging decides, and the copy button hands them the mention.
+function suggestedTeamList(item) {
+  const list = element("div", {className: "label-list suggested-labels"});
+  list.append(element("span", {className: "suggested-heading", text: "Could ask:"}));
+  for (const suggestion of item.suggested_teams) {
+    const mention = `@whatwg/${suggestion.team}`;
+    list.append(element("span", {className: "chip suggested-chip", text: mention, title: suggestion.reason}));
+    list.append(element("button", {
+      type: "button",
+      className: "copy-button",
+      text: "Copy",
+      attrs: {"aria-label": `Copy the mention ${mention}`},
+      title: suggestion.reason,
+      onClick: () => copyText(mention, `Copied ${mention}.`),
+    }));
+  }
+  return list;
+}
+
 function createPRCard(item) {
   const addressed = isAddressed(item);
   const unseen = isUnseen(item);
@@ -468,7 +488,19 @@ function createPRCard(item) {
     if (item.labels.length > 5) labels.append(element("span", {className: "chip label-chip", text: `+${item.labels.length - 5}`}));
     heading.append(labels);
   }
+  if (item.routing) {
+    const routed = element("p", {className: "routing"}, [
+      "Routed to ",
+      element("strong", {text: `@${item.routing.owner}`}),
+      `: ${item.routing.evidence}`,
+    ]);
+    if (item.routing.also_knows.length) {
+      routed.append(`. Also knows it: ${item.routing.also_knows.map(login => `@${login}`).join(", ")}`);
+    }
+    heading.append(routed);
+  }
   if (item.suggested_labels && item.suggested_labels.length) heading.append(suggestedLabelList(item));
+  if (item.suggested_teams && item.suggested_teams.length) heading.append(suggestedTeamList(item));
   // An issue this PR says it fixes is folded into this card rather than queued on its own.
   for (const issue of item.linked_issues || []) {
     const row = element("p", {className: "linked-issue"}, [
@@ -600,8 +632,14 @@ function suggestedItems() {
   // still land inside the response target. Past it the outcome is already fixed, so
   // those stay in the cycle. Bounded so incoming work cannot bury live reviews, and
   // the limit is applied after filtering so addressing one promotes the next.
+  // Read as one person, the ones routed to them come first: that is what spreading
+  // the work means. The stable sort keeps deadline order within each group.
   const leadLimit = dashboard.suggested_next.first_response_lead || 0;
-  for (const item of orderedVisibleItems(laneKeys("reply_window")).slice(0, leadLimit)) add(item);
+  const perspective = perspectiveKey();
+  const routedHere = item => Boolean(item.routing && item.routing.owner === perspective);
+  const lead = orderedVisibleItems(laneKeys("reply_window"))
+    .sort((a, b) => Number(routedHere(b)) - Number(routedHere(a)));
+  for (const item of lead.slice(0, leadLimit)) add(item);
 
   for (const item of orderedVisibleItems(laneKeys("active"))) add(item);
 
@@ -1011,6 +1049,75 @@ function tableRow(cells) {
   })));
 }
 
+const PARTY_NAMES = {
+  editors: "Editors",
+  merge: "Approved, ready to land",
+  author: "The author",
+  implementers: "Implementer interest",
+  tests: "Tests",
+  compat: "Compat analysis",
+  meeting: "The WHATNOT meeting",
+  dependency: "A dependency",
+  proposal: "A concrete proposal",
+};
+
+function renderWhoseMove() {
+  const parties = dashboard.metrics.repository.current.waiting_on_parties || {};
+  const order = Object.keys(PARTY_NAMES).filter(party => parties[party]);
+  document.querySelector("#whose-move").replaceChildren(...order.map(party => statCard(
+    numberFormat(parties[party]),
+    PARTY_NAMES[party],
+    party === "editors" ? "The backlog that is actually the editors' move." : "",
+  )));
+}
+
+// One small line of weekly activity per person. Colour carries nothing here, so it is
+// the text colour; the numbers are in the row and in the label.
+function sparkline(values, description) {
+  const width = 96;
+  const height = 22;
+  const max = Math.max(1, ...values);
+  const step = values.length > 1 ? width / (values.length - 1) : width;
+  const path = values.map((value, index) => `${index ? "L" : "M"}${(index * step).toFixed(1)},${(height - 2 - (value / max) * (height - 4)).toFixed(1)}`).join(" ");
+  return svgElement("svg", {class: "sparkline", viewBox: `0 0 ${width} ${height}`, width, height, role: "img", "aria-label": description}, [
+    svgElement("path", {d: path, fill: "none", stroke: "currentColor", "stroke-width": 1.5}),
+  ]);
+}
+
+function renderTeam() {
+  const people = dashboard.metrics.people;
+  if (!people) return;
+  const weeks = Math.round(people.window_days / 7);
+  document.querySelector("#team-window").textContent = `Last ${weeks} weeks`;
+  document.querySelector("#team-table tbody").replaceChildren(...people.rows.map(row => {
+    const activity = row.weekly.reviews.map((_, index) =>
+      row.weekly.reviews[index] + row.weekly.first_replies[index] + row.weekly.merged[index] + row.weekly.issues_closed[index]);
+    const name = element("th", {attrs: {scope: "row"}}, [
+      `@${row.login}`,
+      row.role === "editor" ? "" : element("span", {className: "role-note", text: ` ${row.role}`}),
+    ]);
+    if (row.qualified_by) name.title = `Listed because they ${row.qualified_by}.`;
+    const routed = row.routed.routed
+      ? `${row.routed.answered_in_time} of ${row.routed.routed} (${row.routed.answered_by_them} by them)`
+      : "—";
+    const waiting = row.waiting_now
+      ? `${row.waiting_now}, oldest ${relativeTime(row.waiting_oldest_since)}`
+      : "None";
+    return element("tr", {}, [
+      name,
+      element("td", {}, [sparkline(activity, `Weekly reviews, first replies, merges and issue closes: ${activity.join(", ")}`)]),
+      ...[row.totals.reviews, row.totals.first_replies, row.totals.triaged, row.totals.merged, row.totals.authored_merged, row.totals.issues_closed]
+        .map(value => element("td", {text: numberFormat(value)})),
+      element("td", {text: routed}),
+      element("td", {text: waiting}),
+    ]);
+  }));
+  document.querySelector("#team-note").textContent =
+    `Counts describe public events in order, not their cause. Reviews are of other people's PRs; first replies are the first response on a contributor's PR or issue; issues triaged are those whose first response was a label. ` +
+    `Routed counts items routed since ${people.routing_start} whose response target has passed. ` +
+    `Anyone who isn't an editor or helper but reviewed at least ${people.min_reviews_of_others} other people's PRs is listed too.`;
+}
+
 function renderHealth() {
   const metrics = dashboard.metrics;
   const health = metrics.health;
@@ -1077,6 +1184,29 @@ function renderHealth() {
       }),
     }),
   );
+
+  const issueRate = health.indicators.issue_first_response_rate;
+  if (issueRate) {
+    const issueBuckets = (trends.issue_buckets || []).filter(bucket => bucket.first_response_mature);
+    document.querySelector("#trend-cards").append(trendCard({
+      title: issueRate.label,
+      status: issueRate.status,
+      value: percentText(issueRate.percent),
+      delta: element("span", {className: "chip muted", text: `${numberFormat(issueRate.within_target_by_editors)} of ${numberFormat(issueRate.within_target)} by editors`}),
+      hint: `Share of new contributor issues with a comment, label or close by an editor or helper inside ${targetDays} days. Target ${issueRate.target_percent}%. Higher is better.`,
+      chart: lineChart(issueBuckets.map(bucket => (
+        bucket.first_response_eligible ? (bucket.first_response_within_target / bucket.first_response_eligible) * 100 : null
+      )), {
+        labels: issueBuckets.map(bucket => weekLabel(bucket.start)),
+        scale: {min: 0, max: 100, step: 50},
+        formatValue: percentText,
+        formatTick: value => `${Math.round(value)}%`,
+        description: `Share of new contributor issues answered within ${targetDays} days, by week opened; ${percentText(issueRate.percent)} across the window.`,
+      }),
+    }));
+  }
+  renderWhoseMove();
+  renderTeam();
 
   const problems = [
     backlog.status === "on_track" ? null : `the backlog is ${changePhrase(backlog.change, {period})}`,

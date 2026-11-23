@@ -73,6 +73,27 @@ class IssueTests(unittest.TestCase):
             for lane, values in lanes.items():
                 self.assertTrue(set(values) <= keys, (perspective, lane))
 
+    def test_routing_only_names_people_who_take_routed_work(self) -> None:
+        routed = [item for item in self.payload["items"] if item.get("routing")]
+        self.assertTrue(routed)
+        for item in routed:
+            owner = item["routing"]["owner"]
+            self.assertNotEqual(owner, "domenic")
+            if item["kind"] == "issue":
+                self.assertNotEqual(owner, "noamr")
+            self.assertIn(item["key"], self.payload["perspective_lanes"][owner]["routed"])
+            self.assertIn(item["key"], self.payload["perspective_lanes"]["all-editors"]["routed"])
+            self.assertEqual(item["waiting_on"]["who"], [owner])
+        # Only unanswered, unnamed items show a routing.
+        self.assertTrue(all("reply_window" in item["lanes"] or "overdue" in item["lanes"] for item in routed))
+
+    def test_people_rows_cover_the_team(self) -> None:
+        rows = {row["login"]: row for row in self.payload["metrics"]["people"]["rows"]}
+        self.assertEqual(rows["noamr"]["role"], "helper")
+        self.assertTrue({"annevk", "domfarolino", "foolip", "zcorpan"} <= set(rows))
+        for row in rows.values():
+            self.assertEqual(len(row["weekly"]["reviews"]), 12)
+
     def test_issue_items_publish_no_bodies(self) -> None:
         serialized = json.dumps([item for item in self.payload["items"] if item.get("kind") == "issue"])
         self.assertNotIn("would you like to send a PR", serialized)
