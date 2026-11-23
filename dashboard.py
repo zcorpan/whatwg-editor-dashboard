@@ -10,8 +10,9 @@ from pathlib import Path
 
 from editor_dashboard.build import build_site
 from editor_dashboard.config import load_config
-from editor_dashboard.github import fetch_repository_data, load_fixture
+from editor_dashboard.github import fetch_with_snapshot, load_fixture
 from editor_dashboard.models import parse_datetime
+from editor_dashboard.state import full_fetch_reason, load_snapshot, save_snapshot
 
 
 def _parse_now(value: str | None) -> datetime:
@@ -28,12 +29,37 @@ def build_command(args: argparse.Namespace) -> int:
     now = _parse_now(args.now)
 
     if args.fixture:
+        if args.state or args.full:
+            raise SystemExit("--state and --full apply to GitHub fetches, not to --fixture")
         repository_data = load_fixture(args.fixture)
     else:
         token = os.environ.get("GITHUB_TOKEN")
         if not token:
             raise SystemExit("GITHUB_TOKEN is required unless --fixture is used")
-        repository_data = fetch_repository_data(config, token, now=now)
+        previous = None
+        if args.state:
+            try:
+                previous = load_snapshot(args.state)
+            except (OSError, ValueError, KeyError) as error:
+                # A corrupt snapshot costs one full fetch, not the build.
+                logging.warning("Ignoring unreadable snapshot in %s: %s", args.state, error)
+        if args.full:
+            reason = "--full was given"
+        elif not args.state:
+            reason = "no state directory"
+        else:
+            reason = full_fetch_reason(previous, config, now=now)
+        repository_data, snapshot = fetch_with_snapshot(
+            config, token, now=now, previous=previous, full_reason=reason
+        )
+        if args.state:
+            save_snapshot(args.state, snapshot)
+        metadata = repository_data.metadata
+        print(
+            f"Fetched {metadata.fetch_mode}"
+            + (f" ({metadata.full_fetch_reason})" if metadata.full_fetch_reason else "")
+            + f": {metadata.query_count} GraphQL queries, cost {metadata.total_cost}."
+        )
 
     payload = build_site(config, repository_data, output_dir=args.output, now=now)
     current = payload["metrics"]["repository"]["current"]
@@ -67,6 +93,11 @@ def create_parser() -> argparse.ArgumentParser:
     build.add_argument("--output", default="site")
     build.add_argument("--fixture", help="Build from a local fixture instead of GitHub")
     build.add_argument("--now", help="Override current time (ISO 8601), useful for deterministic fixtures")
+    build.add_argument(
+        "--state",
+        help="Directory holding the previous build's raw snapshot; fetch only what changed since it, then update it",
+    )
+    build.add_argument("--full", action="store_true", help="Fetch everything even if --state has a usable snapshot")
     build.set_defaults(handler=build_command)
 
     validate = subparsers.add_parser("validate", help="Validate dashboard.yml")

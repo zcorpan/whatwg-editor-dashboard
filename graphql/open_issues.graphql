@@ -1,0 +1,104 @@
+query OpenIssues(
+  $owner: String!
+  $name: String!
+  $cursor: String
+  $pageSize: Int!
+  $timelineEachEnd: Int!
+) {
+  repository(owner: $owner, name: $name) {
+    issues(
+      states: OPEN
+      first: $pageSize
+      after: $cursor
+      orderBy: {field: UPDATED_AT, direction: DESC}
+    ) {
+      totalCount
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        ...IssueDashboardFields
+      }
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}
+
+# Shared with recent_closed_issues.graphql and issues_by_id.graphql, which append it,
+# so every path asks for the same fields.
+fragment IssueDashboardFields on Issue {
+  id
+  number
+  title
+  url
+  state
+  author { login }
+  authorAssociation
+  body
+  createdAt
+  updatedAt
+  lastEditedAt
+  closedAt
+  labels(first: 20) {
+    nodes { name }
+  }
+  assignees(first: 10) {
+    nodes { login }
+  }
+  timelineFirst: timelineItems(first: $timelineEachEnd, itemTypes: [ISSUE_COMMENT]) {
+    ...IssueTimelineConnectionFields
+  }
+  timelineLast: timelineItems(last: $timelineEachEnd, itemTypes: [ISSUE_COMMENT]) {
+    ...IssueTimelineConnectionFields
+  }
+  # Applying a label is how most whatwg/html issues get triaged, so it counts as a
+  # response. Only the earliest few matter for that.
+  labeledEvents: timelineItems(first: 10, itemTypes: [LABELED_EVENT]) {
+    nodes {
+      ... on LabeledEvent {
+        createdAt
+        actor { login }
+        label { name }
+      }
+    }
+  }
+  closedEvents: timelineItems(last: 1, itemTypes: [CLOSED_EVENT]) {
+    nodes {
+      ... on ClosedEvent {
+        createdAt
+        actor { login }
+      }
+    }
+  }
+  # The pull requests that say they fix this issue: the issue's card is folded into
+  # theirs while one is open.
+  closedByPullRequestsReferences(first: 5, includeClosedPrs: false) {
+    nodes { number }
+  }
+}
+
+fragment IssueTimelineConnectionFields on IssueTimelineItemsConnection {
+  # As for pull requests, totalCount counts every timeline item kind, so completeness
+  # comes from pageInfo. See models.py.
+  totalCount
+  pageInfo {
+    hasNextPage
+  }
+  nodes {
+    __typename
+    ... on IssueComment {
+      id
+      author { login }
+      authorAssociation
+      body
+      createdAt
+      updatedAt
+    }
+  }
+}

@@ -1,7 +1,7 @@
 const STATE_VERSION = 1;
 const STATE_NAMESPACE = location.pathname.replace(/\/+$/, "") || "/";
 const STATE_KEY = `whatwg-editor-dashboard:v${STATE_VERSION}:${STATE_NAMESPACE}`;
-const LANE_ORDER = ["reply_window", "active", "direct", "rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct", "all"];
+const LANE_ORDER = ["reply_window", "active", "direct", "land", "rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct", "stale_author", "triage", "all"];
 const SUGGESTED_LIMIT_AFTER_ACTIVE = 12;
 
 const DATA_URL = "data.json";
@@ -15,7 +15,10 @@ const CLOCK_TICK_MS = 60 * 1000;
 
 // Collapsible sections, and how each one starts before this browser has an opinion.
 const SECTION_DEFAULTS = {"queue-controls": false, "suggested-section": true, "lanes-section": true};
-const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, perspective: null, identity: null, openSections: {}});
+const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, perspective: null, identity: null, kind: "all", openSections: {}});
+// Which items the queue shows. Additive to the stored settings, so STATE_VERSION stays.
+const KINDS = ["all", "pr", "issue"];
+const readKind = value => (KINDS.includes(value) ? value : "all");
 
 let dashboard = null;
 let itemsByKey = new Map();
@@ -77,6 +80,7 @@ function loadLocalState() {
         // no longer one of them has to fall back rather than empty the queue.
         perspective: typeof parsed.settings?.perspective === "string" ? parsed.settings.perspective : null,
         identity: typeof parsed.settings?.identity === "string" ? parsed.settings.identity : null,
+        kind: readKind(parsed.settings?.kind),
         openSections: readOpenSections(parsed.settings?.openSections),
       },
     };
@@ -282,6 +286,8 @@ function itemMatchesSearch(item) {
 
 function itemVisible(item) {
   if (!itemMatchesSearch(item)) return false;
+  const kind = localState.settings.kind || "all";
+  if (kind !== "all" && (item.kind || "pr") !== kind) return false;
   if (!localState.settings.showAddressed && isAddressed(item)) return false;
   if (!localState.settings.showSnoozed && isSnoozed(item)) return false;
   return true;
@@ -337,7 +343,7 @@ function createDetails(item) {
     content.append(list);
   }
 
-  if (item.checklist.total) {
+  if (item.checklist && item.checklist.total) {
     content.append(element("h4", {text: "Description checklist"}));
     // The ballot-box marker carries the checked state; style.css explains why that
     // is enough to drop the "Checked:" / "Unchecked:" prefixes this used to print.
@@ -354,11 +360,44 @@ function createDetails(item) {
   if (!item.timeline_sample_complete) {
     content.append(element("p", {text: "The middle of a long comment/review timeline was not sampled; some discussion signals may be absent."}));
   }
-  if (!item.review_threads_sample_complete) {
+  if (item.kind !== "issue" && !item.review_threads_sample_complete) {
     content.append(element("p", {text: "Not every review thread was sampled, so unresolved-thread status is incomplete."}));
   }
   details.append(content);
   return details;
+}
+
+// The command that applies a suggested label. The build has no write access and the
+// page holds no token, so applying one is the reader's own `gh`, pasted into a terminal.
+function labelCommand(item, label) {
+  const slug = dashboard.repository.slug;
+  return `gh issue edit ${item.number} --repo ${slug} --add-label ${JSON.stringify(label)}`;
+}
+
+async function copyText(text, confirmation) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(confirmation);
+  } catch (error) {
+    toast("Could not copy to the clipboard.");
+  }
+}
+
+function suggestedLabelList(item) {
+  const list = element("div", {className: "label-list suggested-labels"});
+  list.append(element("span", {className: "suggested-heading", text: "Suggested:"}));
+  for (const suggestion of item.suggested_labels) {
+    list.append(element("span", {className: "chip suggested-chip", text: suggestion.label, title: suggestion.reason}));
+    list.append(element("button", {
+      type: "button",
+      className: "copy-button",
+      text: "Copy",
+      attrs: {"aria-label": `Copy the gh command that adds “${suggestion.label}” to #${item.number}`},
+      title: labelCommand(item, suggestion.label),
+      onClick: () => copyText(labelCommand(item, suggestion.label), `Copied: add “${suggestion.label}” to #${item.number}.`),
+    }));
+  }
+  return list;
 }
 
 function createPRCard(item) {
@@ -389,7 +428,7 @@ function createPRCard(item) {
     onClick: markOpened,
     onAuxClick: markMiddleOpened,
   }, [
-    element("span", {className: "pr-number", text: `#${item.number} `}),
+    element("span", {className: "pr-number", text: item.kind === "issue" ? `Issue #${item.number} ` : `#${item.number} `}),
     item.title,
   ]);
   title.append(titleLink);
@@ -412,6 +451,8 @@ function createPRCard(item) {
   heading.append(meta);
 
   const reasonList = element("div", {className: "reason-list"});
+  // Whose move it is leads the evidence: it decides whether the rest is yours to act on.
+  if (item.waiting_on) reasonList.append(chip(item.waiting_on.reason));
   const reasons = itemReasons(item);
   const visibleReasons = reasons.slice(0, 6);
   for (const reason of visibleReasons) reasonList.append(chip(reason));
@@ -427,10 +468,28 @@ function createPRCard(item) {
     if (item.labels.length > 5) labels.append(element("span", {className: "chip label-chip", text: `+${item.labels.length - 5}`}));
     heading.append(labels);
   }
+  if (item.suggested_labels && item.suggested_labels.length) heading.append(suggestedLabelList(item));
+  // An issue this PR says it fixes is folded into this card rather than queued on its own.
+  for (const issue of item.linked_issues || []) {
+    const row = element("p", {className: "linked-issue"}, [
+      "Fixes ",
+      element("a", {href: issue.url, target: "_blank", rel: "noopener", text: `#${issue.number}`}),
+      ` ${issue.title}`,
+    ]);
+    for (const label of issue.labels.filter(value => value.toLowerCase().startsWith("topic:"))) {
+      row.append(" ", element("span", {className: "chip label-chip", text: label}));
+    }
+    heading.append(row);
+  }
   card.append(heading);
 
   const side = element("div", {className: "pr-side"});
-  if (item.checklist.total) {
+  if (item.kind === "issue") {
+    side.append(element("div", {className: "pr-summary-stat"}, [
+      element("span", {text: "Comments sampled"}),
+      element("strong", {text: numberFormat(item.comment_count)}),
+    ]));
+  } else if (item.checklist.total) {
     side.append(element("div", {className: "pr-summary-stat"}, [
       element("span", {text: "Description checklist"}),
       element("strong", {text: `${item.checklist.checked}/${item.checklist.total}`}),
@@ -446,11 +505,11 @@ function createPRCard(item) {
       element("strong", {text: "None"}),
     ]));
   }
-  side.append(element("div", {className: "pr-summary-stat"}, [
+  if (item.kind !== "issue") side.append(element("div", {className: "pr-summary-stat"}, [
     element("span", {text: "Diff"}),
     element("strong", {text: `${numberFormat(item.changed_lines)} lines · ${numberFormat(item.changed_files)} files`} ),
   ]));
-  side.append(element("div", {className: "pr-summary-stat"}, [
+  if (item.kind !== "issue") side.append(element("div", {className: "pr-summary-stat"}, [
     element("span", {text: "Status"}),
     element("strong", {text: statusLabel(item)}),
   ]));
@@ -479,7 +538,8 @@ function createPRCard(item) {
       onClick: () => {
         setAddressed(item, !isAddressed(item));
         renderQueues();
-        toast(isAddressed(item) ? "Hidden until somebody else changes the PR." : "PR returned to active queues.");
+        const noun = item.kind === "issue" ? "issue" : "PR";
+        toast(isAddressed(item) ? `Hidden until somebody else changes the ${noun}.` : `${noun === "PR" ? "PR" : "Issue"} returned to active queues.`);
       },
     }));
   }
@@ -494,7 +554,7 @@ function createPRCard(item) {
     },
   }));
 
-  const snooze = element("select", {className: "snooze-select", attrs: {"aria-label": `Snooze PR #${item.number}`}});
+  const snooze = element("select", {className: "snooze-select", attrs: {"aria-label": `Snooze ${item.kind === "issue" ? "issue" : "PR"} #${item.number}`}});
   const snoozed = isSnoozed(item);
   const options = [
     ["", snoozed ? `Snoozed until ${new Date(stateFor(item.key).snoozedUntil).toLocaleDateString()}` : "Snooze…"],
@@ -1293,6 +1353,7 @@ async function importState(file) {
       showSnoozed: Boolean(parsed.settings?.showSnoozed),
       perspective: typeof parsed.settings?.perspective === "string" ? parsed.settings.perspective : null,
       identity: typeof parsed.settings?.identity === "string" ? parsed.settings.identity : null,
+      kind: readKind(parsed.settings?.kind),
       openSections: readOpenSections(parsed.settings?.openSections),
     },
   };
@@ -1311,6 +1372,7 @@ function syncControlState() {
   }
   document.querySelector("#show-addressed").checked = localState.settings.showAddressed;
   document.querySelector("#show-snoozed").checked = localState.settings.showSnoozed;
+  document.querySelector("#item-kind").value = localState.settings.kind || "all";
 }
 
 function installEventHandlers() {
@@ -1321,6 +1383,11 @@ function installEventHandlers() {
   });
   document.querySelector("#show-addressed").addEventListener("change", event => {
     localState.settings.showAddressed = event.target.checked;
+    saveLocalState();
+    renderQueues();
+  });
+  document.querySelector("#item-kind").addEventListener("change", event => {
+    localState.settings.kind = readKind(event.target.value);
     saveLocalState();
     renderQueues();
   });

@@ -226,12 +226,20 @@ class AnalysisTests(unittest.TestCase):
         self.assertNotIn("reply_window", analysis.shared_lanes)
         self.assertNotIn("overdue", analysis.shared_lanes)
 
-    def test_ready_bounded_requires_a_description_checklist(self) -> None:
+    def test_ready_bounded_requires_a_description_checklist_of_normative_prs(self) -> None:
         original = self.by_number[13004]
-        without_checklist = replace(original.pr, body="No task list here.")
-        analysis = analyze_pull_request(without_checklist, self.config, now=NOW)
+        normative = replace(original.pr, title="Align a definition", body="No task list here.")
+        analysis = analyze_pull_request(normative, self.config, now=NOW)
         self.assertNotIn("ready_bounded", analysis.shared_lanes)
         self.assertIn("checklist-missing", {blocker.code for blocker in analysis.blockers})
+
+    def test_an_editorial_pr_needs_no_checklist(self) -> None:
+        # The whatwg/html PR template asks only normative changes to fill it in.
+        original = self.by_number[13004]
+        editorial = replace(original.pr, body="No task list here.")
+        analysis = analyze_pull_request(editorial, self.config, now=NOW)
+        self.assertIn("ready_bounded", analysis.shared_lanes)
+        self.assertFalse({"checklist-missing", "checklist-low"} & {blocker.code for blocker in analysis.blockers})
 
     def test_address_fingerprint_changes_with_public_pr_change(self) -> None:
         original = self.by_number[13003]
@@ -318,10 +326,10 @@ class AnalysisTests(unittest.TestCase):
         }
         self.assertEqual(len(fingerprints), 1)
 
-    def test_every_configured_editor_gets_a_perspective(self) -> None:
+    def test_every_configured_editor_and_helper_gets_a_perspective(self) -> None:
         self.assertEqual(
             tuple(self.by_number[13001].perspectives),
-            (ALL_EDITORS, "annevk", "domenic", "domfarolino", "foolip", "zcorpan"),
+            (ALL_EDITORS, "annevk", "domenic", "domfarolino", "foolip", "noamr", "zcorpan"),
         )
 
     def test_an_editor_only_sees_their_own_direct_signals(self) -> None:

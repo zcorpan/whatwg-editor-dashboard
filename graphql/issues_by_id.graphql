@@ -1,0 +1,15 @@
+# Refetches issues that changed since the last build. github.py appends the fragments
+# from open_issues.graphql.
+query IssuesById($ids: [ID!]!, $timelineEachEnd: Int!) {
+  nodes(ids: $ids) {
+    ... on Issue {
+      ...IssueDashboardFields
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}

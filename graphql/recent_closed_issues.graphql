@@ -1,0 +1,26 @@
+# github.py appends the fragments from open_issues.graphql.
+query RecentClosedIssues(
+  $query: String!
+  $cursor: String
+  $pageSize: Int!
+  $timelineEachEnd: Int!
+) {
+  search(query: $query, type: ISSUE, first: $pageSize, after: $cursor) {
+    issueCount
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      ... on Issue {
+        ...IssueDashboardFields
+      }
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}

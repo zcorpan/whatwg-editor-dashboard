@@ -19,7 +19,13 @@ The review dashboard contains these explainable lanes:
 5. **Reply window open** — contributor PRs that have never received a sampled editor response and are still inside the seven-day target, closest to the deadline first. The only PRs where a first reply can still meet the target.
 6. **First reply overdue** — the same population past the target, oldest first. A PR that misses the target moves here rather than leaving the pair.
 7. **Longest waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
-8. **Ready** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
+8. **Ready** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and (for normative PRs) a complete description checklist.
+9. **Ready to land** — the selected editor approved the current head and nothing in the template checklist is left unticked.
+10. **Long wait on author** — the author has had the next move for more than `waiting_on.stale_author_days`; candidates to ping or close.
+
+Open issues are queued too, with the same lanes where the meaning carries over: mentions and assignments, first response (a comment, a label or a close by an editor, within the 7-day target), and longest waits. There's also **Needs triage**, for issues without a `topic:` label. Only issues opened, or last answered by a contributor, inside `issues.window_days` are queued, because most open issues are dormant. An issue an open PR says it fixes is shown on that PR's card ("Fixes #N") instead of on its own. The **Show** control filters PRs and issues.
+
+Every card leads with whose move it is: the editors (named when a review is requested or an editor is already in the conversation), the author, implementers, tests, compat analysis, the WHATNOT meeting, a dependency, or "approved, ready to land". Labels decide first, then an unaddressed change request, a current approval, and finally who acted last. A merge conflict or failing checks never hands a PR back to its author. Re-review owed, Stale mentions, Longest waits and Active now only hold a PR while the move is the editors'. Cards can also suggest a label, with a button that copies the `gh` command to apply it.
 
 The first four lanes are computed for every editor in `dashboard.yml`, and the **Editor** control in the queue controls picks whose queue is on screen. It defaults to **All editors** — the union, so a PR is in a lane if it is in that lane for anybody — and the other options are the individual editors. The remaining lanes are properties of the pull request rather than of any editor, so they read the same from every perspective. The choice is stored per browser, and somebody else’s login is repeated next to the “Suggested next” heading, because the controls panel starts collapsed.
 
@@ -107,6 +113,12 @@ Build from live public GitHub data using an existing local token:
 GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site
 ```
 
+With `--state DIR`, the build stores the raw GitHub data it fetched in `DIR/snapshot.json.gz`, and the next build with the same directory only fetches what changed since (pass `--full` to fetch everything anyway):
+
+```bash
+GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site --state .state
+```
+
 Validate configuration and run tests:
 
 ```bash
@@ -146,6 +158,8 @@ The Python builder uses GitHub's GraphQL API and paginates open PRs and recently
 - a bounded review-thread sample.
 
 Only derived public data is written to `site/data.json`; raw PR bodies and comment/review bodies are not published by the dashboard build.
+
+The scheduled build is incremental. It restores the previous run's snapshot from the Actions cache and searches for PRs updated since that run started, less `incremental.overlap_hours`. Then it refetches those PRs by node id with exactly the fields a full fetch asks for. Some fields change without moving a PR's `updatedAt`: mergeability, merge state, review decision and check rollup move when the base branch does. So every open PR is also re-asked for those, plus its `updatedAt` and state, in batches of 100, and any PR whose `updatedAt` or state moved is refetched too. Closed PRs age out of the snapshot on the same date boundary the full search uses. A full fetch runs instead when there is no snapshot, when the queries or sampling sizes changed (a fingerprint of them is stored), when more than 1,000 PRs changed, or every `incremental.full_every_days`. The last case catches changes no `updatedAt` reflects, such as an edited comment. A manual workflow run can also force one. Analysis always reruns over the whole snapshot, so ages and lanes are current whichever way the data was fetched. `data.json`'s `build` block says which it was.
 
 GitHub computes mergeability lazily, answering `UNKNOWN` to a cold query and only scheduling the real value, so a build that trusts the first answer reports almost nothing as mergeable. After the closed-PR search — which gives GitHub several seconds of computing time — the builder re-asks for the PRs that answered `UNKNOWN`, by node id, in rounds that back off up to just under a minute in total. Anything still unknown keeps its “Mergeability unknown” marker and is counted in the build warnings rather than guessed at.
 

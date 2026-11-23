@@ -1,0 +1,24 @@
+# Asked for every open PR on every incremental build. The first four fields can change
+# without moving `updatedAt` (GitHub recomputes them when the base branch moves), so
+# they are patched in place; a changed `updatedAt` or `state` means the stored snapshot
+# is stale and the PR is refetched in full.
+query PullRequestVolatileFields($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on PullRequest {
+      id
+      number
+      state
+      updatedAt
+      mergeable
+      mergeStateStatus
+      reviewDecision
+      statusCheckRollup { state }
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}

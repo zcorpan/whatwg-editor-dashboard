@@ -9,7 +9,7 @@ import yaml
 # `active`, `direct`, `reply_window` and `all` are deliberately absent: each has a
 # fixed position in the suggested queue, so letting the cycle claim one too would
 # give a single concept two competing mechanisms.
-_ALLOWED_SUGGESTED_LANES = {"rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct"}
+_ALLOWED_SUGGESTED_LANES = {"rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct", "stale_author", "land", "triage"}
 
 @dataclass(frozen=True)
 class RepositoryConfig:
@@ -54,6 +54,8 @@ class SamplingConfig:
     reviews_per_pr: int = 25
     review_threads: int = 50
     history_days: int = 90
+    # Issues carry fewer nested connections than PRs, so their pages can be larger.
+    issue_page_size: int = 25
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,54 @@ class SuggestedNextConfig:
     # they get the top slots; the bound keeps incoming work from burying live reviews.
     # Zero disables the lead without hiding the lane.
     first_response_lead: int = 3
+
+
+@dataclass(frozen=True)
+class WaitingOnConfig:
+    """Labels that say whose move a PR is, ahead of what the conversation says.
+
+    A label is an editor's deliberate statement, so it outranks "who spoke last".
+    """
+
+    # Waiting for the WHATNOT meeting.
+    meeting_labels: frozenset[str] = frozenset({"agenda+", "agenda+ f2f"})
+    # "Must not merge per rationale in comment": usually a dependency that has to land
+    # first, so on its own it does not decide who is next. See analysis.py.
+    hold_labels: frozenset[str] = frozenset({"do not merge yet", "blocked"})
+    # Label -> the party it says the PR waits on.
+    party_labels: tuple[tuple[str, str], ...] = (
+        ("needs implementer interest", "implementers"),
+        ("needs compat analysis", "compat"),
+        ("needs tests", "tests"),
+    )
+    # Waiting on the author for longer than this: a candidate to ping or close.
+    stale_author_days: int = 180
+
+
+_PARTIES = {"editors", "author", "implementers", "tests", "compat", "meeting", "dependency", "merge", "proposal"}
+
+
+@dataclass(frozen=True)
+class IssuesConfig:
+    # Only issues opened (for the first-response lanes and triage) or last answered by
+    # a contributor (for the longest waits) inside this window are queued. Most of
+    # whatwg/html's open issues are dormant feature requests; without a bound, the
+    # queue would be a decade of backlog.
+    window_days: int = 90
+    # Labels starting with this say what an issue is about; an issue without one is
+    # in the triage lane.
+    topic_label_prefix: str = "topic:"
+
+
+@dataclass(frozen=True)
+class IncrementalConfig:
+    # A build with a stored snapshot only asks GitHub for what changed since it. Some
+    # changes never move a PR's `updatedAt` (an edited comment, a deleted one), so a
+    # full fetch still runs at least this often to put the snapshot right.
+    full_every_days: int = 7
+    # How far before the previous build's start the next one looks for updates, so
+    # that GitHub's search index lagging behind a write cannot lose it.
+    overlap_hours: int = 2
 
 
 @dataclass(frozen=True)
@@ -79,6 +129,25 @@ class DashboardConfig:
     blocking_labels: frozenset[str] = field(default_factory=frozenset)
     sampling: SamplingConfig = field(default_factory=SamplingConfig)
     suggested_next: SuggestedNextConfig = field(default_factory=SuggestedNextConfig)
+    incremental: IncrementalConfig = field(default_factory=IncrementalConfig)
+    waiting_on: WaitingOnConfig = field(default_factory=WaitingOnConfig)
+    issues: IssuesConfig = field(default_factory=IssuesConfig)
+    # Editors who no longer take routed work. They keep a queue perspective, their
+    # replies still count as editor responses, and only direct requests reach them.
+    retired_editors: frozenset[str] = frozenset()
+    # Non-editors who take routed review work and get their own queue perspective,
+    # but are not editors for any metric.
+    helpers: frozenset[str] = frozenset()
+    # Relative share of routed work, by login; 0 means never routed.
+    shares: tuple[tuple[str, float], ...] = ()
+
+    @property
+    def people(self) -> frozenset[str]:
+        """Everyone with a queue perspective: the editors and the helpers."""
+        return self.editors | self.helpers
+
+    def share(self, login: str) -> float:
+        return dict(self.shares).get(login, 0.0)
 
 
 def _mapping(value: Any, name: str) -> dict[str, Any]:
@@ -119,7 +188,46 @@ def load_config(path: str | Path) -> DashboardConfig:
     editors_raw = raw.get("editors", [])
     if not isinstance(editors_raw, list):
         raise ValueError("editors must be a list")
-    editors = frozenset(str(value).strip().lstrip("@").lower() for value in editors_raw if str(value).strip())
+    shares: dict[str, float] = {}
+    retired: set[str] = set()
+
+    def person(value: Any, name: str) -> tuple[str, float, str]:
+        """A bare login, or a mapping with `login`, optional `share` and `status`."""
+        if isinstance(value, dict):
+            login = str(value.get("login", "")).strip().lstrip("@").lower()
+            status = str(value.get("status", "active")).strip()
+            if status not in {"active", "retired"}:
+                raise ValueError(f"{name}.status must be active or retired")
+            share = float(value.get("share", 0 if status == "retired" else 1))
+        else:
+            login, status, share = str(value).strip().lstrip("@").lower(), "active", 1.0
+        if not login:
+            raise ValueError(f"{name} entries need a login")
+        if share < 0:
+            raise ValueError(f"{name}.share must not be negative")
+        return login, share, status
+
+    editor_list: list[str] = []
+    for value in editors_raw:
+        if not isinstance(value, dict) and not str(value).strip():
+            continue
+        login, share, status = person(value, "editors")
+        editor_list.append(login)
+        shares[login] = 0.0 if status == "retired" else share
+        if status == "retired":
+            retired.add(login)
+    editors = frozenset(editor_list)
+
+    helpers_raw = raw.get("helpers", [])
+    if not isinstance(helpers_raw, list):
+        raise ValueError("helpers must be a list")
+    helpers: set[str] = set()
+    for value in helpers_raw:
+        login, share, _status = person(value, "helpers")
+        if login in editors:
+            raise ValueError(f"helpers: @{login} is already an editor")
+        helpers.add(login)
+        shares[login] = share
     if not editors:
         raise ValueError("editors must list at least one login")
 
@@ -190,6 +298,11 @@ def load_config(path: str | Path) -> DashboardConfig:
             sampling_raw.get("history_days", 90),
             "sampling.history_days",
         ),
+        issue_page_size=_positive_int(
+            sampling_raw.get("issue_page_size", 25),
+            "sampling.issue_page_size",
+            maximum=100,
+        ),
     )
 
     suggested_raw = _mapping(raw.get("suggested_next", {}), "suggested_next")
@@ -208,6 +321,60 @@ def load_config(path: str | Path) -> DashboardConfig:
         maximum=10,
     )
 
+    incremental_raw = _mapping(raw.get("incremental", {}), "incremental")
+    incremental = IncrementalConfig(
+        full_every_days=_positive_int(
+            incremental_raw.get("full_every_days", 7),
+            "incremental.full_every_days",
+            # The closed-PR search a full fetch runs is what bounds recent history, so
+            # an incremental chain must not outlive it.
+            maximum=sampling.history_days,
+        ),
+        overlap_hours=_non_negative_int(
+            incremental_raw.get("overlap_hours", 2),
+            "incremental.overlap_hours",
+            maximum=48,
+        ),
+    )
+
+    waiting_raw = _mapping(raw.get("waiting_on", {}), "waiting_on")
+    defaults = WaitingOnConfig()
+
+    def label_set(name: str, default: frozenset[str]) -> frozenset[str]:
+        value = waiting_raw.get(name)
+        if value is None:
+            return default
+        if not isinstance(value, list):
+            raise ValueError(f"waiting_on.{name} must be a list")
+        return frozenset(str(item).strip().lower() for item in value if str(item).strip())
+
+    party_raw = waiting_raw.get("party_labels")
+    if party_raw is None:
+        party_labels = defaults.party_labels
+    else:
+        party_raw = _mapping(party_raw, "waiting_on.party_labels")
+        party_labels = tuple((str(label).strip().lower(), str(party).strip()) for label, party in party_raw.items())
+        bad = sorted(party for _label, party in party_labels if party not in _PARTIES)
+        if bad:
+            raise ValueError(f"waiting_on.party_labels names unknown parties: {', '.join(bad)}")
+    waiting_on = WaitingOnConfig(
+        meeting_labels=label_set("meeting_labels", defaults.meeting_labels),
+        hold_labels=label_set("hold_labels", defaults.hold_labels),
+        party_labels=party_labels,
+        stale_author_days=_positive_int(
+            waiting_raw.get("stale_author_days", defaults.stale_author_days),
+            "waiting_on.stale_author_days",
+        ),
+    )
+
+    issues_raw = _mapping(raw.get("issues", {}), "issues")
+    issues = IssuesConfig(
+        window_days=_positive_int(issues_raw.get("window_days", 90), "issues.window_days"),
+        topic_label_prefix=str(issues_raw.get("topic_label_prefix", "topic:")).strip().lower(),
+    )
+    if not issues.topic_label_prefix:
+        raise ValueError("issues.topic_label_prefix must not be empty")
+
     blocking_labels_raw = raw.get("blocking_labels", [])
     if not isinstance(blocking_labels_raw, list):
         raise ValueError("blocking_labels must be a list")
@@ -215,10 +382,16 @@ def load_config(path: str | Path) -> DashboardConfig:
     return DashboardConfig(
         repository=RepositoryConfig(owner=owner, name=name),
         editors=editors,
+        retired_editors=frozenset(retired),
+        helpers=frozenset(helpers),
+        shares=tuple(sorted(shares.items())),
         response_targets=targets,
         attention=attention,
         ready_bounded=bounded,
         blocking_labels=frozenset(str(value).strip().lower() for value in blocking_labels_raw if str(value).strip()),
         sampling=sampling,
         suggested_next=SuggestedNextConfig(cycle, first_response_lead),
+        incremental=incremental,
+        waiting_on=waiting_on,
+        issues=issues,
     )

@@ -5,12 +5,24 @@ repository:
 # Current HTML editors. These are public identities: they are the queue perspectives,
 # the rows of the editor-impact section, and the population of the response-time
 # metrics. Which one is *you* is chosen in the browser, not here.
+#
+# Each entry is a login, or a mapping with `login`, a `share` of routed work (default
+# 1; 0 never routes anything) and a `status`. A `retired` editor keeps a queue
+# perspective and still counts as an editor response, but only direct requests reach
+# them.
 editors:
   - annevk
-  - domenic
+  - login: domenic
+    status: retired
   - domfarolino
   - foolip
   - zcorpan
+
+# Non-editors who review regularly enough to take routed review work. They get their
+# own queue perspective but are not editors for any metric.
+helpers:
+  - login: noamr
+    share: 1
 
 response_targets:
   initial_editor_response_days: 7
@@ -55,8 +67,46 @@ suggested_next:
   # Then everything in the "active now" lane, newest activity first.
   # Remaining lanes are interleaved so the backlog cannot be starved by new work.
   cycle:
+    - land
     - rereview
     - overdue
     - oldest_wait
     - ready_bounded
     - stale_direct
+    - stale_author
+
+incremental:
+  # With a stored snapshot (`build --state DIR`), a build only fetches PRs updated since
+  # the previous one. A full fetch still runs at least this often, because some changes
+  # (an edited or deleted comment) never move a PR's updatedAt.
+  full_every_days: 7
+  # Look this far before the previous build's start, in case GitHub's search index lags.
+  overlap_hours: 2
+
+waiting_on:
+  # Labels decide whose move a PR is before the conversation does, because a label is
+  # an editor's deliberate statement.
+  meeting_labels:
+    - agenda+
+    - agenda+ f2f
+  # These hold a PR without saying why. If its description names an open PR it depends
+  # on, it waits on that; otherwise the label shows as a warning and the conversation
+  # decides.
+  hold_labels:
+    - do not merge yet
+    - blocked
+  party_labels:
+    needs implementer interest: implementers
+    needs compat analysis: compat
+    needs tests: tests
+    needs concrete proposal: proposal
+    needs incubation: proposal
+  # Waiting on the author for longer than this: a candidate to ping or close.
+  stale_author_days: 180
+
+issues:
+  # Issues are queued only if they were opened, or last answered by a contributor,
+  # inside this window; most of whatwg/html's open issues are dormant.
+  window_days: 90
+  # An issue without a label starting with this is in the triage lane.
+  topic_label_prefix: "topic:"

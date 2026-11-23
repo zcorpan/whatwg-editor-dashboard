@@ -1,0 +1,20 @@
+# Refetches open PRs that changed since the last build. github.py appends the fragments
+# from open_pull_requests.graphql, so both paths always ask for the same fields.
+query OpenPullRequestsById(
+  $ids: [ID!]!
+  $timelineEachEnd: Int!
+  $reviewCount: Int!
+  $threadCount: Int!
+) {
+  nodes(ids: $ids) {
+    ... on PullRequest {
+      ...PullRequestDashboardFields
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}

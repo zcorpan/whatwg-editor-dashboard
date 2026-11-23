@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .issue_analysis import analyze_issues, linked_issues_by_pr
 from .analysis import ALL_EDITORS, analyze_all, build_lanes, build_perspective_lanes, perspective_keys
 from .config import DashboardConfig
 from .github import RepositoryData
@@ -28,7 +29,11 @@ LANE_DESCRIPTIONS = {
     },
     "rereview": {
         "title": "Re-review owed",
-        "description": "The PR changed or the author replied after the selected editor's latest sampled review.",
+        "description": "The PR changed or the author replied after the selected editor's latest sampled review, and the next move is an editor's.",
+    },
+    "land": {
+        "title": "Ready to land",
+        "description": "The selected editor approved the current head, no other editor's latest review requests changes, and no template checklist item is left unticked. A merge conflict is shown but does not hold a PR here.",
     },
     "reply_window": {
         "title": "Reply window open",
@@ -46,9 +51,17 @@ LANE_DESCRIPTIONS = {
         "title": "Ready",
         "description": "A deterministic quick-win heuristic: mergeable, no detected blocker, bounded diff, and sufficient description-checklist completion.",
     },
+    "stale_author": {
+        "title": "Long wait on author",
+        "description": "The next move has been the author's for a long time: an editor requested changes or replied last. Candidates to ping or close, longest first.",
+    },
+    "triage": {
+        "title": "Needs triage",
+        "description": "Issues opened inside the issue window that have no topic label yet, oldest first. Labeling one is a first response.",
+    },
     "all": {
         "title": "All open",
-        "description": "Every open pull request that is ready for review, ordered by latest public GitHub update.",
+        "description": "Every open pull request that is ready for review, and every open issue in another lane, ordered by latest public GitHub update.",
     },
 }
 
@@ -75,8 +88,16 @@ def _perspective_options(config: DashboardConfig) -> list[dict[str, Any]]:
     return [
         {
             "key": key,
-            "label": "All editors" if key == ALL_EDITORS else f"@{key}",
+            "label": (
+                "All editors"
+                if key == ALL_EDITORS
+                else f"@{key} (helper)"
+                if key in config.helpers
+                else f"@{key}"
+            ),
+            # Whether the option can be an identity: every person, editor or helper.
             "editor": key != ALL_EDITORS,
+            "role": None if key == ALL_EDITORS else "helper" if key in config.helpers else "editor",
         }
         for key in perspective_keys(config)
     ]
@@ -177,15 +198,31 @@ def build_site(
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
 
-    open_analyses = analyze_all(repository_data.open_pull_requests, config, now=now)
+    # Issues first: an issue an open PR claims to fix is folded into that PR's card,
+    # so the PR's analysis needs the issue's.
+    open_numbers = frozenset(pr.number for pr in repository_data.open_pull_requests)
+    issue_analyses = analyze_issues(
+        repository_data.open_issues, config, now=now, open_pull_requests=open_numbers
+    )
+    open_analyses = analyze_all(
+        repository_data.open_pull_requests,
+        config,
+        now=now,
+        dependency_states=repository_data.dependency_states,
+        linked_issues=linked_issues_by_pr(issue_analyses, config, now=now),
+    )
     closed_analyses = analyze_all(repository_data.recently_closed_pull_requests, config, now=now)
-    lanes = build_lanes(open_analyses, config.repository.slug)
-    perspective_lanes = build_perspective_lanes(open_analyses, config)
+    # Only issues something asks about are published; the rest of the open issues
+    # would multiply data.json for nothing a lane shows.
+    published_issues = [analysis for analysis in issue_analyses if analysis.in_any_lane()]
+    queued = [*open_analyses, *published_issues]
+    lanes = build_lanes(queued, config.repository.slug)
+    perspective_lanes = build_perspective_lanes(queued, config)
     metrics = build_metrics(open_analyses, closed_analyses, config, now=now)
 
     items = [
         analysis.to_public_dict(config.repository.slug)
-        for analysis in sorted(open_analyses, key=lambda value: value.pr.number)
+        for analysis in sorted(queued, key=lambda value: value.number)
     ]
 
     payload: dict[str, Any] = {

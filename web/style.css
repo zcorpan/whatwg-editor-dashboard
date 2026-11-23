@@ -448,6 +448,21 @@ main {
 .chip.warning { background: var(--warning-soft); color: var(--warning); }
 .chip.muted { background: var(--surface-subtle); color: var(--muted); }
 .label-chip { border: 1px solid var(--border); background: transparent; }
+.linked-issue { margin: .5rem 0 0; color: var(--muted); font-size: .82rem; }
+/* A label the rules argue for: dashed, because it is not on the PR. */
+.suggested-labels { align-items: center; }
+.suggested-heading { color: var(--muted); font-size: .71rem; }
+.suggested-chip { border: 1px dashed var(--border); background: transparent; }
+.copy-button {
+  padding: .15rem .45rem;
+  border: 1px solid var(--border);
+  border-radius: .42rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: .71rem;
+  cursor: pointer;
+}
 .pr-side {
   min-width: 190px;
   display: flex;

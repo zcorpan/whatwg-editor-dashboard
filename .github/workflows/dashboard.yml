@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      full:
+        description: Fetch everything, ignoring the snapshot the previous build left
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -41,10 +46,29 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests -v
 
+      # The previous build's raw GitHub data, so this one only fetches what changed.
+      # A cache keeps the workflow read-only; a miss (evicted, or the first run) just
+      # means a full fetch. The snapshot is never published (see PRIVACY.md).
+      - name: Restore the previous build's snapshot
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .state
+          key: dashboard-snapshot-${{ github.run_id }}
+          restore-keys: dashboard-snapshot-
+
       - name: Build dashboard from public GitHub data
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python dashboard.py build --output site
+          FULL_FETCH: ${{ inputs.full && '--full' || '' }}
+        run: python dashboard.py build --output site --state .state $FULL_FETCH
+
+      # Cache entries are immutable, so every run saves under its own key and the next
+      # one restores the newest by prefix.
+      - name: Save the snapshot for the next build
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .state
+          key: dashboard-snapshot-${{ github.run_id }}
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

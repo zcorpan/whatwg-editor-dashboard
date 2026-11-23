@@ -47,6 +47,18 @@ class FakeClient:
             return next(self.closed_responses)
         if "query PullRequestMergeability" in query:
             return next(self.mergeability_responses)
+        if "query OpenIssues" in query:
+            return {
+                "repository": {
+                    "issues": {"totalCount": 0, "nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}
+                },
+                "rateLimit": rate_limit(1),
+            }
+        if "query RecentClosedIssues" in query:
+            return {
+                "search": {"issueCount": 0, "nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}},
+                "rateLimit": rate_limit(1),
+            }
         raise AssertionError("Unexpected GraphQL query")
 
 
@@ -251,6 +263,38 @@ class GraphQLClientTests(unittest.TestCase):
         self.assertEqual(client.timeout_count, 1)
         self.assertEqual(delays, [37.5])
 
+    def test_a_timed_out_batch_of_node_ids_is_split_instead_of_retried(self) -> None:
+        """By-id queries have no page size to halve, so the batch itself is halved."""
+        from editor_dashboard.github import FetchMetadata, _fetch_nodes_by_id
+
+        sent: list[list[str]] = []
+        delays: list[float] = []
+
+        def urlopen(request, *, timeout):
+            ids = json.loads(request.data.decode("utf-8"))["variables"]["ids"]
+            sent.append(ids)
+            if len(ids) > 2:
+                raise http_error(502, "timeout")
+            return FakeHTTPResponse({"data": {"nodes": [{"id": value} for value in ids]}})
+
+        client = GraphQLClient("token", urlopen=urlopen, sleep=delays.append)
+        nodes = _fetch_nodes_by_id(client, "query Q { x }", list("abcdef"), {}, FetchMetadata("test"), batch_size=6)
+
+        self.assertEqual([node["id"] for node in nodes], list("abcdef"))
+        self.assertEqual(sent, [list("abcdef"), list("abc"), ["a"], ["b", "c"], list("def"), ["d"], ["e", "f"]])
+        self.assertEqual(delays, [])
+
+    def test_a_node_that_no_longer_exists_is_null_not_a_failure(self) -> None:
+        client, delays, _page_sizes = self._client_with_failures(
+            [],
+            then={
+                "data": {"nodes": [None, {"id": "b"}]},
+                "errors": [{"type": "NOT_FOUND", "message": "Could not resolve to a node"}],
+            },
+        )
+        self.assertEqual(client.execute("query Q { x }", {"pageSize": 1, "ids": ["a", "b"]}), {"nodes": [None, {"id": "b"}]})
+        self.assertEqual(delays, [])
+
     def test_other_graphql_errors_fail_without_retrying(self) -> None:
         client, delays, _ = self._client_with_failures(
             [
@@ -353,10 +397,11 @@ class GitHubFetchTests(unittest.TestCase):
             {pr.number for pr in data.recently_closed_pull_requests},
             {int(closes_during_build["number"]), int(already_closed["number"])},
         )
-        self.assertEqual(data.metadata.query_count, 3)
-        self.assertEqual(data.metadata.total_cost, 25)
+        # Three PR pages, plus one page each of open and recently closed issues.
+        self.assertEqual(data.metadata.query_count, 5)
+        self.assertEqual(data.metadata.total_cost, 27)
         self.assertEqual(data.metadata.effective_page_size, 10)
-        self.assertTrue(all(call["pageSize"] == 10 for call in client.calls))
+        self.assertTrue(all(call["pageSize"] == 10 for call in client.calls if "reviewCount" in call))
         self.assertTrue(any("Deduplicated open" in warning for warning in data.metadata.warnings))
         self.assertTrue(any("changed from open to closed" in warning for warning in data.metadata.warnings))
 

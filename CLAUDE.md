@@ -28,6 +28,7 @@ Build from live public GitHub data:
 
 ```bash
 GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site
+GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site --state .state   # incremental after the first run; --full forces a full fetch
 ```
 
 Validate `dashboard.yml`, and run tests:
@@ -48,7 +49,7 @@ There is no linter, formatter, or JS toolchain. `site/` is build output and giti
 The pipeline is a strict one-way chain; keep the layer boundaries intact when extending.
 
 1. [config.py](editor_dashboard/config.py) — parses and validates [dashboard.yml](dashboard.yml) into frozen dataclasses. All thresholds, logins, sampling sizes, and lane cycling live here; validation is eager and raises `ValueError` with a field-qualified message. `editors` must name at least one login: there is deliberately no configured viewer, so it is the only thing saying who the queue can be read as.
-2. [github.py](editor_dashboard/github.py) — `GraphQLClient` (urllib, no HTTP library) plus `fetch_repository_data`, which paginates two queries from [graphql/](graphql/): open PRs via the repository connection, recently closed PRs via `search`. `load_fixture` produces the same `RepositoryData` from JSON, which is how every test and the demo build run. Both drop draft PRs (`_drop_drafts`) before anything else sees them, so no lane, health figure or mergeability re-check has to know drafts exist; `metadata.drafts_excluded` publishes how many.
+2. [github.py](editor_dashboard/github.py) — `GraphQLClient` (urllib, no HTTP library) plus `fetch_repository_data`, which paginates two queries from [graphql/](graphql/): open PRs via the repository connection, recently closed PRs via `search`. `load_fixture` produces the same `RepositoryData` from JSON, which is how every test and the demo build run. `fetch_with_snapshot` is the entry point: with a stored [state.py](editor_dashboard/state.py) `Snapshot` it searches for PRs updated since the previous build, re-asks every open PR for the fields that change without moving `updatedAt` (`_VOLATILE_FIELDS`), and refetches what moved by node id through the `*_by_id.graphql` queries, which append the connection queries' own fragments so both paths fetch identical fields. The snapshot stores raw nodes, drafts included; `_repository_data` drops drafts (`_drop_drafts`) and orders by PR number before anything else sees them, so no lane, health figure or mergeability re-check has to know drafts exist; `metadata.drafts_excluded` publishes how many.
 3. [models.py](editor_dashboard/models.py) — `PullRequestSnapshot.from_graphql` / `Activity.from_graphql` normalize raw GraphQL nodes: logins lowercased, timestamps parsed to UTC, the `timelineFirst`/`timelineLast` aliases merged and deduplicated. Snapshots are frozen and carry their own sampling-completeness flags. `ready_for_review_at` is the latest `ReadyForReviewEvent`, or `created_at` for a PR that was never a draft; it, not `created_at`, is a PR's age, its first-response clock, and when it joins the reconstructed backlog.
 4. [analysis.py](editor_dashboard/analysis.py) — the heart. `analyze_pull_request` produces one `PRAnalysis` per PR: lane membership, `Reason` evidence chips, blockers, and the two fingerprints. The four attention lanes are computed once per *perspective* (each configured editor, plus `ALL_EDITORS` for the union) into `PRAnalysis.perspectives`; everything else is shared. `build_lanes` orders the shared lanes and `build_perspective_lanes` the attention ones, both as lists of `owner/repo#number` keys.
 5. [metrics.py](editor_dashboard/metrics.py) — aggregates `PRAnalysis` values into the health view's payload: a twelve-week weekly trend (`trends.points` backlog moments, `trends.buckets` flow), three judged `health.indicators`, `editors.team` and a per-editor `editors.members` list of merge, first-reply and review counts, and sampling coverage.
@@ -57,7 +58,31 @@ The pipeline is a strict one-way chain; keep the layer boundaries intact when ex
 
 [checklist.py](editor_dashboard/checklist.py) sits outside the chain as a leaf called from `analysis.py`: it parses GitHub task-list items out of a PR description while skipping fenced code blocks, then reduces each label to plain text and drops the author's answer after the `: ` so the list reads as the questions it is. The label is Markdown and the page can only show it as text, so `clean_label` unwraps links, emphasis and code spans; it deliberately leaves `_underscore_` emphasis alone, because these labels are full of URLs. Only the constructs that occur in real `whatwg/html` descriptions are handled — check a live `data.json` before adding more. PR bodies stay on the in-memory snapshot; `analysis.py` reduces each one to a mention match, a sha256 for the content fingerprint, and a `Checklist`, and only the checklist's counts plus its short labels cross into `data.json`.
 
-Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `reply_window`, `overdue`, `oldest_wait`, `ready_bounded`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four. `analysis.py` also splits them into `PERSPECTIVE_LANES` and `SHARED_LANES`, and a new lane has to join one of the two.
+Lane identifiers (`active`, `direct`, `stale_direct`, `rereview`, `land`, `reply_window`, `overdue`, `oldest_wait`, `ready_bounded`, `stale_author`, `triage`, `all`) are a shared vocabulary across `analysis.py`, `build.py` `LANE_DESCRIPTIONS`, `config.py` `_ALLOWED_SUGGESTED_LANES`, and `web/app.js` `LANE_ORDER`. Adding or renaming one means touching all four. `analysis.py` also splits them into `PERSPECTIVE_LANES` and `SHARED_LANES`, and a new lane has to join one of the two.
+
+### Issues
+
+[issue_analysis.py](editor_dashboard/issue_analysis.py) reads open issues with the PR rules wherever the meaning carries over, reusing `analysis.py`'s `Reason`, `PerspectiveView` and `WaitingOn`, and sits beside `analysis.py` in the chain. `build.py` runs it first, because of two decisions:
+
+- **An issue an open PR says it fixes is folded into that PR's card** (`closedByPullRequestsReferences`, restricted to PRs on the dashboard so a draft's issue keeps its own card). `linked_issues_by_pr` restates the issue's direct signals with `-on-linked-issue` codes for the PR's perspectives, and the PR's content fingerprint hashes the issue's own fingerprint. That key is only added when there is a linked issue, so other PRs' stored addressed state is untouched.
+- **Only issues in some lane are published.** Most of whatwg/html's ~2,500 open issues are dormant feature requests, so `reply_window`, `overdue`, `oldest_wait` and the issue-only `triage` lane (no `topic:` label) only consider issues inside `issues.window_days`. Without that bound they'd be a decade of backlog.
+
+An issue's first response is the earliest editor comment, label or close. Applying a label is how most whatwg/html issues are triaged. Issues are not in the health metrics yet.
+
+### Whose move it is
+
+`analysis.py` `_waiting_on` gives every PR one `WaitingOn` (`party`, `who`, `since`, and a `Reason` the card leads with). The first rule that matches wins:
+
+1. meeting labels (`agenda+`), then `party_labels` (`needs implementer interest`, `needs compat analysis`, `needs tests`). A label is an editor's deliberate statement, so it outranks the conversation.
+2. `hold_labels` (`do not merge yet`): an open dependency named in the description ([references.py](editor_dashboard/references.py), resolved by `github.py` `_fetch_dependency_states` on every build) makes it a `dependency` wait. A landed dependency or none at all only adds a note and falls through, because the label alone doesn't say why.
+3. An editor's unaddressed `CHANGES_REQUESTED` → `author`.
+4. A current approval (of the head commit) → `merge`, unless a normative PR has unticked template items (`outstanding_items`), in which case it's that item's party.
+5. An editor other than the author acted last → `author`.
+6. Otherwise `editors`, naming review requests/assignees, else the editors already in the conversation.
+
+**Merge conflicts and failing checks never move the ball.** They're common, often trivial, and fixable by whoever lands the PR, so they stay chips and `ready_bounded` blockers. `oldest_wait`, `rereview`, `stale_direct` and `active` (unless there's a direct request, or it's `merge`) only hold a PR while the move is the editors'; that is what cut the first two from 203/117 to 160/67 on live data. Editorial PRs (`Editorial:`/`Meta:` titles) are exempt from the checklist, as the PR template says.
+
+`suggested_labels` are never applied. `needs tests`/`needs implementer interest` are suggested only when that unticked item is what holds an approved PR up. Merely unticked is about half of all normative PRs, and that was noise. The browser copies a `gh issue edit` command for each suggestion, because the build has no write access and the page holds no token.
 
 ### Queue perspectives
 
@@ -157,7 +182,7 @@ Count line charts use a focused y-range rather than a zero baseline: a backlog m
 
 **The workflow is read-only apart from the Pages deploy.** Rolling 90-day metrics are recomputed from the API each run rather than kept in a database. If daily aggregates are added later they belong on a separate data branch, which is the only thing that should ever need `contents: write`.
 
-**Deferred by plan:** issues (PRs only for now), other WHATWG repositories (`dashboard.yml` is single-repo, though the layering is meant to allow more), cross-device state, OAuth/multi-user, and assessment of actual WPT coverage, implementer interest, web-compat risk, or consensus quality.
+**Deferred by plan:** other WHATWG repositories (`dashboard.yml` is single-repo, though the layering is meant to allow more), cross-device state, OAuth/multi-user, and assessment of actual WPT coverage, implementer interest, web-compat risk, or consensus quality.
 
 ## Constraints enforced by tests
 
@@ -172,4 +197,4 @@ Count line charts use a focused y-range rather than a zero baseline: a backlog m
 
 ## CI
 
-[.github/workflows/dashboard.yml](.github/workflows/dashboard.yml) runs on push to `main`, once every 24 hours, or manual dispatch. It runs the test suite before building, uses only the job `GITHUB_TOKEN` (`contents: read` for build; `pages: write` + `id-token: write` isolated to the deploy job), and pins actions to full commit SHAs. Never add `pull_request_target` or anything that would execute code from a `whatwg/html` PR branch.
+[.github/workflows/dashboard.yml](.github/workflows/dashboard.yml) runs on push to `main`, once every 24 hours, or manual dispatch. It runs the test suite before building, restores the previous run's raw snapshot from the Actions cache into `.state/` (saved again under a per-run key afterwards, so the build stays incremental without `contents: write`; a miss just means a full fetch), uses only the job `GITHUB_TOKEN` (`contents: read` for build; `pages: write` + `id-token: write` isolated to the deploy job), and pins actions to full commit SHAs. Never add `pull_request_target` or anything that would execute code from a `whatwg/html` PR branch.
