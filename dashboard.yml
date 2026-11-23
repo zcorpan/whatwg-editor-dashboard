@@ -37,6 +37,7 @@ editors:
       - "topic: custom protocols"
       - "topic: dialog"
       - "topic: document lifecycle"
+      - "topic: document metadata"
       - "topic: drag and drop"
       - "topic: dynamic markup insertion"
       - "topic: embed and object"
@@ -47,6 +48,7 @@ editors:
       - "topic: focus"
       - "topic: forms"
       - "topic: frames/navigables/browsing contexts"
+      - "topic: grouping content"
       - "topic: history"
       - "topic: img"
       - "topic: javascript: urls"
@@ -65,6 +67,7 @@ editors:
       - "topic: resource hints (inc. preload)"
       - "topic: sanitizer"
       - "topic: script"
+      - "topic: sections"
       - "topic: select"
       - "topic: selectors"
       - "topic: serialize and transfer"
@@ -73,6 +76,7 @@ editors:
       - "topic: style"
       - "topic: svg"
       - "topic: table"
+      - "topic: text-level semantics"
       - "topic: timers and user prompts"
       - "topic: url"
       - "topic: workers and worklets"
@@ -92,6 +96,7 @@ editors:
       - "topic: custom protocols"
       - "topic: dialog"
       - "topic: document lifecycle"
+      - "topic: document metadata"
       - "topic: drag and drop"
       - "topic: editing"
       - "topic: embed and object"
@@ -102,6 +107,7 @@ editors:
       - "topic: focus"
       - "topic: forms"
       - "topic: frames/navigables/browsing contexts"
+      - "topic: grouping content"
       - "topic: history"
       - "topic: imports/exports"
       - "topic: javascript: urls"
@@ -115,8 +121,10 @@ editors:
       - "topic: resource hints (inc. preload)"
       - "topic: sandbox"
       - "topic: script"
+      - "topic: sections"
       - "topic: shadow"
       - "topic: style"
+      - "topic: text-level semantics"
       - "topic: user activation"
       - "topic: workers and worklets"
   - login: domfarolino
@@ -141,6 +149,7 @@ editors:
       - "spec tooling"  # fallback: nobody else covers it
       - "topic: button"
       - "topic: cookie"  # fallback: nobody else covers it
+      - "topic: document metadata"
       - "topic: dynamic markup insertion"
       - "topic: editing"  # fallback: nobody else covers it
       - "topic: embed and object"
@@ -148,6 +157,7 @@ editors:
       - "topic: events"
       - "topic: forms"
       - "topic: frames/navigables/browsing contexts"
+      - "topic: grouping content"
       - "topic: img"
       - "topic: javascript: urls"
       - "topic: mathml"
@@ -162,12 +172,14 @@ editors:
       - "topic: ruby"  # fallback: nobody else covers it
       - "topic: sandbox"  # fallback: nobody else covers it
       - "topic: sanitizer"
+      - "topic: sections"
       - "topic: select"
       - "topic: selectors"
       - "topic: storage"
       - "topic: style"
       - "topic: svg"
       - "topic: table"
+      - "topic: text-level semantics"
       - "topic: timers and user prompts"
       - "topic: user activation"
 
@@ -314,6 +326,7 @@ topics:
   "topic: custom protocols": [system-state]
   "topic: dialog": [interactive-elements]
   "topic: drag and drop": [dnd]
+  "topic: document metadata": [semantics]
   "topic: dynamic markup insertion": [dynamic-markup-insertion]
   "topic: embed and object": [iframe-embed-object]
   "topic: eventsource": [server-sent-events]
@@ -321,6 +334,7 @@ topics:
   "topic: focus": [interaction]
   "topic: forms": [forms, form-control-infrastructure, input]
   "topic: frames/navigables/browsing contexts": [document-sequences, iframe-embed-object]
+  "topic: grouping content": [grouping-content]
   "topic: img": [images, embedded-content, image-maps]
   "topic: links": [links, "semantics#the-link-element", "text-level-semantics#the-a-element"]
   "topic: mathml": [embedded-content-other]
@@ -336,6 +350,7 @@ topics:
   "topic: ruby": ["text-level-semantics#the-ruby-element", "text-level-semantics#the-rt-element", "text-level-semantics#the-rp-element"]
   "topic: sanitizer": [dynamic-markup-insertion]
   "topic: script": [webappapis, scripting]
+  "topic: sections": [sections]
   "topic: select": [form-elements]
   "topic: selectors": [semantics-other]
   "topic: serialize and transfer": [structured-data]
@@ -343,15 +358,15 @@ topics:
   "topic: style": ["semantics#the-style-element", "dom#the-style-attribute"]
   "topic: svg": [embedded-content-other]
   "topic: table": [tables]
+  "topic: text-level semantics": [text-level-semantics]
   "topic: timers and user prompts": [timers-and-user-prompts]
   "topic: url": [urls-and-fetching, "semantics#the-base-element"]
   "topic: workers and worklets": [workers, worklets]
   "removal/deprecation": [obsolete]
-  # Not a GitHub label (whatwg/html#13322 prefers one per element category): a catch-all
-  # for the element and document pages, for whatever no more specific entry above
-  # covers. A section entry (`page#section`, the spec's anchor for the heading) wins
-  # over a whole page.
-  "element semantics": [dom, semantics, sections, grouping-content, text-level-semantics, edits, microdata, common-microsyntaxes]
+  # Not a GitHub label: a catch-all for the element and document pages that no
+  # per-category label (whatwg/html#13322) covers. A section entry (`page#section`,
+  # the spec's anchor for the heading) wins over a whole page.
+  "element semantics": [dom, edits, microdata, common-microsyntaxes]
   # Areas of knowledge that are not a spec page: declarable in `knows:`, and a topic of
   # any item that carries them.
   "accessibility": []
@@ -365,7 +380,9 @@ topics:
 # Labels proposed to be renamed or merged, under the name that replaces them. An item
 # with an old label counts as the new one, and `knows:` and `teams:` accept either, so
 # the new names work before the labels are changed on GitHub. Suggestions only ever
-# name a label that exists. topic: mathml and topic: messaging are new and need no alias.
+# name a label that exists. The labels new in whatwg/html#13322 (topic: mathml,
+# topic: messaging, topic: sections, topic: grouping content, topic: text-level
+# semantics, topic: document metadata) need no alias.
 topic_aliases:
   "topic: cross-origin isolation": ["topic: cross-origin-opener-policy", "topic: cross-origin-embedder-policy"]
   "topic: links": ["topic: link", "topic: hyperlink"]
