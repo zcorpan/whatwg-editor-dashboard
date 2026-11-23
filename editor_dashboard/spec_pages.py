@@ -48,8 +48,33 @@ def _hunk_key(line: str) -> str:
     return line.encode("utf-8")[:_HUNK_HEADER_BYTES].decode("utf-8", errors="ignore").strip()
 
 
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _section_slug(attributes: str, rest: str) -> str:
+    """A heading's anchor: its explicit `id`, else a slug of its text, as the spec's
+    generated ids mostly are ("The link element" -> "the-link-element")."""
+    explicit = _ID_RE.search(attributes)
+    if explicit:
+        return explicit.group(1)
+    text = _TAG_RE.sub("", rest.split("</h", 1)[0])
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def split_location(location: str) -> tuple[str, tuple[str, ...]]:
+    """`page#a/b` -> ("page", ("a", "b")): the page and its enclosing sections, outermost first."""
+    page, _, sections = location.partition("#")
+    return page, tuple(sections.split("/")) if sections else ()
+
+
 @dataclass(frozen=True)
 class PageIndex:
+    """Where each heading is: `page`, or `page#section/subsection` below the page's own heading.
+
+    Changes and links are attributed to these locations, so the `topics:` map can name
+    a section (`semantics#the-link-element`) as well as a whole page.
+    """
+
     by_heading: dict[str, str]
     by_fragment: dict[str, str]
 
@@ -58,37 +83,48 @@ class PageIndex:
         by_heading: dict[str, str] = {}
         by_fragment: dict[str, str] = {}
         page: str | None = None
+        # Enclosing headings below the page's own, as (level, slug).
+        chain: list[tuple[int, str]] = []
+        location: str | None = None
         for line in text.split("\n"):
             match = _HEADING_RE.match(line)
             if match:
+                level = int(match.group(1))
                 split = _SPLIT_RE.search(match.group(2))
                 if split:
                     page = split.group(1)
+                    chain = []
+                elif page:
+                    chain = [entry for entry in chain if entry[0] < level]
+                    chain.append((level, _section_slug(match.group(2), line[match.end() :])))
                 if page:
-                    by_heading.setdefault(_hunk_key(line), page)
-            if page:
+                    location = page + ("#" + "/".join(slug for _level, slug in chain) if chain else "")
+                    by_heading.setdefault(_hunk_key(line), location)
+            if location:
                 for fragment in _ID_RE.findall(line):
-                    by_fragment.setdefault(fragment, page)
+                    by_fragment.setdefault(fragment, location)
         return cls(by_heading, by_fragment)
 
     def link_pages(self, text: str | None) -> frozenset[str]:
-        """Pages a piece of Markdown links to on html.spec.whatwg.org."""
-        pages: set[str] = set()
+        """Locations a piece of Markdown links to on html.spec.whatwg.org."""
+        locations: set[str] = set()
         for page, fragment in _SPEC_LINK_RE.findall(text or ""):
-            resolved = page or self.by_fragment.get(fragment)
+            resolved = self.by_fragment.get(fragment) if fragment else None
+            if resolved is None or (page and split_location(resolved)[0] != page):
+                resolved = page or None
             if resolved:
-                pages.add(resolved)
-        return frozenset(pages)
+                locations.add(resolved)
+        return frozenset(locations)
 
     def hunk_pages(self, diff: str) -> Counter[str]:
-        """Count the hunks of a `git diff -U0` output by the page of their heading."""
+        """Count the hunks of a `git diff -U0` output by the location of their heading."""
         counts: Counter[str] = Counter()
         for line in diff.split("\n"):
             match = _HUNK_RE.match(line)
             if match:
-                page = self.by_heading.get(_hunk_key(match.group(1)))
-                if page:
-                    counts[page] += 1
+                location = self.by_heading.get(_hunk_key(match.group(1)))
+                if location:
+                    counts[location] += 1
         return counts
 
 
@@ -199,6 +235,9 @@ class SpecPages:
 
 
 MAIN_REF = "refs/heads/main"
+# Bumped when what a cached page map holds changes, so older entries are not reused.
+# v2: locations (`page#section/...`) rather than whole pages.
+_CACHE_VERSION = "v2:"
 
 
 def compute_spec_pages(
@@ -223,7 +262,7 @@ def compute_spec_pages(
     for number, head in pull_requests:
         if not head:
             continue
-        key = f"pr:{head}"
+        key = f"{_CACHE_VERSION}pr:{head}"
         if key not in cache:
             pages = pull_request_pages(repository, index, head_oid=head, main_ref=MAIN_REF)
             if pages is None:
@@ -232,10 +271,11 @@ def compute_spec_pages(
         by_pr[number] = cache[key]
 
     wanted = sorted({oid for oid in merge_oids if oid})
-    uncached = [oid for oid in wanted if f"commit:{oid}" not in cache and repository.has_commit(oid)]
+    commit_key = f"{_CACHE_VERSION}commit:"
+    uncached = [oid for oid in wanted if commit_key + oid not in cache and repository.has_commit(oid)]
     for oid, pages in repository.commits_pages(index, uncached).items():
-        cache[f"commit:{oid}"] = pages
-    by_commit = {oid: cache[f"commit:{oid}"] for oid in wanted if f"commit:{oid}" in cache}
+        cache[commit_key + oid] = pages
+    by_commit = {oid: cache[commit_key + oid] for oid in wanted if commit_key + oid in cache}
     return SpecPages(index=index, by_pr=by_pr, by_commit=by_commit)
 
 

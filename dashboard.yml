@@ -24,6 +24,7 @@ editors:
     knows:
       - "accessibility"
       - "document conformance"
+      - "element semantics"
       - "i18n-tracker"
       - "removal/deprecation"
       - "security/privacy"
@@ -66,7 +67,6 @@ editors:
       - "topic: script"
       - "topic: select"
       - "topic: selectors"
-      - "topic: semantics"
       - "topic: serialize and transfer"
       - "topic: shadow"
       - "topic: storage"
@@ -81,6 +81,7 @@ editors:
     knows:
       - "dev edition"
       - "document conformance"
+      - "element semantics"
       - "removal/deprecation"
       - "security/privacy"
       - "spec tooling"
@@ -114,7 +115,6 @@ editors:
       - "topic: resource hints (inc. preload)"
       - "topic: sandbox"
       - "topic: script"
-      - "topic: semantics"
       - "topic: shadow"
       - "topic: style"
       - "topic: user activation"
@@ -135,6 +135,7 @@ editors:
       - "accessibility"
       - "dev edition"
       - "document conformance"
+      - "element semantics"
       - "removal/deprecation"
       - "security/privacy"
       - "spec tooling"  # fallback: nobody else covers it
@@ -163,7 +164,6 @@ editors:
       - "topic: sanitizer"
       - "topic: select"
       - "topic: selectors"
-      - "topic: semantics"
       - "topic: storage"
       - "topic: style"
       - "topic: svg"
@@ -322,7 +322,7 @@ topics:
   "topic: forms": [forms, form-control-infrastructure, input]
   "topic: frames/navigables/browsing contexts": [document-sequences, iframe-embed-object]
   "topic: img": [images, embedded-content, image-maps]
-  "topic: links": [links]
+  "topic: links": [links, "semantics#the-link-element", "text-level-semantics#the-a-element"]
   "topic: mathml": [embedded-content-other]
   "topic: media": [media]
   "topic: messaging": [web-messaging, comms]
@@ -333,19 +333,25 @@ topics:
   "topic: reflect": [common-dom-interfaces]
   "topic: resource hints (inc. preload)": [speculative-loading]
   "topic: rendering": [rendering]
+  "topic: ruby": ["text-level-semantics#the-ruby-element", "text-level-semantics#the-rt-element", "text-level-semantics#the-rp-element"]
   "topic: sanitizer": [dynamic-markup-insertion]
   "topic: script": [webappapis, scripting]
   "topic: select": [form-elements]
   "topic: selectors": [semantics-other]
-  "topic: semantics": [dom, semantics, sections, grouping-content, text-level-semantics, microdata, common-microsyntaxes]
   "topic: serialize and transfer": [structured-data]
   "topic: storage": [webstorage]
+  "topic: style": ["semantics#the-style-element", "dom#the-style-attribute"]
   "topic: svg": [embedded-content-other]
   "topic: table": [tables]
   "topic: timers and user prompts": [timers-and-user-prompts]
-  "topic: url": [urls-and-fetching]
+  "topic: url": [urls-and-fetching, "semantics#the-base-element"]
   "topic: workers and worklets": [workers, worklets]
   "removal/deprecation": [obsolete]
+  # Not a GitHub label (whatwg/html#13322 prefers one per element category): a catch-all
+  # for the element and document pages, for whatever no more specific entry above
+  # covers. A section entry (`page#section`, the spec's anchor for the heading) wins
+  # over a whole page.
+  "element semantics": [dom, semantics, sections, grouping-content, text-level-semantics, edits, microdata, common-microsyntaxes]
   # Areas of knowledge that are not a spec page: declarable in `knows:`, and a topic of
   # any item that carries them.
   "accessibility": []
@@ -359,8 +365,7 @@ topics:
 # Labels proposed to be renamed or merged, under the name that replaces them. An item
 # with an old label counts as the new one, and `knows:` and `teams:` accept either, so
 # the new names work before the labels are changed on GitHub. Suggestions only ever
-# name a label that exists. topic: semantics, topic: mathml and topic: messaging are new
-# and need no alias.
+# name a label that exists. topic: mathml and topic: messaging are new and need no alias.
 topic_aliases:
   "topic: cross-origin isolation": ["topic: cross-origin-opener-policy", "topic: cross-origin-embedder-policy"]
   "topic: links": ["topic: link", "topic: hyperlink"]

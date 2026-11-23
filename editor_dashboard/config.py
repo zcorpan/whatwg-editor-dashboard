@@ -208,6 +208,16 @@ class DashboardConfig:
     def labels_for_page(self, page: str) -> tuple[str, ...]:
         return tuple(sorted(label for label, pages in self.topic_pages if page in pages))
 
+    def labels_for_location(self, page: str, sections: tuple[str, ...] = ()) -> tuple[str, ...]:
+        """The labels covering a place in the spec: those naming its innermost listed
+        section (`semantics#the-link-element`), else those covering the whole page."""
+        for section in reversed(sections):
+            entry = f"{page}#{section}"
+            found = tuple(sorted(label for label, pages in self.topic_pages if entry in pages))
+            if found:
+                return found
+        return self.labels_for_page(page)
+
 
 def _mapping(value: Any, name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
@@ -487,7 +497,7 @@ def load_config(path: str | Path) -> DashboardConfig:
         if not isinstance(pages, list):
             raise ValueError(f"topics.{label} must be a list of spec pages")
         values = frozenset(str(page).strip().lower() for page in pages if str(page).strip())
-        ignored = sorted(values & ignore_pages)
+        ignored = sorted(value for value in values if value.partition("#")[0] in ignore_pages)
         if ignored:
             raise ValueError(f"topics.{label}: {', '.join(ignored)} in ignore_pages, so they say nothing")
         topic_pages[topic] = values

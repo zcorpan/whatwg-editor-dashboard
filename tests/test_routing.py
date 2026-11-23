@@ -138,6 +138,14 @@ class TopicTests(unittest.TestCase):
             },
         )
 
+    def test_a_section_entry_wins_over_its_page(self) -> None:
+        # The link element has a label; the rest of the document metadata page falls
+        # to the catch-all.
+        topics = item_topics(
+            [], self.config, pages={"semantics#document-metadata/the-link-element": 1, "semantics#document-metadata/the-title-element": 1}
+        )
+        self.assertEqual(topics, {"label:topic: links": 0.5, "label:element semantics": 0.5})
+
     def test_old_labels_count_as_the_names_that_replace_them(self) -> None:
         topics = item_topics(["topic: timing", "topic: link"], self.config)
         self.assertEqual(set(topics), {"label:topic: timers and user prompts", "label:topic: links"})

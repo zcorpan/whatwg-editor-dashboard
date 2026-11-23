@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Iterable, Mapping
 
 from .config import DashboardConfig
+from .spec_pages import split_location
 
 
 Topics = dict[str, float]
@@ -26,8 +27,13 @@ def topic_labels(labels: Iterable[str], config: DashboardConfig) -> list[str]:
 
 
 def page_shares(pages: Mapping[str, int] | None, config: DashboardConfig) -> dict[str, float]:
-    """Hunk counts as shares, without the pages every change touches."""
-    kept = {page: count for page, count in (pages or {}).items() if page not in config.ignore_pages and count > 0}
+    """Hunk counts per location (`page` or `page#section/...`) as shares, without the
+    pages every change touches."""
+    kept = {
+        location: count
+        for location, count in (pages or {}).items()
+        if split_location(location)[0] not in config.ignore_pages and count > 0
+    }
     total = sum(kept.values())
     return {page: count / total for page, count in kept.items()} if total else {}
 
@@ -41,16 +47,17 @@ def item_topics(
 ) -> Topics:
     """Each topic label weighs 1; the spec pages share 1 between them.
 
-    A page's share goes to the labels that cover it, split evenly, or stays on the
-    page if none does.
+    A location's share goes to the labels that cover it (its innermost mapped section,
+    else its page), split evenly, or stays on the page if none does.
     """
     topics: Topics = {f"label:{label}": 1.0 for label in topic_labels(labels, config)}
     shares = page_shares(pages, config)
-    linked = [page for page in sorted(set(linked_pages)) if page not in config.ignore_pages]
+    linked = [location for location in sorted(set(linked_pages)) if split_location(location)[0] not in config.ignore_pages]
     if not shares and linked:
-        shares = {page: 1 / len(linked) for page in linked}
-    for page, share in sorted(shares.items()):
-        covering = config.labels_for_page(page)
+        shares = {location: 1 / len(linked) for location in linked}
+    for location, share in sorted(shares.items()):
+        page, sections = split_location(location)
+        covering = config.labels_for_location(page, sections)
         keys = [f"label:{label}" for label in covering] or [f"page:{page}"]
         for key in keys:
             topics[key] = topics.get(key, 0.0) + share / len(keys)
@@ -64,9 +71,13 @@ def display_name(topic: str) -> str:
 
 def top_page(shares: Mapping[str, float]) -> str | None:
     """The page a change is mostly about: at least half of its hunks."""
-    if not shares:
+    by_page: dict[str, float] = {}
+    for location, share in shares.items():
+        page = split_location(location)[0]
+        by_page[page] = by_page.get(page, 0.0) + share
+    if not by_page:
         return None
-    page, share = min(shares.items(), key=lambda pair: (-pair[1], pair[0]))
+    page, share = min(by_page.items(), key=lambda pair: (-pair[1], pair[0]))
     return page if share >= 0.5 else None
 
 
@@ -109,17 +120,18 @@ class LabelSuggester:
         return cls(tuple(words), tuple(sorted(existing.items())))
 
     def from_pages(self, pages: Mapping[str, int] | None, config: DashboardConfig) -> tuple[str, str] | None:
-        """The label covering the page a change is mostly about, if exactly one does."""
+        """The label at least half of a change is about, through the `topics:` map."""
+        topics = item_topics([], config, pages=pages)
+        labels = [(weight, key[len("label:") :]) for key, weight in topics.items() if key.startswith("label:")]
+        if not labels:
+            return None
+        weight, best = max(labels, key=lambda pair: (pair[0], pair[1]))
+        label = dict(self.existing).get(best)
+        if weight < 0.5 or label is None:
+            return None
         page = top_page(page_shares(pages, config))
-        if page is None:
-            return None
-        covering = config.labels_for_page(page)
-        if len(covering) != 1:
-            return None
-        label = dict(self.existing).get(covering[0])
-        if label is None:
-            return None
-        return label, f"mostly changes the {page} page, which it covers in dashboard.yml"
+        where = f"the {page} page" if page else "the parts of the spec it touches"
+        return label, f"mostly changes {where}, which dashboard.yml files under it"
 
     def from_title(self, title: str) -> tuple[str, str] | None:
         for pattern, label in self.label_words:

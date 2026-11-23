@@ -17,7 +17,7 @@ from .config import DashboardConfig
 from .expertise import contributions
 from .github import RepositoryData
 from .models import HistoryRecord
-from .spec_pages import SpecPages
+from .spec_pages import SpecPages, split_location
 from .topics import LabelSuggester, display_name, page_shares, top_page, topic_labels
 
 
@@ -47,6 +47,15 @@ def label_suggestion_precision(data: RepositoryData, spec: SpecPages, config: Da
     }
 
 
+def unknown_sections(index: Any, config: DashboardConfig) -> list[str]:
+    """`page#section` entries in `topics:` that match no heading in the current source."""
+    known = set()
+    for location in index.by_heading.values():
+        page, sections = split_location(location)
+        known.update(f"{page}#{section}" for section in sections)
+    return sorted(entry for _label, entries in config.topic_pages for entry in entries if "#" in entry and entry not in known)
+
+
 def uncovered_pages(data: RepositoryData, spec: SpecPages, config: DashboardConfig) -> list[tuple[str, int]]:
     """Pages merged PRs are mostly about that no label in `topics:` covers, busiest first."""
     counts: Counter[str] = Counter()
@@ -73,6 +82,9 @@ def report(payload: dict[str, Any], data: RepositoryData, spec: SpecPages, confi
         mapped_history = sum(bool(page_shares((spec.by_commit or {}).get(record.merge_oid or ""), config)) for record in data.history)
         lines.append(f"Merged PRs with a spec page: {mapped_history} of {len(data.history)}")
         precision = label_suggestion_precision(data, spec, config)
+        if spec.index is not None:
+            missing = unknown_sections(spec.index, config)
+            lines.append("Sections in topics: that no heading matches: " + (", ".join(missing) or "none"))
         gaps = uncovered_pages(data, spec, config)
         lines.append(
             "Pages no label covers (merged PRs mostly about them): "

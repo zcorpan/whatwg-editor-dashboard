@@ -31,13 +31,21 @@ class PageIndexTests(unittest.TestCase):
     def setUp(self) -> None:
         self.index = PageIndex.from_source(SOURCE.format(forms=lines("f"), inputs=lines("i"), tokens=lines("t")))
 
-    def test_headings_belong_to_the_page_their_split_starts(self) -> None:
-        self.assertEqual(self.index.by_heading['<h4 id="the-input-element">The <code>input</code> element</h4>'], "forms")
+    def test_headings_are_located_by_page_and_enclosing_sections(self) -> None:
+        self.assertEqual(
+            self.index.by_heading['<h4 id="the-input-element">The <code>input</code> element</h4>'],
+            "forms#the-input-element",
+        )
+        # Without an explicit id, a section is named by a slug of its heading text.
+        self.assertEqual(
+            self.index.by_heading['<h4><dfn id="tokenization">Tokenization</dfn></h4>'],
+            "parsing#parsing-html-documents/tokenization",
+        )
+        self.assertEqual(self.index.by_heading['<h2 split-filename="parsing" id="parsing">The HTML syntax</h2>'], "parsing")
         # git truncates hunk headers, so long headings are keyed by their first 80 bytes.
         long_heading = '  <h4 id="x">' + "A very long heading " * 6 + "</h4>"
         index = PageIndex.from_source('<h2 split-filename="p">P</h2>\n' + long_heading)
-        self.assertEqual(index.hunk_pages("@@ -1 +1 @@ " + long_heading.encode()[:80].decode()), {"p": 1})
-        self.assertEqual(self.index.by_heading['<h4><dfn id="tokenization">Tokenization</dfn></h4>'], "parsing")
+        self.assertEqual(index.hunk_pages("@@ -1 +1 @@ " + long_heading.encode()[:80].decode()), {"p#x": 1})
         self.assertNotIn('<h2 class="no-num no-toc" w-nosplit>Table of contents</h2>', self.index.by_heading)
 
     def test_spec_links_resolve_to_pages(self) -> None:
@@ -45,7 +53,11 @@ class PageIndexTests(unittest.TestCase):
             "See https://html.spec.whatwg.org/multipage/forms.html#x and "
             "https://html.spec.whatwg.org/#tokenization, not https://html.spec.whatwg.org/#nowhere."
         )
-        self.assertEqual(self.index.link_pages(text), frozenset({"forms", "parsing"}))
+        # A fragment says where on the page; an unknown one still says which page.
+        self.assertEqual(
+            self.index.link_pages(text),
+            frozenset({"forms", "parsing#parsing-html-documents/tokenization"}),
+        )
 
 
 class SpecRepositoryTests(unittest.TestCase):
@@ -84,8 +96,8 @@ class SpecRepositoryTests(unittest.TestCase):
         index = PageIndex.from_source(repository.source_at("main"))
         try:
             pages = pull_request_pages(repository, index, head_oid=head, main_ref="main")
-            self.assertEqual(pages, {"forms": 1, "parsing": 1})
-            self.assertEqual(commit_pages(repository, index, self.git("rev-parse", "main")), {"forms": 1})
+            self.assertEqual(pages, {"forms#the-input-element": 1, "parsing#parsing-html-documents/tokenization": 1})
+            self.assertEqual(commit_pages(repository, index, self.git("rev-parse", "main")), {"forms#the-form-element": 1})
             self.assertIsNone(pull_request_pages(repository, index, head_oid="0" * 40, main_ref="main"))
         finally:
             repository.close()
