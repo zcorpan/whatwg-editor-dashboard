@@ -41,7 +41,7 @@ class RoutingTests(unittest.TestCase):
                 ("annevk", frozenset({"label:topic: forms"})),
                 ("domenic", frozenset({"label:topic: navigation"})),
                 ("noamr", frozenset({"label:topic: parser"})),
-                ("zcorpan", frozenset({"label:topic: parser", "label:topic: img", "page:sections"})),
+                ("zcorpan", frozenset({"label:topic: parser", "label:topic: img", "page:image-maps"})),
             ),
         )
 
@@ -61,9 +61,9 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(decision.evidence, "Declared in dashboard.yml: topic: img")
 
     def test_a_page_no_label_covers_can_be_declared_directly(self) -> None:
-        decision = self.route([candidate("outline", 1, pages={"sections": 2})])["outline"]
+        decision = self.route([candidate("usemap", 1, pages={"image-maps": 2})])["usemap"]
         self.assertEqual(decision.owner, "zcorpan")
-        self.assertIn("the sections page", decision.evidence)
+        self.assertIn("the image-maps page", decision.evidence)
 
     def test_load_spreads_a_run_among_those_who_declare_it(self) -> None:
         # zcorpan and noamr both declare the parser; a run of parser PRs goes to both.
@@ -128,14 +128,31 @@ class TopicTests(unittest.TestCase):
         topics = item_topics([], self.config, pages={"acknowledgements": 3, "parsing": 1})
         self.assertEqual(topics, {"label:topic: parser": 1.0})
         # A page two labels cover splits its share; one no label covers stays a page.
-        topics = item_topics([], self.config, pages={"iframe-embed-object": 1, "sections": 1})
+        topics = item_topics([], self.config, pages={"iframe-embed-object": 1, "image-maps": 1})
         self.assertEqual(
             topics,
             {
                 "label:topic: embed and object": 0.25,
                 "label:topic: frames/navigables/browsing contexts": 0.25,
-                "page:sections": 0.5,
+                "page:image-maps": 0.5,
             },
+        )
+
+    def test_old_labels_count_as_the_names_that_replace_them(self) -> None:
+        topics = item_topics(["topic: timing", "topic: link"], self.config)
+        self.assertEqual(set(topics), {"label:topic: timers and user prompts", "label:topic: links"})
+        # Before the rename, the existing label is what gets suggested.
+        suggester = LabelSuggester.from_config(self.config, ["topic: timing"])
+        self.assertEqual(suggester.from_pages({"timers-and-user-prompts": 2}, self.config)[0], "topic: timing")
+        # Of two old labels being merged, the first listed in topic_aliases.
+        suggester = LabelSuggester.from_config(
+            self.config, ["topic: cross-origin-embedder-policy", "topic: cross-origin-opener-policy"]
+        )
+        self.assertEqual(suggester.from_pages({"browsers": 2}, self.config)[0], "topic: cross-origin-opener-policy")
+        # Afterwards, the new one.
+        suggester = LabelSuggester.from_config(self.config, ["topic: timing", "topic: timers and user prompts"])
+        self.assertEqual(
+            suggester.from_pages({"timers-and-user-prompts": 2}, self.config)[0], "topic: timers and user prompts"
         )
 
     def test_mapped_labels_without_the_prefix_are_topic_labels(self) -> None:
@@ -143,13 +160,15 @@ class TopicTests(unittest.TestCase):
         self.assertNotIn("label:clarification", item_topics(["accessibility", "clarification"], self.config))
 
     def test_the_label_covering_the_main_page_is_suggested(self) -> None:
-        suggester = LabelSuggester.from_config(self.config, ["topic: parser", "topic: dialog"])
+        suggester = LabelSuggester.from_config(self.config, ["topic: parser", "topic: dialog", "removal/deprecation"])
         label, reason = suggester.from_pages({"parsing": 3, "rendering": 1}, self.config)
         self.assertEqual(label, "topic: parser")
         self.assertIn("parsing page", reason)
         self.assertEqual(suggester.from_pages({"obsolete": 1}, self.config)[0], "removal/deprecation")
         # Two labels cover it, or none does: no suggestion.
         self.assertIsNone(suggester.from_pages({"iframe-embed-object": 3}, self.config))
+        self.assertIsNone(suggester.from_pages({"image-maps": 3}, self.config))
+        # topic: semantics covers sections, but does not exist on GitHub yet.
         self.assertIsNone(suggester.from_pages({"sections": 3}, self.config))
         self.assertEqual(suggester.from_title("The <dialog> element closes twice")[0], "topic: dialog")
 

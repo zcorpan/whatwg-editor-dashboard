@@ -20,8 +20,9 @@ Topics = dict[str, float]
 
 
 def topic_labels(labels: Iterable[str], config: DashboardConfig) -> list[str]:
-    """The labels that say what an item is about: `topic:` ones and the mapped ones."""
-    return sorted({label for label in labels if config.is_topic_label(label)})
+    """The labels that say what an item is about, by their lowercased current names:
+    `topic:` ones and the mapped ones, with renamed and merged ones under their new name."""
+    return sorted({config.canonical_label(label) for label in labels if config.is_topic_label(label)})
 
 
 def page_shares(pages: Mapping[str, int] | None, config: DashboardConfig) -> dict[str, float]:
@@ -43,7 +44,7 @@ def item_topics(
     A page's share goes to the labels that cover it, split evenly, or stays on the
     page if none does.
     """
-    topics: Topics = {f"label:{label.lower()}": 1.0 for label in topic_labels(labels, config)}
+    topics: Topics = {f"label:{label}": 1.0 for label in topic_labels(labels, config)}
     shares = page_shares(pages, config)
     linked = [page for page in sorted(set(linked_pages)) if page not in config.ignore_pages]
     if not shares and linked:
@@ -71,22 +72,41 @@ def top_page(shares: Mapping[str, float]) -> str | None:
 
 @dataclass(frozen=True)
 class LabelSuggester:
-    """A topic label for an unlabeled item, from the `topics:` map or its title."""
+    """A topic label for an unlabeled item, from the `topics:` map or its title.
+
+    Only labels that exist on GitHub are suggested, under the name GitHub has: a name
+    in `topics:` that replaces a label nobody has renamed yet is suggested as the old
+    one, and one that exists nowhere yet is not suggested at all.
+    """
 
     label_words: tuple[tuple[re.Pattern[str], str], ...]
+    # Lowercased current name -> the label as it exists on GitHub.
+    existing: tuple[tuple[str, str], ...] = ()
 
     @classmethod
     def from_config(cls, config: DashboardConfig, known_labels: Iterable[str]) -> "LabelSuggester":
         prefix = config.issues.topic_label_prefix
+        # The label under its own current name wins; failing that, the old label
+        # listed first under it in `topic_aliases`.
+        order = {alias: index for index, (alias, _canonical) in enumerate(config.topic_aliases)}
+
+        def rank(label: str) -> tuple[int, str]:
+            lowered = label.lower()
+            return (-1 if lowered == config.canonical_label(label) else order.get(lowered, len(order)), lowered)
+
+        existing: dict[str, str] = {}
+        for label in sorted(set(known_labels), key=rank):
+            if config.is_topic_label(label):
+                existing.setdefault(config.canonical_label(label), label)
         words = []
-        for label in sorted(set(topic_labels(known_labels, config))):
+        for label in sorted(set(existing.values())):
             if not label.lower().startswith(prefix):
                 continue
             name = label[len(prefix) :].strip()
             # Short names ("img", "url") match too much prose to be evidence.
             if len(name) >= 4 and re.fullmatch(r"[a-z][a-z -]*", name.lower()):
                 words.append((re.compile(rf"(?<![\w-]){re.escape(name)}(?![\w-])", re.IGNORECASE), label))
-        return cls(tuple(words))
+        return cls(tuple(words), tuple(sorted(existing.items())))
 
     def from_pages(self, pages: Mapping[str, int] | None, config: DashboardConfig) -> tuple[str, str] | None:
         """The label covering the page a change is mostly about, if exactly one does."""
@@ -96,7 +116,10 @@ class LabelSuggester:
         covering = config.labels_for_page(page)
         if len(covering) != 1:
             return None
-        return covering[0], f"mostly changes the {page} page, which it covers in dashboard.yml"
+        label = dict(self.existing).get(covering[0])
+        if label is None:
+            return None
+        return label, f"mostly changes the {page} page, which it covers in dashboard.yml"
 
     def from_title(self, title: str) -> tuple[str, str] | None:
         for pattern, label in self.label_words:

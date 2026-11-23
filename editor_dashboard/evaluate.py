@@ -24,10 +24,12 @@ from .topics import LabelSuggester, display_name, page_shares, top_page, topic_l
 def label_suggestion_precision(data: RepositoryData, spec: SpecPages, config: DashboardConfig) -> dict[str, Any]:
     """How often the `topics:` map's label for a merged PR's main page is one it carried."""
     by_commit = spec.by_commit or {}
-    suggester = LabelSuggester.from_config(config, ())
+    suggester = LabelSuggester.from_config(
+        config, {label for record in data.history for label in (*record.labels, *record.issue_labels)}
+    )
     labeled = suggested = correct = 0
     for record in data.history:
-        labels = {label.lower() for label in topic_labels((*record.labels, *record.issue_labels), config)}
+        labels = set(topic_labels((*record.labels, *record.issue_labels), config))
         pages = by_commit.get(record.merge_oid or "")
         if not labels or not pages:
             continue
@@ -35,7 +37,7 @@ def label_suggestion_precision(data: RepositoryData, spec: SpecPages, config: Da
         suggestion = suggester.from_pages(pages, config)
         if suggestion is not None:
             suggested += 1
-            correct += suggestion[0] in labels
+            correct += config.canonical_label(suggestion[0]) in labels
     return {
         "labeled_with_pages": labeled,
         "suggested": suggested,

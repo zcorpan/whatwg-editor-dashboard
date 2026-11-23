@@ -16,44 +16,155 @@ repository:
 # It is declared, not computed, because merged-PR history misses design done
 # elsewhere and follows volume.
 #
-# DRAFT: these lists were seeded from `dashboard.py expertise` (merged PRs 2019-2026,
-# a share of the topic's credit of at least 10%). Each person should prune and extend
-# their own; `accessibility`, `i18n-tracker`, `security/privacy`, `document
-# conformance`, `spec tooling` and the other labels in `topics:` can be declared too.
+# DRAFT, for each person to prune and extend: seeded with every topic where they hold
+# at least 10% of the credit in merged-PR history (`dashboard.py expertise`) or belong
+# to the matching @whatwg team. Topics nobody else covered fall back to zcorpan.
 editors:
   - login: annevk
     knows:
+      - "accessibility"
+      - "document conformance"
+      - "i18n-tracker"
+      - "removal/deprecation"
+      - "security/privacy"
+      - "topic: agent"
+      - "topic: button"
       - "topic: canvas"
+      - "topic: close watchers"
+      - "topic: cross-origin isolation"
       - "topic: custom elements"
-      - "topic: media"
-      - "topic: navigation"
-      - "topic: parser"
-      - "topic: rendering"
-      - "topic: script"
-      - "topic: select"
-  - login: domenic
-    status: retired
-    knows:
-      - "topic: canvas"
+      - "topic: custom protocols"
       - "topic: dialog"
+      - "topic: document lifecycle"
+      - "topic: drag and drop"
+      - "topic: dynamic markup insertion"
+      - "topic: embed and object"
+      - "topic: event loop"
+      - "topic: events"
+      - "topic: eventsource"
+      - "topic: fetch"
       - "topic: focus"
       - "topic: forms"
       - "topic: frames/navigables/browsing contexts"
+      - "topic: history"
+      - "topic: img"
+      - "topic: javascript: urls"
+      - "topic: links"
+      - "topic: media"
+      - "topic: multiple globals"
       - "topic: navigation"
+      - "topic: navigation api"
+      - "topic: origin"
+      - "topic: parser"
+      - "topic: popover"
+      - "topic: reflect"
+      - "topic: rendering"
+      - "topic: resource hints (inc. preload)"
+      - "topic: sanitizer"
       - "topic: script"
+      - "topic: select"
+      - "topic: selectors"
+      - "topic: semantics"
+      - "topic: serialize and transfer"
+      - "topic: shadow"
+      - "topic: storage"
+      - "topic: style"
+      - "topic: table"
+      - "topic: timers and user prompts"
+      - "topic: url"
+      - "topic: workers and worklets"
+  - login: domenic
+    status: retired
+    knows:
+      - "dev edition"
+      - "document conformance"
+      - "removal/deprecation"
+      - "security/privacy"
+      - "spec tooling"
+      - "topic: canvas"
+      - "topic: close watchers"
+      - "topic: cross-origin isolation"
+      - "topic: custom elements"
+      - "topic: custom protocols"
+      - "topic: dialog"
+      - "topic: document lifecycle"
+      - "topic: drag and drop"
+      - "topic: editing"
+      - "topic: embed and object"
+      - "topic: error reporting"
+      - "topic: event loop"
+      - "topic: events"
+      - "topic: fetch"
+      - "topic: focus"
+      - "topic: forms"
+      - "topic: frames/navigables/browsing contexts"
+      - "topic: history"
+      - "topic: imports/exports"
+      - "topic: javascript: urls"
+      - "topic: links"
+      - "topic: multiple globals"
+      - "topic: navigation"
+      - "topic: origin"
+      - "topic: policy container"
+      - "topic: popover"
+      - "topic: reflect"
+      - "topic: resource hints (inc. preload)"
+      - "topic: sandbox"
+      - "topic: script"
+      - "topic: semantics"
+      - "topic: shadow"
+      - "topic: style"
+      - "topic: user activation"
+      - "topic: workers and worklets"
   - login: domfarolino
     knows:
-      - "topic: workers"
+      - "topic: event loop"
+      - "topic: imports/exports"
+      - "topic: script"
+      - "topic: workers and worklets"
   - login: foolip
     knows:
       - "topic: media"
+      - "topic: user activation"
   - login: zcorpan
     knows:
+      - "a11y-tracker"
+      - "accessibility"
+      - "dev edition"
+      - "document conformance"
+      - "removal/deprecation"
+      - "security/privacy"
+      - "spec tooling"  # fallback: nobody else covers it
+      - "topic: button"
+      - "topic: cookie"  # fallback: nobody else covers it
+      - "topic: dynamic markup insertion"
+      - "topic: editing"  # fallback: nobody else covers it
+      - "topic: embed and object"
+      - "topic: error reporting"  # fallback: nobody else covers it
+      - "topic: events"
+      - "topic: forms"
+      - "topic: frames/navigables/browsing contexts"
       - "topic: img"
+      - "topic: javascript: urls"
       - "topic: media"
       - "topic: navigation"
+      - "topic: navigation api"
+      - "topic: origin"
+      - "topic: parser"
+      - "topic: policy container"  # fallback: nobody else covers it
       - "topic: rendering"
+      - "topic: ruby"  # fallback: nobody else covers it
+      - "topic: sandbox"  # fallback: nobody else covers it
       - "topic: sanitizer"
+      - "topic: select"
+      - "topic: selectors"
+      - "topic: semantics"
+      - "topic: storage"
+      - "topic: style"
+      - "topic: svg"  # fallback: nobody else covers it
+      - "topic: table"
+      - "topic: timers and user prompts"
+      - "topic: user activation"
 
 # Non-editors who review regularly enough to take routed review work. They get their
 # own queue perspective but are not editors for any metric.
@@ -61,12 +172,25 @@ helpers:
   - login: noamr
     share: 1
     knows:
+      - "a11y-tracker"
+      - "topic: agent"
+      - "topic: dynamic markup insertion"
+      - "topic: embed and object"
       - "topic: img"
-      - "topic: link"
+      - "topic: imports/exports"
+      - "topic: links"
       - "topic: media"
       - "topic: navigation"
+      - "topic: navigation api"
       - "topic: parser"
+      - "topic: resource hints (inc. preload)"
       - "topic: sanitizer"
+      - "topic: script"
+      - "topic: selectors"
+      - "topic: serialize and transfer"
+      - "topic: storage"
+      - "topic: style"
+      - "topic: timers and user prompts"
 
 response_targets:
   initial_editor_response_days: 7
@@ -180,18 +304,20 @@ routing:
 # reports the pages no label covers.
 topics:
   "topic: canvas": [canvas, imagebitmap-and-animations]
-  "topic: cross-origin-opener-policy": [browsers]
+  "topic: cross-origin isolation": [browsers]
   "topic: custom elements": [custom-elements]
   "topic: custom protocols": [system-state]
   "topic: dialog": [interactive-elements]
   "topic: drag and drop": [dnd]
+  "topic: dynamic markup insertion": [dynamic-markup-insertion]
   "topic: embed and object": [iframe-embed-object]
   "topic: eventsource": [server-sent-events]
+  "topic: fetch": [urls-and-fetching]
   "topic: focus": [interaction]
   "topic: forms": [forms, form-control-infrastructure, input]
   "topic: frames/navigables/browsing contexts": [document-sequences, iframe-embed-object]
   "topic: img": [images, embedded-content]
-  "topic: link": [links]
+  "topic: links": [links]
   "topic: media": [media]
   "topic: navigation": [nav-history-apis, browsing-the-web, document-lifecycle]
   "topic: origin": [origin]
@@ -202,11 +328,14 @@ topics:
   "topic: sanitizer": [dynamic-markup-insertion]
   "topic: script": [webappapis, scripting]
   "topic: select": [form-elements]
+  "topic: selectors": [semantics-other]
+  "topic: semantics": [dom, semantics, sections, grouping-content, text-level-semantics, microdata]
   "topic: serialize and transfer": [structured-data, web-messaging]
   "topic: storage": [webstorage]
   "topic: table": [tables]
-  "topic: timing": [timers-and-user-prompts]
-  "topic: workers": [workers, worklets]
+  "topic: timers and user prompts": [timers-and-user-prompts]
+  "topic: url": [urls-and-fetching]
+  "topic: workers and worklets": [workers, worklets]
   "removal/deprecation": [obsolete]
   # Areas of knowledge that are not a spec page: declarable in `knows:`, and a topic of
   # any item that carries them.
@@ -217,6 +346,19 @@ topics:
   "document conformance": [syntax]
   "spec tooling": []
   "dev edition": []
+
+# Labels proposed to be renamed or merged, under the name that replaces them. An item
+# with an old label counts as the new one, and `knows:` and `teams:` accept either, so
+# the new names work before the labels are changed on GitHub. Suggestions only ever
+# name a label that exists. topic: semantics is new and needs no alias.
+topic_aliases:
+  "topic: cross-origin isolation": ["topic: cross-origin-opener-policy", "topic: cross-origin-embedder-policy"]
+  "topic: links": ["topic: link", "topic: hyperlink"]
+  "topic: forms": ["topic: fieldset"]
+  "topic: navigation": ["topic: location"]
+  "topic: workers and worklets": ["topic: workers", "topic: worklets"]
+  "topic: timers and user prompts": ["topic: timing"]
+  "topic: dynamic markup insertion": ["topic: document.open()"]
 
 # Spec pages every change touches, which say nothing about its topic.
 ignore_pages:

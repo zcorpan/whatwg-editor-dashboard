@@ -180,6 +180,10 @@ class DashboardConfig:
     # counts as being about the labels that cover it, so `knows:` only needs labels.
     # Every key is a topic label, `topic:` prefix or not.
     topic_pages: tuple[tuple[str, frozenset[str]], ...] = ()
+    # Old label -> the name that replaces it, both lowercased, so a renamed or merged
+    # label can be used under its new name before GitHub has it, and the old one keeps
+    # counting afterwards.
+    topic_aliases: tuple[tuple[str, str], ...] = ()
 
     @property
     def people(self) -> frozenset[str]:
@@ -192,8 +196,13 @@ class DashboardConfig:
     def knows_of(self, login: str) -> frozenset[str]:
         return dict(self.knows).get(login, frozenset())
 
+    def canonical_label(self, label: str) -> str:
+        """A label's lowercased current name: the one it was renamed or merged into, if any."""
+        lowered = label.strip().lower()
+        return dict(self.topic_aliases).get(lowered, lowered)
+
     def is_topic_label(self, label: str) -> bool:
-        lowered = label.lower()
+        lowered = self.canonical_label(label)
         return lowered.startswith(self.issues.topic_label_prefix) or lowered in dict(self.topic_pages)
 
     def labels_for_page(self, page: str) -> tuple[str, ...]:
@@ -483,6 +492,21 @@ def load_config(path: str | Path) -> DashboardConfig:
             raise ValueError(f"topics.{label}: {', '.join(ignored)} in ignore_pages, so they say nothing")
         topic_pages[topic] = values
 
+    aliases_raw = _mapping(raw.get("topic_aliases", {}), "topic_aliases")
+    aliases: dict[str, str] = {}
+    for new, old_labels in aliases_raw.items():
+        canonical = str(new).strip().lower()
+        if not isinstance(old_labels, list) or not old_labels:
+            raise ValueError(f"topic_aliases.{new} must be a non-empty list of the labels it replaces")
+        for old in old_labels:
+            alias = str(old).strip().lower()
+            if alias in aliases and aliases[alias] != canonical:
+                raise ValueError(f"topic_aliases: {old} is replaced by both {aliases[alias]} and {new}")
+            aliases[alias] = canonical
+    stale = sorted(set(aliases) & set(topic_pages))
+    if stale:
+        raise ValueError(f"topics: list {', '.join(stale)} under the name that replaces it, not the old one")
+
     knows: dict[str, frozenset[str]] = {}
     for login, declared in knows_raw.items():
         keys = set()
@@ -490,6 +514,7 @@ def load_config(path: str | Path) -> DashboardConfig:
             text = str(entry).strip().lower()
             if not text:
                 raise ValueError(f"knows of @{login} has an empty entry")
+            text = aliases.get(text, text)
             if text.startswith(issues.topic_label_prefix) or text in topic_pages:
                 keys.add(f"label:{text}")
             else:
@@ -510,6 +535,8 @@ def load_config(path: str | Path) -> DashboardConfig:
         shares=tuple(sorted(shares.items())),
         knows=tuple(sorted(knows.items())),
         topic_pages=tuple(sorted(topic_pages.items())),
+        # In file order: before a merge, the first old label listed is the one suggested.
+        topic_aliases=tuple(aliases.items()),
         response_targets=targets,
         attention=attention,
         ready_bounded=bounded,
