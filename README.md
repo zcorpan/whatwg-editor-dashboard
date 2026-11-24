@@ -46,7 +46,7 @@ Issues use the same rules where the meaning carries over. Only issues opened, or
 
 ## Health view
 
-Four trends over twelve weeks: open pull requests, contributors waiting past the first-response target, and the shares of contributor PRs and new issues answered inside it, each with its good direction and a verdict when it is off target or getting worse. Then how the work divides: merges by week split by editor, reviews, first replies, and a **Who did what** table per editor and helper.
+Four trends over twelve weeks: open pull requests, contributors waiting past the first-response target, and the shares of contributor PRs and new issues answered inside it, each saying whether it is on target and how it changed. Then how the work divides: merges by week split by editor, reviews, first replies, and a **Who did what** table per editor and helper.
 
 The weekly backlog is reconstructed from the current sample rather than stored. The newest week never counts toward the response rate, because its PRs can't have missed the target yet. Wording describes event order, not causation: "merged after a review", never "because of".
 

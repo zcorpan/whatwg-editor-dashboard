@@ -1014,27 +1014,31 @@ function changePhrase(change, {unit = "", period}) {
   return `${direction} ${numberFormat(Math.round(Math.abs(change)))}${unit} ${period}`;
 }
 
-function deltaChip(change, {lowerIsBetter, unit = "", period}) {
-  if (change === null || change === undefined) {
-    return element("span", {className: "trend-delta", dataset: {tone: "flat"}, text: "no comparison yet"});
-  }
-  const improving = lowerIsBetter ? change < 0 : change > 0;
-  const tone = change === 0 ? "flat" : improving ? "good" : "bad";
-  return element("span", {className: "trend-delta", dataset: {tone}}, [
-    element("span", {className: "trend-arrow", text: change === 0 ? "→" : change < 0 ? "▼" : "▲", attrs: {"aria-hidden": "true"}}),
-    changePhrase(change, {unit, period}),
-  ]);
+// One line per card saying whether it is on target, with the change across the
+// window. The tone is the judgement metrics.py made, never the direction alone:
+// improving while still below target is not good news yet.
+const STATUS_TONES = {on_track: "good", watch: "warning", off_track: "bad", unknown: "flat"};
+
+function statusLine(status, {problem, change, unit = "", period}) {
+  const verdict = {on_track: "On target", unknown: "Not enough data yet"}[status] || `Needs attention: ${problem}`;
+  const delta = change === null || change === undefined ? "" : changePhrase(change, {unit, period});
+  return element("p", {
+    className: "trend-status",
+    dataset: {tone: STATUS_TONES[status] || "flat"},
+    text: delta ? `${verdict}, ${delta}` : verdict,
+  });
 }
 
-function trendCard({title, value, chart, delta, hint, status}) {
+function trendCard({title, value, chart, note, statusText, hint, status}) {
   return element("article", {className: "trend-card", dataset: {status}}, [
     element("h2", {className: "trend-title", text: title}),
     element("div", {className: "trend-headline"}, [
       element("strong", {className: "trend-value", text: value}),
-      delta,
+      note,
     ]),
     chart,
     element("p", {className: "trend-hint", text: hint}),
+    statusText,
   ]);
 }
 
@@ -1156,7 +1160,7 @@ function renderHealth() {
       title: backlog.label,
       status: backlog.status,
       value: numberFormat(backlog.value),
-      delta: deltaChip(backlog.change, {lowerIsBetter: true, period}),
+      statusText: statusLine(backlog.status, {problem: "growing", change: backlog.change, period}),
       hint: "Open pull requests at the end of each week. Fewer is better.",
       chart: lineChart(points.map(point => point.open_prs), {
         labels: pointLabels,
@@ -1169,7 +1173,7 @@ function renderHealth() {
       title: overdue.label,
       status: overdue.status,
       value: numberFormat(overdue.value),
-      delta: deltaChip(overdue.change, {lowerIsBetter: true, period}),
+      statusText: statusLine(overdue.status, {problem: "growing", change: overdue.change, period}),
       hint: `Open contributor PRs with no editor reply after ${targetDays} days. Fewer is better.`,
       chart: lineChart(points.map(point => point.overdue_first_response), {
         labels: pointLabels,
@@ -1182,7 +1186,12 @@ function renderHealth() {
       title: rate.label,
       status: rate.status,
       value: percentText(rate.percent),
-      delta: deltaChip(rate.change, {lowerIsBetter: false, unit: " points", period: "vs the earlier weeks"}),
+      statusText: statusLine(rate.status, {
+        problem: `below ${rate.target_percent}%`,
+        change: rate.change,
+        unit: " points",
+        period: "vs the earlier weeks",
+      }),
       hint: `Share of contributor PRs answered inside ${targetDays} days. Target ${rate.target_percent}%. Higher is better.`,
       chart: lineChart(rateValues, {
         labels: rateLabels,
@@ -1201,7 +1210,8 @@ function renderHealth() {
       title: issueRate.label,
       status: issueRate.status,
       value: percentText(issueRate.percent),
-      delta: element("span", {className: "chip muted", text: `${numberFormat(issueRate.within_target_by_editors)} of ${numberFormat(issueRate.within_target)} by editors`}),
+      note: element("span", {className: "chip muted", text: `${numberFormat(issueRate.within_target_by_editors)} of ${numberFormat(issueRate.within_target)} by editors`}),
+      statusText: statusLine(issueRate.status, {problem: `below ${issueRate.target_percent}%`}),
       hint: `Share of new contributor issues with a comment, label or close by an editor or helper inside ${targetDays} days. Target ${issueRate.target_percent}%. Higher is better.`,
       chart: lineChart(issueBuckets.map(bucket => (
         bucket.first_response_eligible ? (bucket.first_response_within_target / bucket.first_response_eligible) * 100 : null
@@ -1217,24 +1227,6 @@ function renderHealth() {
   renderWhoseMove();
   renderTeam();
 
-  const problems = [
-    backlog.status === "on_track" ? null : `the backlog is ${changePhrase(backlog.change, {period})}`,
-    overdue.status === "on_track" ? null : `contributors waiting over ${targetDays} days are ${changePhrase(overdue.change, {period})}`,
-    rate.status === "on_track" || rate.percent === null
-      ? null
-      : `${percentText(rate.percent)} of contributor PRs get a first reply within ${targetDays} days, below the ${rate.target_percent}% target`,
-  ].filter(Boolean);
-  const verdict = document.querySelector("#health-verdict");
-  verdict.dataset.status = health.overall_status;
-  // The verdict itself is the only bold part; the sentence after it reads as prose.
-  const [label, detail] = problems.length
-    ? ["Needs attention:", ` ${problems.join("; ")}.`]
-    : [
-        "On target:",
-        ` the backlog is ${changePhrase(backlog.change, {period})}, and ${percentText(rate.percent)}` +
-          ` of contributor PRs get a first reply within ${targetDays} days.`,
-      ];
-  verdict.replaceChildren(element("strong", {text: label}), detail);
 
   document.querySelector("#trend-table tbody").replaceChildren(...buckets.map((bucket, index) => {
     const point = points[index + 1];

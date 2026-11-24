@@ -618,23 +618,13 @@ main {
 .legend-swatch.series-other { background: var(--series-other); }
 .legend-swatch.series-rest { background: var(--series-rest); }
 
-.verdict {
-  margin: 0 0 1.3rem;
-  padding: .8rem 1rem;
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--border-strong);
-  border-radius: .7rem;
-  background: var(--surface);
-}
-.verdict[data-status="on_track"] { border-left-color: var(--positive); }
-.verdict[data-status="watch"] { border-left-color: var(--warning); }
-.verdict[data-status="off_track"] { border-left-color: var(--danger); }
-
 .trend-cards {
   display: grid;
   gap: .8rem;
 }
 .trend-card {
+  display: flex;
+  flex-direction: column;
   padding: 1rem 1.1rem 1.1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -643,21 +633,20 @@ main {
 .trend-title { margin: 0; font-size: .85rem; font-weight: 650; color: var(--muted); }
 .trend-headline { display: flex; align-items: baseline; flex-wrap: wrap; gap: .55rem; margin-top: .4rem; }
 .trend-value { font-size: 2.4rem; line-height: 1; font-weight: 820; letter-spacing: -.045em; }
-.trend-delta {
-  display: inline-flex;
-  align-items: center;
-  gap: .3rem;
-  padding: .15rem .55rem;
-  border-radius: 999px;
+/* Pushed to the bottom, so the status lines of a row of cards line up. */
+.trend-status {
+  margin: auto 0 0;
+  padding: .3rem .6rem;
+  border-radius: .5rem;
   background: var(--surface-subtle);
   color: var(--muted);
-  font-size: .74rem;
+  font-size: .76rem;
   font-weight: 700;
 }
-.trend-delta[data-tone="good"] { background: var(--positive-soft); color: var(--positive); }
-.trend-delta[data-tone="bad"] { background: var(--danger-soft); color: var(--danger); }
-.trend-arrow { font-size: .85em; }
-.trend-hint { margin: .55rem 0 0; color: var(--muted); font-size: .74rem; }
+.trend-status[data-tone="good"] { background: var(--positive-soft); color: var(--positive); }
+.trend-status[data-tone="warning"] { background: var(--warning-soft); color: var(--warning); }
+.trend-status[data-tone="bad"] { background: var(--danger-soft); color: var(--danger); }
+.trend-hint { margin: .55rem 0 .8rem; color: var(--muted); font-size: .74rem; }
 
 .chart-data { margin-top: 1.1rem; }
 .chart-data > summary { color: var(--muted); font-size: .78rem; cursor: pointer; }
