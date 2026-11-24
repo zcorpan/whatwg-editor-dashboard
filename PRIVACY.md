@@ -6,6 +6,10 @@ The scheduled build requests public data from `whatwg/html` and publishes a deri
 
 It does not publish complete PR descriptions, complete comment or review bodies, a GitHub notification inbox, authentication tokens, or browser-local workflow state. Task-list labels and classification labels can quote small pieces of public PR descriptions because they are part of the displayed public evidence.
 
+## Build state between runs
+
+So that a daily build only fetches what changed, each build leaves the raw GraphQL responses it worked from in `.state/snapshot.json.gz`, which the workflow keeps in the repository's Actions cache. Unlike `data.json`, the snapshot holds complete public PR descriptions and comment and review bodies, exactly as GitHub returned them. It contains nothing that isn't public on GitHub and no credentials, but it is never copied into `site/` or published. Actions cache entries are readable only by workflows in this repository and expire after seven days without use, at which point the next build simply fetches everything again.
+
 ## Browser-local state
 
 The static page stores these values in `localStorage`:

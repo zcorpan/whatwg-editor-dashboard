@@ -6,10 +6,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .assignments import apply_assignments
+from .issue_analysis import analyze_issues, linked_issues_by_pr
+from .spec_pages import SpecPages
 from .analysis import ALL_EDITORS, analyze_all, build_lanes, build_perspective_lanes, perspective_keys
 from .config import DashboardConfig
 from .github import RepositoryData
-from .metrics import build_metrics
+from .accountability import build_people
+from .metrics import TREND_BUCKET_DAYS, TREND_WINDOW_DAYS, build_metrics
 from .models import isoformat
 
 
@@ -28,15 +32,19 @@ LANE_DESCRIPTIONS = {
     },
     "rereview": {
         "title": "Re-review owed",
-        "description": "The PR changed or the author replied after the selected editor's latest sampled review.",
+        "description": "The PR changed or the author replied after the selected editor's latest sampled review, and the next move is an editor's.",
+    },
+    "land": {
+        "title": "Ready to land",
+        "description": "The selected editor approved the current head, no other editor's latest review requests changes, and no template checklist item is left unticked. A merge conflict is shown but does not hold a PR here.",
     },
     "reply_window": {
         "title": "Reply window open",
-        "description": "Non-draft contributor PRs that have never received a sampled editor response and are still inside the response target, closest to the deadline first. The only ones where a first reply can still meet the target.",
+        "description": "Contributor PRs that have never received a sampled editor response and are still inside the response target, closest to the deadline first. The only ones where a first reply can still meet the target.",
     },
     "overdue": {
         "title": "First reply overdue",
-        "description": "Non-draft contributor PRs that have never received a sampled editor response and are past the response target, oldest first.",
+        "description": "Contributor PRs that have never received a sampled editor response and are past the response target, oldest first.",
     },
     "oldest_wait": {
         "title": "Longest waits",
@@ -46,9 +54,21 @@ LANE_DESCRIPTIONS = {
         "title": "Ready",
         "description": "A deterministic quick-win heuristic: mergeable, no detected blocker, bounded diff, and sufficient description-checklist completion.",
     },
+    "stale_author": {
+        "title": "Long wait on author",
+        "description": "The next move has been the author's for a long time: an editor requested changes or replied last. Candidates to ping or close, longest first.",
+    },
+    "triage": {
+        "title": "Needs triage",
+        "description": "Issues opened inside the issue window that have no topic label yet, oldest first. Labeling one is a first response.",
+    },
+    "routed": {
+        "title": "Routed to you",
+        "description": "Unanswered PRs and issues nobody was asked about directly, each routed to one person by topic expertise and recent load, oldest first. The card says why.",
+    },
     "all": {
         "title": "All open",
-        "description": "Every open pull request ordered by latest public GitHub update.",
+        "description": "Every open pull request that is ready for review, and every open issue in another lane, ordered by latest public GitHub update.",
     },
 }
 
@@ -75,8 +95,16 @@ def _perspective_options(config: DashboardConfig) -> list[dict[str, Any]]:
     return [
         {
             "key": key,
-            "label": "All editors" if key == ALL_EDITORS else f"@{key}",
+            "label": (
+                "All editors"
+                if key == ALL_EDITORS
+                else f"@{key} (helper)"
+                if key in config.helpers
+                else f"@{key}"
+            ),
+            # Whether the option can be an identity: every person, editor or helper.
             "editor": key != ALL_EDITORS,
+            "role": None if key == ALL_EDITORS else "helper" if key in config.helpers else "editor",
         }
         for key in perspective_keys(config)
     ]
@@ -89,6 +117,20 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
             _queue_order_principle(config),
             "The attention lanes are computed for every configured editor, so the queue can be read from any one editor's perspective or from all of them at once.",
             "Which editor you are is chosen in the browser and stored only there; the build has no configured viewer and the published data names nobody as the reader.",
+            (
+                "Draft pull requests are left out of every lane and every health figure. A PR that was "
+                "a draft is counted from when it was last marked ready for review, not from when it was opened."
+            ),
+            (
+                "Every item says whose move it is. Labels decide first, then an unaddressed change request, "
+                "a current approval, and finally who acted last; a merge conflict or failing checks never hand a PR back to its author."
+            ),
+            (
+                "Unanswered contributor items nobody was asked about are routed to one person by the topics each person "
+                "declares in the dashboard configuration and by recent load. A routing decision never changes once made "
+                "unless the configuration or the item's topics do."
+            ),
+            "Suggested labels and GitHub teams are only suggestions: nothing is ever applied or mentioned automatically.",
             "The generated site contains public GitHub data only.",
             "Seen, addressed, pinned, snoozed, and opened state is stored only in the browser.",
             "Description checklist completion is descriptive and is not an assessment of test sufficiency or specification readiness.",
@@ -147,13 +189,25 @@ def _methodology(config: DashboardConfig) -> dict[str, Any]:
             "The configured current editor list is applied to the full sampled history; historical editor-membership changes are not reconstructed.",
             (
                 "The weekly trend replays today's PR data at past moments. Draft state, authorship and "
-                "editor membership are taken as they are now, so a PR that left draft during the window "
-                "counts across the whole of it."
+                "editor membership are taken as they are now: a PR that is a draft today is absent from "
+                "the whole window, and one that was converted back to draft and readied again counts only "
+                "from the latest time it was marked ready."
             ),
             "A PR description edit is attributed to the PR author because the sampled API data does not identify who edited the description.",
-            "First-response clocks use PR creation time for non-draft PRs; this MVP does not reconstruct when a formerly draft PR became ready for review.",
+            (
+                "First-response clocks start when a PR was last marked ready for review. An editor reply "
+                "to the draft still counts as the first response, so it meets the target."
+            ),
             "A ready-and-bounded result is a prioritization hint, not a merge recommendation.",
             "No claim is made about actual test coverage, implementer interest, web compatibility, or consensus quality.",
+            (
+                "Spec pages come from the heading that precedes each changed line in the current HTML source; a change under "
+                "a heading renamed since is not attributed to any page."
+            ),
+            (
+                "The team section counts public events per person. It says nothing about work that leaves no public trace on "
+                "this repository, such as reviews elsewhere, meetings, or implementation work."
+            ),
         ],
     }
 
@@ -164,21 +218,70 @@ def build_site(
     *,
     output_dir: str | Path,
     now: datetime | None = None,
+    spec: SpecPages | None = None,
 ) -> dict[str, Any]:
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
 
-    open_analyses = analyze_all(repository_data.open_pull_requests, config, now=now)
+    # Issues first: an issue an open PR claims to fix is folded into that PR's card,
+    # so the PR's analysis needs the issue's.
+    open_numbers = frozenset(pr.number for pr in repository_data.open_pull_requests)
+    issue_analyses = analyze_issues(
+        repository_data.open_issues, config, now=now, open_pull_requests=open_numbers
+    )
+    open_analyses = analyze_all(
+        repository_data.open_pull_requests,
+        config,
+        now=now,
+        dependency_states=repository_data.dependency_states,
+        linked_issues=linked_issues_by_pr(issue_analyses, config, now=now),
+    )
     closed_analyses = analyze_all(repository_data.recently_closed_pull_requests, config, now=now)
-    lanes = build_lanes(open_analyses, config.repository.slug)
-    perspective_lanes = build_perspective_lanes(open_analyses, config)
-    metrics = build_metrics(open_analyses, closed_analyses, config, now=now)
+    closed_issue_analyses = analyze_issues(repository_data.recently_closed_issues, config, now=now)
+    # Only issues something asks about are published; the rest of the open issues
+    # would multiply data.json for nothing a lane shows.
+    published_issues = [analysis for analysis in issue_analyses if analysis.in_any_lane()]
+    queued = [*open_analyses, *published_issues]
+    lanes = build_lanes(queued, config.repository.slug)
+    perspective_lanes = build_perspective_lanes(queued, config)
+    metrics = build_metrics(
+        open_analyses,
+        closed_analyses,
+        config,
+        now=now,
+        issue_analyses=[*issue_analyses, *closed_issue_analyses],
+    )
 
     items = [
         analysis.to_public_dict(config.repository.slug)
-        for analysis in sorted(open_analyses, key=lambda value: value.pr.number)
+        for analysis in sorted(queued, key=lambda value: value.number)
     ]
+    assignments = apply_assignments(
+        items={item["key"]: item for item in items},
+        open_prs=open_analyses,
+        closed_prs=closed_analyses,
+        open_issues=issue_analyses,
+        closed_issues=closed_issue_analyses,
+        history=repository_data.history,
+        spec=spec or SpecPages(),
+        perspective_lanes=perspective_lanes,
+        config=config,
+        now=now,
+        repository_labels=repository_data.labels,
+    )
+    metrics["people"] = build_people(
+        prs=[*open_analyses, *closed_analyses],
+        issues=[*issue_analyses, *closed_issue_analyses],
+        history=repository_data.history,
+        items=items,
+        decisions=assignments.decisions,
+        candidates=assignments.candidates,
+        config=config,
+        now=now,
+        window_days=TREND_WINDOW_DAYS,
+        bucket_days=TREND_BUCKET_DAYS,
+    )
 
     payload: dict[str, Any] = {
         "schema_version": 2,

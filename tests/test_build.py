@@ -59,7 +59,7 @@ class BuildTests(unittest.TestCase):
             payload["suggested_next"],
             {
                 "active": "all",
-                "cycle": ["rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct"],
+                "cycle": ["land", "rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct", "stale_author"],
                 "first_response_lead": 3,
             },
         )
@@ -68,7 +68,11 @@ class BuildTests(unittest.TestCase):
 
         # The browser resolves the lead against `items`, so every key has to be there.
         item_keys = {item["key"] for item in payload["items"]}
-        self.assertEqual(payload["lanes"]["reply_window"], ["whatwg/html#13001", "whatwg/html#13003"])
+        # Issue #14001 is new and unanswered too, and the lane orders PRs and issues alike.
+        self.assertEqual(
+            payload["lanes"]["reply_window"],
+            ["whatwg/html#13001", "whatwg/html#14001", "whatwg/html#13003"],
+        )
         self.assertTrue(set(payload["lanes"]["reply_window"]) <= item_keys)
 
         principles = " ".join(payload["methodology"]["principles"])
@@ -84,12 +88,13 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(
             payload["perspectives"]["options"],
             [
-                {"key": "all-editors", "label": "All editors", "editor": False},
-                {"key": "annevk", "label": "@annevk", "editor": True},
-                {"key": "domenic", "label": "@domenic", "editor": True},
-                {"key": "domfarolino", "label": "@domfarolino", "editor": True},
-                {"key": "foolip", "label": "@foolip", "editor": True},
-                {"key": "zcorpan", "label": "@zcorpan", "editor": True},
+                {"key": "all-editors", "label": "All editors", "editor": False, "role": None},
+                {"key": "annevk", "label": "@annevk", "editor": True, "role": "editor"},
+                {"key": "domenic", "label": "@domenic", "editor": True, "role": "editor"},
+                {"key": "domfarolino", "label": "@domfarolino", "editor": True, "role": "editor"},
+                {"key": "foolip", "label": "@foolip", "editor": True, "role": "editor"},
+                {"key": "noamr", "label": "@noamr (helper)", "editor": True, "role": "helper"},
+                {"key": "zcorpan", "label": "@zcorpan", "editor": True, "role": "editor"},
             ],
         )
 
@@ -119,7 +124,8 @@ class BuildTests(unittest.TestCase):
         annevk = next(item for item in payload["items"] if item["number"] == 13009)
         self.assertIn("direct", annevk["perspectives"]["annevk"]["lanes"])
         self.assertNotIn("direct", annevk["perspectives"]["zcorpan"]["lanes"])
-        self.assertEqual(payload["perspective_lanes"]["annevk"]["direct"], ["whatwg/html#13009"])
+        # #13001 through the mention on #14003, the issue it fixes.
+        self.assertEqual(payload["perspective_lanes"]["annevk"]["direct"], ["whatwg/html#13001", "whatwg/html#13009"])
 
     def test_frontend_avoids_dynamic_inner_html(self) -> None:
         javascript = (ROOT / "web" / "app.js").read_text(encoding="utf-8")

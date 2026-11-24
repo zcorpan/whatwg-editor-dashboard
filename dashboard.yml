@@ -5,12 +5,212 @@ repository:
 # Current HTML editors. These are public identities: they are the queue perspectives,
 # the rows of the editor-impact section, and the population of the response-time
 # metrics. Which one is *you* is chosen in the browser, not here.
+#
+# Each entry is a login, or a mapping with `login`, a `share` of routed work (default
+# 1; 0 never routes anything), a `status`, and `knows`. A `retired` editor keeps a
+# queue perspective and still counts as an editor response, but only direct requests
+# reach them.
+#
+# `knows` is what routing goes by: labels, which cover spec pages through `topics:`
+# below (a page no label covers can be named directly, `sections` for sections.html).
+# It is declared, not computed, because merged-PR history misses design done
+# elsewhere and follows volume.
+#
+# DRAFT, for each person to prune and extend: seeded with every topic where they hold
+# at least 10% of the credit in merged-PR history (`dashboard.py expertise`) or belong
+# to the matching @whatwg team. Topics nobody else covered fall back to zcorpan.
 editors:
-  - annevk
-  - domenic
-  - domfarolino
-  - foolip
-  - zcorpan
+  - login: annevk
+    knows:
+      - "accessibility"
+      - "document conformance"
+      - "element semantics"
+      - "i18n-tracker"
+      - "removal/deprecation"
+      - "security/privacy"
+      - "topic: agent"
+      - "topic: button"
+      - "topic: canvas"
+      - "topic: close watchers"
+      - "topic: cross-origin isolation"
+      - "topic: custom elements"
+      - "topic: custom protocols"
+      - "topic: dialog"
+      - "topic: document lifecycle"
+      - "topic: document metadata"
+      - "topic: drag and drop"
+      - "topic: dynamic markup insertion"
+      - "topic: embed and object"
+      - "topic: event loop"
+      - "topic: events"
+      - "topic: eventsource"
+      - "topic: fetch"
+      - "topic: focus"
+      - "topic: forms"
+      - "topic: frames/navigables/browsing contexts"
+      - "topic: grouping content"
+      - "topic: history"
+      - "topic: img"
+      - "topic: javascript: urls"
+      - "topic: links"
+      - "topic: mathml"
+      - "topic: media"
+      - "topic: messaging"
+      - "topic: multiple globals"
+      - "topic: navigation"
+      - "topic: navigation api"
+      - "topic: origin"
+      - "topic: parser"
+      - "topic: popover"
+      - "topic: reflect"
+      - "topic: rendering"
+      - "topic: resource hints (inc. preload)"
+      - "topic: sanitizer"
+      - "topic: script"
+      - "topic: sections"
+      - "topic: select"
+      - "topic: selectors"
+      - "topic: serialize and transfer"
+      - "topic: shadow"
+      - "topic: storage"
+      - "topic: style"
+      - "topic: svg"
+      - "topic: table"
+      - "topic: text-level semantics"
+      - "topic: timers and user prompts"
+      - "topic: url"
+      - "topic: websockets"
+      - "topic: workers and worklets"
+  - login: domenic
+    status: retired
+    knows:
+      - "dev edition"
+      - "document conformance"
+      - "element semantics"
+      - "removal/deprecation"
+      - "security/privacy"
+      - "spec tooling"
+      - "topic: canvas"
+      - "topic: close watchers"
+      - "topic: cross-origin isolation"
+      - "topic: custom elements"
+      - "topic: custom protocols"
+      - "topic: dialog"
+      - "topic: document lifecycle"
+      - "topic: document metadata"
+      - "topic: drag and drop"
+      - "topic: editing"
+      - "topic: embed and object"
+      - "topic: error reporting"
+      - "topic: event loop"
+      - "topic: events"
+      - "topic: fetch"
+      - "topic: focus"
+      - "topic: forms"
+      - "topic: frames/navigables/browsing contexts"
+      - "topic: grouping content"
+      - "topic: history"
+      - "topic: imports/exports"
+      - "topic: javascript: urls"
+      - "topic: links"
+      - "topic: multiple globals"
+      - "topic: navigation"
+      - "topic: origin"
+      - "topic: policy container"
+      - "topic: popover"
+      - "topic: reflect"
+      - "topic: resource hints (inc. preload)"
+      - "topic: sandbox"
+      - "topic: script"
+      - "topic: sections"
+      - "topic: shadow"
+      - "topic: style"
+      - "topic: text-level semantics"
+      - "topic: user activation"
+      - "topic: websockets"
+      - "topic: workers and worklets"
+  - login: domfarolino
+    knows:
+      - "topic: event loop"
+      - "topic: imports/exports"
+      - "topic: script"
+      - "topic: workers and worklets"
+  - login: foolip
+    knows:
+      - "topic: media"
+      - "topic: user activation"
+  - login: zcorpan
+    knows:
+      - "a11y-tracker"
+      - "accessibility"
+      - "dev edition"
+      - "document conformance"
+      - "element semantics"
+      - "removal/deprecation"
+      - "security/privacy"
+      - "spec tooling"  # fallback: nobody else covers it
+      - "topic: button"
+      - "topic: cookie"  # fallback: nobody else covers it
+      - "topic: document metadata"
+      - "topic: dynamic markup insertion"
+      - "topic: editing"  # fallback: nobody else covers it
+      - "topic: embed and object"
+      - "topic: error reporting"  # fallback: nobody else covers it
+      - "topic: events"
+      - "topic: forms"
+      - "topic: frames/navigables/browsing contexts"
+      - "topic: grouping content"
+      - "topic: img"
+      - "topic: javascript: urls"
+      - "topic: mathml"
+      - "topic: media"
+      - "topic: messaging"
+      - "topic: navigation"
+      - "topic: navigation api"
+      - "topic: origin"
+      - "topic: parser"
+      - "topic: policy container"  # fallback: nobody else covers it
+      - "topic: rendering"
+      - "topic: ruby"  # fallback: nobody else covers it
+      - "topic: sandbox"  # fallback: nobody else covers it
+      - "topic: sanitizer"
+      - "topic: sections"
+      - "topic: select"
+      - "topic: selectors"
+      - "topic: storage"
+      - "topic: style"
+      - "topic: svg"
+      - "topic: table"
+      - "topic: text-level semantics"
+      - "topic: timers and user prompts"
+      - "topic: user activation"
+      - "topic: xml"
+
+# Non-editors who review regularly enough to take routed review work. They get their
+# own queue perspective but are not editors for any metric.
+helpers:
+  - login: noamr
+    share: 1
+    knows:
+      - "a11y-tracker"
+      - "topic: agent"
+      - "topic: dynamic markup insertion"
+      - "topic: embed and object"
+      - "topic: img"
+      - "topic: imports/exports"
+      - "topic: links"
+      - "topic: media"
+      - "topic: navigation"
+      - "topic: navigation api"
+      - "topic: parser"
+      - "topic: resource hints (inc. preload)"
+      - "topic: sanitizer"
+      - "topic: script"
+      - "topic: selectors"
+      - "topic: serialize and transfer"
+      - "topic: storage"
+      - "topic: style"
+      - "topic: timers and user prompts"
 
 response_targets:
   initial_editor_response_days: 7
@@ -34,8 +234,6 @@ blocking_labels:
   - do not merge yet
   - needs implementer interest
   - needs tests
-  - needs work
-  - blocked
 
 sampling:
   # The outer page is deliberately small because each PR includes several nested samples.
@@ -55,8 +253,166 @@ suggested_next:
   # Then everything in the "active now" lane, newest activity first.
   # Remaining lanes are interleaved so the backlog cannot be starved by new work.
   cycle:
+    - land
     - rereview
     - overdue
     - oldest_wait
     - ready_bounded
     - stale_direct
+    - stale_author
+
+incremental:
+  # With a stored snapshot (`build --state DIR`), a build only fetches PRs updated since
+  # the previous one. A full fetch still runs at least this often, because some changes
+  # (an edited or deleted comment) never move a PR's updatedAt.
+  full_every_days: 7
+  # Look this far before the previous build's start, in case GitHub's search index lags.
+  overlap_hours: 2
+
+waiting_on:
+  # Labels decide whose move a PR is before the conversation does, because a label is
+  # an editor's deliberate statement.
+  meeting_labels:
+    - agenda+
+    - agenda+ f2f
+  # These hold a PR without saying why. If its description names an open PR it depends
+  # on, it waits on that; otherwise the label shows as a warning and the conversation
+  # decides.
+  hold_labels:
+    - do not merge yet
+  party_labels:
+    needs implementer interest: implementers
+    needs compat analysis: compat
+    needs tests: tests
+    needs concrete proposal: proposal
+    needs incubation: proposal
+  # Waiting on the author for longer than this: a candidate to ping or close.
+  stale_author_days: 180
+
+issues:
+  # Issues are queued only if they were opened, or last answered by a contributor,
+  # inside this window; most of whatwg/html's open issues are dormant.
+  window_days: 90
+  # An issue without a label starting with this is in the triage lane.
+  topic_label_prefix: "topic:"
+
+expertise:
+  # Merged PRs since this date (about when whatwg/html moved to PRs) are fetched by
+  # full builds. They teach the topic-label suggester which labels go with which spec
+  # pages, and feed `dashboard.py expertise`, the manual who-knows-what report.
+  # Routing does not read them.
+  since: "2016-01-01"
+  # In that report, a contribution this many days old counts half as much as one today.
+  half_life_days: 365
+
+routing:
+  # Unanswered PRs and issues are each routed to one person, by the topics they declare
+  # (`knows`) and recent load. The prior keeps an item nobody declares spread by load.
+  prior: 0.1
+  load_window_days: 28
+  # Routed-and-answered figures count from here; earlier items had no owner.
+  start: "2026-11-23"
+
+# Which multipage spec pages (images for images.html) each label covers. A change to a
+# page counts as being about the labels that cover it, so `knows:` lists only labels,
+# and an unlabeled change can be suggested its label. Any label listed here is a
+# topic label, `topic:` prefix or not, and can be declared in `knows:`. Seeded from
+# which labels merged PRs on each page carried, then hand-fixed; `build --evaluate`
+# reports the pages no label covers.
+topics:
+  "topic: canvas": [canvas, imagebitmap-and-animations]
+  "topic: cross-origin isolation": [browsers]
+  "topic: custom elements": [custom-elements]
+  "topic: custom protocols": [system-state]
+  "topic: dialog": [interactive-elements]
+  "topic: drag and drop": [dnd]
+  "topic: document metadata": [semantics]
+  "topic: dynamic markup insertion": [dynamic-markup-insertion]
+  "topic: embed and object": [iframe-embed-object]
+  "topic: eventsource": [server-sent-events]
+  "topic: fetch": [urls-and-fetching]
+  "topic: focus": [interaction]
+  "topic: forms": [forms, form-control-infrastructure, input]
+  "topic: frames/navigables/browsing contexts": [document-sequences, iframe-embed-object]
+  "topic: grouping content": [grouping-content]
+  "topic: img": [images, embedded-content, image-maps]
+  "topic: links": [links, "semantics#the-link-element", "text-level-semantics#the-a-element"]
+  "topic: mathml": [embedded-content-other]
+  "topic: media": [media]
+  "topic: messaging": [web-messaging, comms]
+  "topic: navigation": [nav-history-apis, browsing-the-web, document-lifecycle]
+  "topic: origin": [origin]
+  "topic: parser": [parsing, named-characters]
+  "topic: popover": [popover]
+  "topic: reflect": [common-dom-interfaces]
+  "topic: resource hints (inc. preload)": [speculative-loading]
+  "topic: rendering": [rendering]
+  "topic: ruby": ["text-level-semantics#the-ruby-element", "text-level-semantics#the-rt-element", "text-level-semantics#the-rp-element"]
+  "topic: sanitizer": [dynamic-markup-insertion]
+  "topic: script": [webappapis, scripting]
+  "topic: sections": [sections]
+  "topic: select": [form-elements]
+  "topic: selectors": [semantics-other]
+  "topic: serialize and transfer": [structured-data]
+  "topic: storage": [webstorage]
+  "topic: style": ["semantics#the-style-element", "dom#the-style-attribute"]
+  "topic: svg": [embedded-content-other]
+  "topic: table": [tables]
+  "topic: text-level semantics": [text-level-semantics]
+  "topic: timers and user prompts": [timers-and-user-prompts]
+  "topic: url": [urls-and-fetching, "semantics#the-base-element"]
+  "topic: workers and worklets": [workers, worklets]
+  "topic: xml": [xhtml]
+  "removal/deprecation": [obsolete]
+  # Not a GitHub label: a catch-all for the element and document pages that no
+  # per-category label (whatwg/html#13322) covers. A section entry (`page#section`,
+  # the spec's anchor for the heading) wins over a whole page.
+  "element semantics": [dom, edits, microdata, common-microsyntaxes]
+  # Areas of knowledge that are not a spec page: declarable in `knows:`, and a topic of
+  # any item that carries them.
+  "accessibility": []
+  "a11y-tracker": []
+  "i18n-tracker": []
+  "security/privacy": []
+  "document conformance": [syntax]
+  "spec tooling": []
+  "dev edition": []
+
+# Keys of topics: that are not GitHub labels. Builds warn about any other label this
+# file names that the repository doesn't have.
+dashboard_labels:
+  - element semantics
+
+# Spec pages every change touches, which say nothing about its topic.
+ignore_pages:
+  - acknowledgements
+  - indices
+  - references
+  - infrastructure
+  - index
+  - introduction
+  - iana
+
+# GitHub teams (whatwg/meta GITHUB-TEAMS.md) and the labels whose items they are a good
+# audience for. Suggested, never mentioned: the triager decides.
+teams:
+  html-parser: ["topic: parser", "topic: xml"]
+  forms: ["topic: forms", "topic: select", "topic: button"]
+  media: ["topic: media"]
+  canvas: ["topic: canvas"]
+  rendering: ["topic: rendering"]
+  components: ["topic: custom elements", "topic: shadow"]
+  cross-origin-isolation: ["topic: cross-origin isolation"]
+  modules: ["topic: script", "topic: imports/exports"]
+  css: ["topic: style", "topic: selectors"]
+  storage: ["topic: storage"]
+  a11y: ["accessibility", "a11y-tracker", "a11y-needs-resolution"]
+  i18n: ["i18n-tracker", "i18n-needs-resolution"]
+  security: ["security/privacy", "security-tracker", "security-needs-resolution"]
+  documentation: ["impacts documentation"]
+
+contributors:
+  # Anyone who isn't an editor or helper but reviewed at least this many other
+  # people's PRs in the twelve-week health window gets their own row, named, with the
+  # numbers that qualified them.
+  min_reviews_of_others: 10

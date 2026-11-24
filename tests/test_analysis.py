@@ -130,8 +130,7 @@ class AnalysisTests(unittest.TestCase):
         unanswered = {
             f"{self.config.repository.slug}#{analysis.pr.number}"
             for analysis in self.analyses
-            if not analysis.pr.is_draft
-            and analysis.pr.author not in self.config.editors
+            if analysis.pr.author not in self.config.editors
             and analysis.first_editor_response is None
             and analysis.first_editor_response_known
         }
@@ -143,28 +142,72 @@ class AnalysisTests(unittest.TestCase):
         target = timedelta(days=self.config.response_targets.initial_editor_response_days)
 
         at_target = analyze_pull_request(
-            replace(self.by_number[13003].pr, created_at=NOW - target),
+            replace(self.by_number[13003].pr, created_at=NOW - target, ready_for_review_at=NOW - target),
             self.config,
             now=NOW,
         )
         self.assertIn("reply_window", at_target.shared_lanes)
         self.assertIn("new-untriaged", {reason.code for reason in at_target.shared_reasons})
 
+        past = NOW - target - timedelta(hours=1)
         past_target = analyze_pull_request(
-            replace(self.by_number[13003].pr, created_at=NOW - target - timedelta(hours=1)),
+            replace(self.by_number[13003].pr, created_at=past, ready_for_review_at=past),
             self.config,
             now=NOW,
         )
         self.assertIn("overdue", past_target.shared_lanes)
         self.assertIn("first-response-overdue", {reason.code for reason in past_target.shared_reasons})
 
-    def test_recent_drafts_are_in_neither_first_response_lane(self) -> None:
-        # #13005 is four days old with no editor response, but a draft is not yet
-        # asking for one, so it must not take a lead slot.
-        analysis = self.by_number[13005]
-        self.assertTrue(analysis.pr.is_draft)
-        self.assertNotIn("reply_window", analysis.shared_lanes)
-        self.assertNotIn("overdue", analysis.shared_lanes)
+    def test_drafts_are_left_out_of_the_data(self) -> None:
+        # #13005 is a draft: it is not asking for a review yet, so it is in no lane.
+        self.assertNotIn(13005, self.by_number)
+        self.assertEqual(self.repository_data.metadata.drafts_excluded, 1)
+        self.assertEqual(self.repository_data.metadata.to_public_dict()["draft_prs_excluded"], 1)
+
+    def test_age_counts_from_the_latest_ready_for_review(self) -> None:
+        # #12900 was opened in March and is overdue; had it been a draft until
+        # yesterday, its first-response clock would only have started then.
+        original = self.by_number[12900]
+        self.assertIn("overdue", original.shared_lanes)
+        readied = analyze_pull_request(
+            replace(
+                original.pr,
+                ready_for_review_at=NOW - timedelta(days=1),
+                ready_for_review_by=original.pr.author,
+            ),
+            self.config,
+            now=NOW,
+        )
+        self.assertEqual(readied.age_hours, 24)
+        self.assertIn("reply_window", readied.shared_lanes)
+        self.assertNotIn("overdue", readied.shared_lanes)
+        chip = next(reason for reason in readied.shared_reasons if reason.code == "new-untriaged")
+        self.assertEqual(chip.timestamp, NOW - timedelta(days=1))
+
+    def test_marking_ready_restarts_the_editor_wait(self) -> None:
+        # @annevk answered #13007 and nobody has spoken since. Marking it ready
+        # afterwards asks for a review again; an editor doing so does not.
+        original = self.by_number[13007]
+        self.assertNotIn("oldest_wait", original.shared_lanes)
+        ready_at = NOW - timedelta(hours=2)
+
+        by_author = analyze_pull_request(
+            replace(original.pr, ready_for_review_at=ready_at, ready_for_review_by=original.pr.author),
+            self.config,
+            now=NOW,
+        )
+        self.assertIn("oldest_wait", by_author.shared_lanes)
+        self.assertEqual(by_author.current_wait_hours, 2)
+        # The reply to the draft still counts as the first response.
+        self.assertEqual(by_author.first_editor_response.author, "annevk")
+        self.assertEqual(by_author.first_editor_response_hours, 0)
+
+        by_editor = analyze_pull_request(
+            replace(original.pr, ready_for_review_at=ready_at, ready_for_review_by="annevk"),
+            self.config,
+            now=NOW,
+        )
+        self.assertNotIn("oldest_wait", by_editor.shared_lanes)
 
     def test_first_time_contributor_detected_without_association(self) -> None:
         self.assertTrue(self.by_number[13011].first_time_contributor)
@@ -183,12 +226,20 @@ class AnalysisTests(unittest.TestCase):
         self.assertNotIn("reply_window", analysis.shared_lanes)
         self.assertNotIn("overdue", analysis.shared_lanes)
 
-    def test_ready_bounded_requires_a_description_checklist(self) -> None:
+    def test_ready_bounded_requires_a_description_checklist_of_normative_prs(self) -> None:
         original = self.by_number[13004]
-        without_checklist = replace(original.pr, body="No task list here.")
-        analysis = analyze_pull_request(without_checklist, self.config, now=NOW)
+        normative = replace(original.pr, title="Align a definition", body="No task list here.")
+        analysis = analyze_pull_request(normative, self.config, now=NOW)
         self.assertNotIn("ready_bounded", analysis.shared_lanes)
         self.assertIn("checklist-missing", {blocker.code for blocker in analysis.blockers})
+
+    def test_an_editorial_pr_needs_no_checklist(self) -> None:
+        # The whatwg/html PR template asks only normative changes to fill it in.
+        original = self.by_number[13004]
+        editorial = replace(original.pr, body="No task list here.")
+        analysis = analyze_pull_request(editorial, self.config, now=NOW)
+        self.assertIn("ready_bounded", analysis.shared_lanes)
+        self.assertFalse({"checklist-missing", "checklist-low"} & {blocker.code for blocker in analysis.blockers})
 
     def test_address_fingerprint_changes_with_public_pr_change(self) -> None:
         original = self.by_number[13003]
@@ -275,10 +326,10 @@ class AnalysisTests(unittest.TestCase):
         }
         self.assertEqual(len(fingerprints), 1)
 
-    def test_every_configured_editor_gets_a_perspective(self) -> None:
+    def test_every_configured_editor_and_helper_gets_a_perspective(self) -> None:
         self.assertEqual(
             tuple(self.by_number[13001].perspectives),
-            (ALL_EDITORS, "annevk", "domenic", "domfarolino", "foolip", "zcorpan"),
+            (ALL_EDITORS, "annevk", "domenic", "domfarolino", "foolip", "noamr", "zcorpan"),
         )
 
     def test_an_editor_only_sees_their_own_direct_signals(self) -> None:

@@ -1,0 +1,15 @@
+# Refetches PRs that closed since the last build. github.py appends the fragments from
+# recent_closed_pull_requests.graphql, so both paths always ask for the same fields.
+query ClosedPullRequestsById($ids: [ID!]!, $timelineEachEnd: Int!, $reviewCount: Int!) {
+  nodes(ids: $ids) {
+    ... on PullRequest {
+      ...ClosedPullRequestFields
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}

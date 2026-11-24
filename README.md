@@ -16,10 +16,20 @@ The review dashboard contains these explainable lanes:
 2. **Direct requests** — review requests and assignments the selected editor currently holds, plus sampled public mentions of them inside the activity window.
 3. **Stale mentions** — mentions older than the activity window, kept findable without leading the queue.
 4. **Re-review owed** — a head commit, PR description, or sampled author activity changed after the selected editor's latest sampled review.
-5. **Reply window open** — non-draft contributor PRs that have never received a sampled editor response and are still inside the seven-day target, closest to the deadline first. The only PRs where a first reply can still meet the target.
+5. **Reply window open** — contributor PRs that have never received a sampled editor response and are still inside the seven-day target, closest to the deadline first. The only PRs where a first reply can still meet the target.
 6. **First reply overdue** — the same population past the target, oldest first. A PR that misses the target moves here rather than leaving the pair.
 7. **Longest waits** — time since the latest sampled non-editor human activity that was not followed by editor activity.
-8. **Ready** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and a complete description checklist.
+8. **Ready** — a quick-win heuristic based on mergeability, CI, labels, review state, review threads, diff size, and (for normative PRs) a complete description checklist.
+9. **Ready to land** — the selected editor approved the current head and nothing in the template checklist is left unticked.
+10. **Long wait on author** — the author has had the next move for more than `waiting_on.stale_author_days`; candidates to ping or close.
+
+Open issues are queued too, with the same lanes where the meaning carries over: mentions and assignments, first response (a comment, a label or a close by an editor, within the 7-day target), and longest waits. There's also **Needs triage**, for issues without a `topic:` label. Only issues opened, or last answered by a contributor, inside `issues.window_days` are queued, because most open issues are dormant. An issue an open PR says it fixes is shown on that PR's card ("Fixes #N") instead of on its own. The **Show** control filters PRs and issues.
+
+Unanswered contributor PRs and issues nobody was asked about directly are **routed** to one person, shown on the card with the evidence ("Declared in dashboard.yml: topic: img, the images page"). Routing weighs the labels each person declares in `dashboard.yml` (`knows:`) against recent load. An item's topics are its labels, its linked issues' labels, and the spec pages its diff touches, found by mapping the diff onto the multipage spec. Through the `topics:` map, which says which pages each label covers, a page counts as the labels covering it. `python dashboard.py expertise --state .state --spec-repo .spec-repo` prints who authored, reviewed and merged what according to history, compared with the declarations, as an aid to editing them. Each person's routed items are in their **Routed to you** lane and lead their Suggested next. `dashboard.yml` gives each editor a `share` of routed work, marks retired editors (never routed, direct requests only), and lists non-editor helpers who take routed PR reviews. Cards can also suggest a `topic:` label from the spec pages, and a GitHub team to ask, with a copy button. Nothing is ever applied or mentioned automatically.
+
+The health view's **Who did what** table has one row per active editor and helper, plus anyone else who reviewed at least ten other people's PRs in twelve weeks. Each row shows reviews, first replies, issues triaged, merges, own normative PRs merged, issues closed, a twelve-week activity line, how the items routed to them did against the response target, and what is waiting on them now.
+
+Every card leads with whose move it is: the editors (named when a review is requested or an editor is already in the conversation), the author, implementers, tests, compat analysis, the WHATNOT meeting, a dependency, or "approved, ready to land". Labels decide first, then an unaddressed change request, a current approval, and finally who acted last. A merge conflict or failing checks never hands a PR back to its author. Re-review owed, Stale mentions, Longest waits and Active now only hold a PR while the move is the editors'. Cards can also suggest a label, with a button that copies the `gh` command to apply it.
 
 The first four lanes are computed for every editor in `dashboard.yml`, and the **Editor** control in the queue controls picks whose queue is on screen. It defaults to **All editors** — the union, so a PR is in a lane if it is in that lane for anybody — and the other options are the individual editors. The remaining lanes are properties of the pull request rather than of any editor, so they read the same from every perspective. The choice is stored per browser, and somebody else’s login is repeated next to the “Suggested next” heading, because the controls panel starts collapsed.
 
@@ -107,6 +117,18 @@ Build from live public GitHub data using an existing local token:
 GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site
 ```
 
+With `--state DIR`, the build stores the raw GitHub data it fetched in `DIR/snapshot.json.gz`, and the next build with the same directory only fetches what changed since (pass `--full` to fetch everything anyway):
+
+```bash
+GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site --state .state
+```
+
+Routing by spec page needs a bare clone of whatwg/html: `--spec-repo DIR` clones one there on first use (about 850 MB) and only fetches into it afterwards. Without it, topics come from labels alone. `--evaluate` also prints how the rules did on the data: whose move, routing spread, and the measured precision of the topic-label suggestion.
+
+```bash
+GITHUB_TOKEN="$(gh auth token)" python dashboard.py build --output site --state .state --spec-repo .spec-repo --evaluate
+```
+
 Validate configuration and run tests:
 
 ```bash
@@ -118,7 +140,7 @@ python -m unittest discover -s tests -v
 
 For GraphQL, GitHub uses HTTP 502 and 504 when a request exceeds its processing-time limit. The client automatically retries and reduces `sampling.graphql_page_size`; the checked-in default is already a conservative 10 rather than 50. Retry messages show the attempt number, request ID when GitHub supplies one, delay, any page-size reduction, and how much of the build's retry budget is left.
 
-The delay starts at 37.5 seconds and doubles up to 5 minutes, and the build keeps retrying until it has waited an hour in total across all of its requests, so a GitHub incident of ordinary length is waited out rather than failing the day's build. The workflow's build job is allowed 90 minutes for that reason. A build that still fails after spending the budget, or a persistent failure at page size 1, is more likely to be a longer GitHub API incident or a pathological single item. Check GitHub Status and rerun the workflow. Do not add a PAT merely to address a 502/504; these status codes do not indicate missing permissions.
+The delay starts at 37.5 seconds and doubles up to 5 minutes, and the build keeps retrying until it has waited an hour in total across all of its requests, so a GitHub incident of ordinary length is waited out rather than failing the day's build. The workflow's build job is allowed 120 minutes for that reason: the retry budget plus a weekly full build. A build that still fails after spending the budget, or a persistent failure at page size 1, is more likely to be a longer GitHub API incident or a pathological single item. Check GitHub Status and rerun the workflow. Do not add a PAT merely to address a 502/504; these status codes do not indicate missing permissions.
 
 ## Configuration
 
@@ -147,6 +169,8 @@ The Python builder uses GitHub's GraphQL API and paginates open PRs and recently
 
 Only derived public data is written to `site/data.json`; raw PR bodies and comment/review bodies are not published by the dashboard build.
 
+The scheduled build is incremental. It restores the previous run's snapshot from the Actions cache and searches for PRs updated since that run started, less `incremental.overlap_hours`. Then it refetches those PRs by node id with exactly the fields a full fetch asks for. Some fields change without moving a PR's `updatedAt`: mergeability, merge state, review decision and check rollup move when the base branch does. So every open PR is also re-asked for those, plus its `updatedAt` and state, in batches of 100, and any PR whose `updatedAt` or state moved is refetched too. Closed PRs age out of the snapshot on the same date boundary the full search uses. A full fetch runs instead when there is no snapshot, when the queries or sampling sizes changed (a fingerprint of them is stored), when more than 1,000 PRs changed, or every `incremental.full_every_days`. The last case catches changes no `updatedAt` reflects, such as an edited comment. A manual workflow run can also force one. Analysis always reruns over the whole snapshot, so ages and lanes are current whichever way the data was fetched. `data.json`'s `build` block says which it was.
+
 GitHub computes mergeability lazily, answering `UNKNOWN` to a cold query and only scheduling the real value, so a build that trusts the first answer reports almost nothing as mergeable. After the closed-PR search — which gives GitHub several seconds of computing time — the builder re-asks for the PRs that answered `UNKNOWN`, by node id, in rounds that back off up to just under a minute in total. Anything still unknown keeps its “Mergeability unknown” marker and is counted in the build warnings rather than guessed at.
 
 The outer GraphQL page defaults to 10 PRs because every PR includes several nested connections. GitHub documents HTTP 502 and 504 responses from the GraphQL endpoint as request timeouts. When either occurs, or when GitHub reports the same timeout inside an HTTP 200 `errors` entry, the client retries with exponential backoff, halves the outer page size, and retains that smaller size for the rest of the build. Other transient 5xx responses, and connection failures including a response cut off mid-body, are retried without changing the page size. Retries are bounded by a waiting budget shared across the build rather than by a fixed count per request.
@@ -171,7 +195,7 @@ A first-time contributor is detected from an author with no GitHub association t
 
 For long discussions, only the beginning and end of the comment/review timeline are sampled. First-response metrics are reported only when the beginning sample establishes the response or the sampled timeline is complete. Later response-interval metrics require a complete sampled timeline.
 The configured current editor list is applied retroactively to the 90-day sample; historical editor-membership changes are not reconstructed. Description edits are attributed to the PR author because the sampled API fields do not identify the editor of the description.
-Current drafts are excluded from response-target and contributor-wait counts. For a non-draft PR that used to be a draft, the MVP still uses PR creation time because it does not fetch the ready-for-review transition history.
+Draft PRs are left out of the dashboard entirely, queue and health view alike. A PR that used to be a draft is dated from the latest time it was marked ready for review: that is where its age, its first-response clock and its place in the weekly backlog start, and marking it ready counts as contributor activity for the editor wait.
 
 ## Repository layout
 

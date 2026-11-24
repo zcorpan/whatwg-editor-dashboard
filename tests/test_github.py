@@ -33,7 +33,10 @@ class FakeClient:
         open_responses: list[dict[str, Any]],
         closed_responses: list[dict[str, Any]],
         mergeability_responses: list[dict[str, Any]] | None = None,
+        labels: tuple[str, ...] | None = None,
     ) -> None:
+        # By default the repository has every label dashboard.yml names.
+        self.labels = labels if labels is not None else tuple(sorted(load_config(ROOT / "dashboard.yml").named_labels()))
         self.open_responses = iter(open_responses)
         self.closed_responses = iter(closed_responses)
         self.mergeability_responses = iter(mergeability_responses or [])
@@ -47,6 +50,29 @@ class FakeClient:
             return next(self.closed_responses)
         if "query PullRequestMergeability" in query:
             return next(self.mergeability_responses)
+        if "query RepositoryLabels" in query:
+            return {
+                "repository": {
+                    "labels": {
+                        "totalCount": len(self.labels),
+                        "nodes": [{"name": name} for name in self.labels],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                },
+                "rateLimit": rate_limit(1),
+            }
+        if "query OpenIssues" in query:
+            return {
+                "repository": {
+                    "issues": {"totalCount": 0, "nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}
+                },
+                "rateLimit": rate_limit(1),
+            }
+        if "query RecentClosedIssues" in query or "query HistoryPullRequests" in query:
+            return {
+                "search": {"issueCount": 0, "nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}},
+                "rateLimit": rate_limit(1),
+            }
         raise AssertionError("Unexpected GraphQL query")
 
 
@@ -119,6 +145,26 @@ class GraphQLClientTests(unittest.TestCase):
         self.assertEqual(client.retry_count, 1)
         self.assertEqual(client.timeout_count, 1)
         self.assertEqual(delays, [0.0])
+
+    def test_a_timeout_only_caps_the_query_that_timed_out(self) -> None:
+        responses = [http_error(502, "Bad Gateway"), *[FakeHTTPResponse({"data": {"ok": True}})] * 3]
+        page_sizes: list[tuple[str, int]] = []
+
+        def urlopen(request, *, timeout):
+            payload = json.loads(request.data.decode("utf-8"))
+            page_sizes.append((payload["query"].split()[1], int(payload["variables"]["pageSize"])))
+            response = responses.pop(0)
+            if isinstance(response, Exception):
+                raise response
+            return response
+
+        client = GraphQLClient("token", retry_base_seconds=0, urlopen=urlopen, sleep=lambda _: None)
+        client.execute("query Heavy { x }", {"pageSize": 10})
+        client.execute("query Light { x }", {"pageSize": 50})
+        client.execute("query Heavy { x }", {"pageSize": 10})
+        self.assertEqual(page_sizes, [("Heavy", 10), ("Heavy", 5), ("Light", 50), ("Heavy", 5)])
+        self.assertEqual(client.cap_for("Heavy"), 5)
+        self.assertIsNone(client.cap_for("Light"))
 
     def test_nonretryable_http_error_fails_without_sleeping(self) -> None:
         delays: list[float] = []
@@ -227,7 +273,9 @@ class GraphQLClientTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "dashboard.yml").read_text(encoding="utf-8")
         build_job = workflow.split("  build:", 1)[1].split("  deploy:", 1)[0]
         timeout_minutes = int(build_job.split("timeout-minutes:", 1)[1].split()[0])
-        self.assertLessEqual(worst_case_minutes + 10, timeout_minutes)
+        # A weekly full build, cold clone included, measured at about 25 minutes.
+        full_build_minutes = 30
+        self.assertLessEqual(worst_case_minutes + full_build_minutes, timeout_minutes)
 
     def test_graphql_timeout_reported_in_a_200_is_retried_like_a_502(self) -> None:
         client, delays, page_sizes = self._client_with_failures(
@@ -250,6 +298,38 @@ class GraphQLClientTests(unittest.TestCase):
         self.assertEqual(page_sizes, [10, 5])
         self.assertEqual(client.timeout_count, 1)
         self.assertEqual(delays, [37.5])
+
+    def test_a_timed_out_batch_of_node_ids_is_split_instead_of_retried(self) -> None:
+        """By-id queries have no page size to halve, so the batch itself is halved."""
+        from editor_dashboard.github import FetchMetadata, _fetch_nodes_by_id
+
+        sent: list[list[str]] = []
+        delays: list[float] = []
+
+        def urlopen(request, *, timeout):
+            ids = json.loads(request.data.decode("utf-8"))["variables"]["ids"]
+            sent.append(ids)
+            if len(ids) > 2:
+                raise http_error(502, "timeout")
+            return FakeHTTPResponse({"data": {"nodes": [{"id": value} for value in ids]}})
+
+        client = GraphQLClient("token", urlopen=urlopen, sleep=delays.append)
+        nodes = _fetch_nodes_by_id(client, "query Q { x }", list("abcdef"), {}, FetchMetadata("test"), batch_size=6)
+
+        self.assertEqual([node["id"] for node in nodes], list("abcdef"))
+        self.assertEqual(sent, [list("abcdef"), list("abc"), ["a"], ["b", "c"], list("def"), ["d"], ["e", "f"]])
+        self.assertEqual(delays, [])
+
+    def test_a_node_that_no_longer_exists_is_null_not_a_failure(self) -> None:
+        client, delays, _page_sizes = self._client_with_failures(
+            [],
+            then={
+                "data": {"nodes": [None, {"id": "b"}]},
+                "errors": [{"type": "NOT_FOUND", "message": "Could not resolve to a node"}],
+            },
+        )
+        self.assertEqual(client.execute("query Q { x }", {"pageSize": 1, "ids": ["a", "b"]}), {"nodes": [None, {"id": "b"}]})
+        self.assertEqual(delays, [])
 
     def test_other_graphql_errors_fail_without_retrying(self) -> None:
         client, delays, _ = self._client_with_failures(
@@ -353,10 +433,12 @@ class GitHubFetchTests(unittest.TestCase):
             {pr.number for pr in data.recently_closed_pull_requests},
             {int(closes_during_build["number"]), int(already_closed["number"])},
         )
-        self.assertEqual(data.metadata.query_count, 3)
-        self.assertEqual(data.metadata.total_cost, 25)
+        # Three PR pages, one page each of open and recently closed issues, one of
+        # merged-PR history, and one of the repository's labels.
+        self.assertEqual(data.metadata.query_count, 7)
+        self.assertEqual(data.metadata.total_cost, 29)
         self.assertEqual(data.metadata.effective_page_size, 10)
-        self.assertTrue(all(call["pageSize"] == 10 for call in client.calls))
+        self.assertTrue(all(call["pageSize"] == 10 for call in client.calls if "reviewCount" in call))
         self.assertTrue(any("Deduplicated open" in warning for warning in data.metadata.warnings))
         self.assertTrue(any("changed from open to closed" in warning for warning in data.metadata.warnings))
 
@@ -432,6 +514,46 @@ class GitHubFetchTests(unittest.TestCase):
         self.assertEqual(data.open_pull_requests[0].mergeable, "UNKNOWN")
         self.assertEqual(delays, [delay for delay in _MERGEABILITY_RETRY_DELAYS if delay])
         self.assertTrue(any("still answered UNKNOWN" in warning for warning in data.metadata.warnings))
+
+    def test_drafts_are_dropped_before_anything_else_asks_about_them(self) -> None:
+        # A draft is in no lane and no health figure, so it is not worth a
+        # mergeability re-check either.
+        ready = self.fixture["open_pull_requests"][0]
+        draft = {**self.fixture["open_pull_requests"][1], "id": "PR_2", "isDraft": True, "mergeable": "UNKNOWN"}
+        closed_draft = {**self.fixture["recently_closed_pull_requests"][0], "isDraft": True}
+
+        client = FakeClient(
+            open_responses=[self._open_page([ready, draft])],
+            closed_responses=[
+                {
+                    "search": {
+                        "issueCount": 1,
+                        "nodes": [closed_draft],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    },
+                    "rateLimit": rate_limit(1),
+                }
+            ],
+        )
+
+        data = fetch_repository_data(self.config, "unused", now=NOW, client=client, sleep=lambda _: None)
+
+        self.assertEqual([pr.number for pr in data.open_pull_requests], [int(ready["number"])])
+        self.assertEqual(data.recently_closed_pull_requests, ())
+        self.assertEqual(data.metadata.drafts_excluded, 2)
+        self.assertFalse(any("ids" in call for call in client.calls))
+
+    def test_labels_dashboard_yml_names_that_the_repository_lacks_are_a_warning(self) -> None:
+        empty = {"search": {"issueCount": 0, "nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}, "rateLimit": rate_limit(1)}
+        client = FakeClient(open_responses=[self._open_page([])], closed_responses=[empty], labels=("Topic: Parser", "agenda+"))
+        data = fetch_repository_data(self.config, "unused", now=NOW, client=client, sleep=lambda _: None)
+        self.assertEqual(data.labels, ("Topic: Parser", "agenda+"))
+        warning = next(value for value in data.metadata.warnings if value.startswith("dashboard.yml names labels"))
+        self.assertIn("topic: forms", warning)
+        # Case doesn't matter, and dashboard-only names are not GitHub labels.
+        self.assertNotIn("topic: parser", warning)
+        self.assertNotIn("agenda+,", warning)
+        self.assertNotIn("element semantics", warning)
 
 
 if __name__ == "__main__":

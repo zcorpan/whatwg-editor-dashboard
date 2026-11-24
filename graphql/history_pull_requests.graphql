@@ -1,0 +1,52 @@
+# Who has worked on what, for routing: every PR merged in a date slice (search returns
+# at most 1,000 results, so github.py walks the history in slices). Only fetched by
+# full builds; merges since then come from the recently closed PRs.
+query HistoryPullRequests($query: String!, $cursor: String, $pageSize: Int!) {
+  search(query: $query, type: ISSUE, first: $pageSize, after: $cursor) {
+    issueCount
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      ... on PullRequest {
+        ...HistoryFields
+      }
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}
+
+# Shared with recent_closed_pull_requests.graphql, so a recently merged PR yields the
+# same history record as one from the history fetch.
+fragment HistoryFields on PullRequest {
+  number
+  title
+  author { login }
+  mergedAt
+  mergedBy { login }
+  mergeCommit { oid }
+  labels(first: 20) {
+    nodes { name }
+  }
+  closingIssuesReferences(first: 5) {
+    nodes {
+      number
+      labels(first: 20) {
+        nodes { name }
+      }
+    }
+  }
+  historyReviews: reviews(first: 30) {
+    nodes {
+      author { login }
+      state
+      submittedAt
+    }
+  }
+}

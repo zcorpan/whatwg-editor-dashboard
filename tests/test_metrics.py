@@ -27,7 +27,8 @@ class MetricsTests(unittest.TestCase):
         # The four attention lanes are per-editor, so these counts are the whole
         # team's view: #13009 is here for @annevk's mention, not for the viewer's.
         current = self.metrics["repository"]["current"]
-        self.assertEqual(current["open_prs"], 12)
+        # #13005 is a draft, so it is not in the data at all.
+        self.assertEqual(current["open_prs"], 11)
         self.assertEqual(current["active_now"], 4)
         self.assertEqual(current["direct_requests"], 3)
         self.assertEqual(current["stale_direct_requests"], 1)
@@ -46,8 +47,8 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(current["known_without_editor_response"], 6)
 
         coverage = self.metrics["coverage"]
-        self.assertEqual(coverage["open_timeline_complete"], 11)
-        self.assertEqual(coverage["open_timeline_total"], 12)
+        self.assertEqual(coverage["open_timeline_complete"], 10)
+        self.assertEqual(coverage["open_timeline_total"], 11)
 
         rate = self.metrics["health"]["indicators"]["first_response_rate"]
         self.assertEqual(rate["eligible"], 11)

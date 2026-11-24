@@ -13,40 +13,7 @@ query RecentClosedPullRequests(
     }
     nodes {
       ... on PullRequest {
-        number
-        title
-        url
-        author { login }
-        authorAssociation
-        createdAt
-        updatedAt
-        closedAt
-        mergedAt
-        timelineFirst: timelineItems(
-          first: $timelineEachEnd
-          itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW]
-        ) {
-          ...TimelineConnectionFields
-        }
-        timelineLast: timelineItems(
-          last: $timelineEachEnd
-          itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW]
-        ) {
-          ...TimelineConnectionFields
-        }
-        reviews(last: $reviewCount) {
-          totalCount
-          nodes {
-            id
-            author { login }
-            authorAssociation
-            createdAt
-            submittedAt
-            updatedAt
-            state
-            commit { oid }
-          }
-        }
+        ...ClosedPullRequestFields
       }
     }
   }
@@ -55,6 +22,59 @@ query RecentClosedPullRequests(
     limit
     remaining
     resetAt
+  }
+}
+
+# Shared with closed_pull_requests_by_id.graphql, which the incremental build uses to
+# refetch a PR that closed since the last build. github.py appends HistoryFields from
+# history_pull_requests.graphql, so a recent merge is also a history record.
+fragment ClosedPullRequestFields on PullRequest {
+  ...HistoryFields
+  id
+  number
+  title
+  url
+  author { login }
+  authorAssociation
+  createdAt
+  updatedAt
+  closedAt
+  mergedAt
+  isDraft
+  # The latest switch from draft to ready for review. A PR's age counts from
+  # here, or from creation if it was never a draft. See models.py.
+  readyForReview: timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) {
+    nodes {
+      ... on ReadyForReviewEvent {
+        actor { login }
+        createdAt
+      }
+    }
+  }
+  timelineFirst: timelineItems(
+    first: $timelineEachEnd
+    itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW]
+  ) {
+    ...TimelineConnectionFields
+  }
+  timelineLast: timelineItems(
+    last: $timelineEachEnd
+    itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW]
+  ) {
+    ...TimelineConnectionFields
+  }
+  reviews(last: $reviewCount) {
+    totalCount
+    nodes {
+      id
+      author { login }
+      authorAssociation
+      createdAt
+      submittedAt
+      updatedAt
+      state
+      commit { oid }
+    }
   }
 }
 

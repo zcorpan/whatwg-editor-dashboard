@@ -1,0 +1,18 @@
+# Asked for every open issue on every incremental build, as a backstop to the search
+# index lagging: an issue whose `updatedAt` or state moved is refetched in full.
+query IssueFreshness($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on Issue {
+      id
+      number
+      state
+      updatedAt
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}

@@ -1,0 +1,32 @@
+# The incremental build's only discovery query: every PR and issue that changed since
+# the last build, open or closed. Their full fields are then refetched by node id.
+query UpdatedSince($query: String!, $cursor: String, $pageSize: Int!) {
+  search(query: $query, type: ISSUE, first: $pageSize, after: $cursor) {
+    issueCount
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      __typename
+      ... on PullRequest {
+        id
+        number
+        state
+        updatedAt
+      }
+      ... on Issue {
+        id
+        number
+        state
+        updatedAt
+      }
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}

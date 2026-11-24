@@ -83,6 +83,16 @@ fragment PullRequestDashboardFields on PullRequest {
       }
     }
   }
+  # The latest switch from draft to ready for review. A PR's age counts from
+  # here, or from creation if it was never a draft. See models.py.
+  readyForReview: timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT]) {
+    nodes {
+      ... on ReadyForReviewEvent {
+        actor { login }
+        createdAt
+      }
+    }
+  }
   timelineFirst: timelineItems(
     first: $timelineEachEnd
     itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW]

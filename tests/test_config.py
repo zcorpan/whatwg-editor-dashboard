@@ -74,3 +74,63 @@ class SuggestedNextConfigTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def config_with_people(people: str):
+    with tempfile.TemporaryDirectory() as temporary:
+        path = Path(temporary) / "dashboard.yml"
+        path.write_text("repository:\n  owner: whatwg\n  name: html\n" + people, encoding="utf-8")
+        return load_config(path)
+
+
+class KnowsConfigTests(unittest.TestCase):
+    def test_labels_and_pages(self) -> None:
+        config = config_with_people(
+            "editors:\n"
+            "  - login: zcorpan\n"
+            "    knows: [\"topic: img\", Images]\n"
+            "  - annevk\n"
+            "helpers:\n"
+            "  - login: noamr\n"
+            "    knows: [parsing]\n"
+        )
+        self.assertEqual(config.knows_of("zcorpan"), frozenset({"label:topic: img", "page:images"}))
+        self.assertEqual(config.knows_of("noamr"), frozenset({"page:parsing"}))
+        self.assertEqual(config.knows_of("annevk"), frozenset())
+
+    def test_rejects_pages_that_say_nothing_and_empty_entries(self) -> None:
+        with self.assertRaisesRegex(ValueError, "ignore_pages"):
+            config_with_people("editors:\n  - login: zcorpan\n    knows: [acknowledgements]\n")
+        with self.assertRaisesRegex(ValueError, "empty entry"):
+            config_with_people("editors:\n  - login: zcorpan\n    knows: [\"\"]\n")
+        with self.assertRaisesRegex(ValueError, "must be a list"):
+            config_with_people("editors:\n  - login: zcorpan\n    knows: images\n")
+
+
+class TopicPagesConfigTests(unittest.TestCase):
+    def test_a_mapped_label_is_declarable_and_covers_its_pages(self) -> None:
+        config = config_with_people(
+            "editors:\n  - login: zcorpan\n    knows: [\"removal/deprecation\", accessibility]\n"
+            "topics:\n  \"topic: img\": [images, Embedded-Content]\n  removal/deprecation: [obsolete]\n  accessibility: []\n"
+        )
+        self.assertEqual(config.labels_for_page("embedded-content"), ("topic: img",))
+        self.assertTrue(config.is_topic_label("Accessibility"))
+        self.assertEqual(config.knows_of("zcorpan"), frozenset({"label:removal/deprecation", "label:accessibility"}))
+
+    def test_rejects_ignored_pages(self) -> None:
+        with self.assertRaisesRegex(ValueError, "ignore_pages"):
+            config_with_people("editors: [zcorpan]\ntopics:\n  \"topic: x\": [indices]\n")
+
+
+class DashboardLabelTests(unittest.TestCase):
+    def test_dashboard_labels_are_left_out_of_the_labels_checked_against_github(self) -> None:
+        config = config_with_people(
+            "editors: [zcorpan]\ntopics:\n  \"element semantics\": [dom]\n  \"topic: forms\": [forms]\n"
+            "dashboard_labels: [Element Semantics]\n"
+        )
+        self.assertIn("topic: forms", config.named_labels())
+        self.assertNotIn("element semantics", config.named_labels())
+
+    def test_a_dashboard_label_must_be_a_topic(self) -> None:
+        with self.assertRaisesRegex(ValueError, "dashboard_labels"):
+            config_with_people("editors: [zcorpan]\ndashboard_labels: [nowhere]\n")

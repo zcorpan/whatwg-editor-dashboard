@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,13 @@ import yaml
 # `active`, `direct`, `reply_window` and `all` are deliberately absent: each has a
 # fixed position in the suggested queue, so letting the cycle claim one too would
 # give a single concept two competing mechanisms.
-_ALLOWED_SUGGESTED_LANES = {"rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct"}
+_ALLOWED_SUGGESTED_LANES = {"rereview", "overdue", "oldest_wait", "ready_bounded", "stale_direct", "stale_author", "land", "triage"}
+
+
+def label_key(label: str) -> str:
+    """How labels are compared: GitHub label names are case-insensitive."""
+    return label.strip().lower()
+
 
 @dataclass(frozen=True)
 class RepositoryConfig:
@@ -54,6 +61,8 @@ class SamplingConfig:
     reviews_per_pr: int = 25
     review_threads: int = 50
     history_days: int = 90
+    # Issues carry fewer nested connections than PRs, so their pages can be larger.
+    issue_page_size: int = 25
 
 
 @dataclass(frozen=True)
@@ -64,6 +73,76 @@ class SuggestedNextConfig:
     # they get the top slots; the bound keeps incoming work from burying live reviews.
     # Zero disables the lead without hiding the lane.
     first_response_lead: int = 3
+
+
+@dataclass(frozen=True)
+class WaitingOnConfig:
+    """Labels that say whose move a PR is, ahead of what the conversation says.
+
+    A label is an editor's deliberate statement, so it outranks "who spoke last".
+    """
+
+    # Waiting for the WHATNOT meeting.
+    meeting_labels: frozenset[str] = frozenset({"agenda+", "agenda+ f2f"})
+    # "Must not merge per rationale in comment": usually a dependency that has to land
+    # first, so on its own it does not decide who is next. See analysis.py.
+    hold_labels: frozenset[str] = frozenset({"do not merge yet"})
+    # Label -> the party it says the PR waits on.
+    party_labels: tuple[tuple[str, str], ...] = (
+        ("needs implementer interest", "implementers"),
+        ("needs compat analysis", "compat"),
+        ("needs tests", "tests"),
+    )
+    # Waiting on the author for longer than this: a candidate to ping or close.
+    stale_author_days: int = 180
+
+
+_PARTIES = {"editors", "author", "implementers", "tests", "compat", "meeting", "dependency", "merge", "proposal"}
+
+
+@dataclass(frozen=True)
+class IssuesConfig:
+    # Only issues opened (for the first-response lanes and triage) or last answered by
+    # a contributor (for the longest waits) inside this window are queued. Most of
+    # whatwg/html's open issues are dormant feature requests; without a bound, the
+    # queue would be a decade of backlog.
+    window_days: int = 90
+    # Labels starting with this say what an issue is about; an issue without one is
+    # in the triage lane.
+    topic_label_prefix: str = "topic:"
+
+
+@dataclass(frozen=True)
+class ExpertiseConfig:
+    # How far back full builds fetch merged PRs: for the label suggester and the
+    # manual `dashboard.py expertise` report. Routing reads `knows:` instead.
+    since: str = "2016-01-01"
+    # Older work counts for less: a contribution this many days old counts half.
+    half_life_days: int = 365
+
+
+@dataclass(frozen=True)
+class RoutingConfig:
+    # Added to everybody's affinity, so an item nobody has expertise for is still
+    # spread by load, and a small expertise edge cannot pile everything on one person.
+    prior: float = 0.1
+    # Routing counts how much each person was routed in this many days before an
+    # item, to balance the load.
+    load_window_days: int = 28
+    # Accountability figures count routed items from this date: earlier ones were
+    # never routed to anybody at the time.
+    start: str = "2026-11-23"
+
+
+@dataclass(frozen=True)
+class IncrementalConfig:
+    # A build with a stored snapshot only asks GitHub for what changed since it. Some
+    # changes never move a PR's `updatedAt` (an edited comment, a deleted one), so a
+    # full fetch still runs at least this often to put the snapshot right.
+    full_every_days: int = 7
+    # How far before the previous build's start the next one looks for updates, so
+    # that GitHub's search index lagging behind a write cannot lose it.
+    overlap_hours: int = 2
 
 
 @dataclass(frozen=True)
@@ -79,6 +158,75 @@ class DashboardConfig:
     blocking_labels: frozenset[str] = field(default_factory=frozenset)
     sampling: SamplingConfig = field(default_factory=SamplingConfig)
     suggested_next: SuggestedNextConfig = field(default_factory=SuggestedNextConfig)
+    incremental: IncrementalConfig = field(default_factory=IncrementalConfig)
+    waiting_on: WaitingOnConfig = field(default_factory=WaitingOnConfig)
+    issues: IssuesConfig = field(default_factory=IssuesConfig)
+    expertise: ExpertiseConfig = field(default_factory=ExpertiseConfig)
+    routing: RoutingConfig = field(default_factory=RoutingConfig)
+    # Spec pages that say nothing about a change's topic: everybody touches them.
+    ignore_pages: frozenset[str] = frozenset({"acknowledgements", "indices", "references", "infrastructure", "index", "introduction", "iana"})
+    # A non-editor, non-helper who reviewed at least this many other people's PRs in
+    # the health window gets their own row in the team section.
+    min_reviews_of_others: int = 10
+    # Team slug -> labels whose items the team is a good audience for.
+    teams: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # Editors who no longer take routed work. They keep a queue perspective, their
+    # replies still count as editor responses, and only direct requests reach them.
+    retired_editors: frozenset[str] = frozenset()
+    # Non-editors who take routed review work and get their own queue perspective,
+    # but are not editors for any metric.
+    helpers: frozenset[str] = frozenset()
+    # Relative share of routed work, by login; 0 means never routed.
+    shares: tuple[tuple[str, float], ...] = ()
+    # What each person says they know, as lowercased topic keys: `label:topic: img`
+    # for a topic label, `page:images` for a multipage spec page. Routing reads only
+    # these; computed expertise is a manual report (`dashboard.py expertise`).
+    knows: tuple[tuple[str, frozenset[str]], ...] = ()
+    # Label -> the multipage spec pages it covers, both lowercased. A change to a page
+    # counts as being about the labels that cover it, so `knows:` only needs labels.
+    # Every key is a topic label, `topic:` prefix or not.
+    topic_pages: tuple[tuple[str, frozenset[str]], ...] = ()
+    # Keys of `topics:` that are not GitHub labels, lowercased: names for parts of the
+    # spec no label covers. They route like labels but are never suggested.
+    dashboard_labels: frozenset[str] = frozenset()
+
+    @property
+    def people(self) -> frozenset[str]:
+        """Everyone with a queue perspective: the editors and the helpers."""
+        return self.editors | self.helpers
+
+    def share(self, login: str) -> float:
+        return dict(self.shares).get(login, 0.0)
+
+    def knows_of(self, login: str) -> frozenset[str]:
+        return dict(self.knows).get(login, frozenset())
+
+    def named_labels(self) -> frozenset[str]:
+        """Every GitHub label this file names, lowercased."""
+        names = {label for label, _pages in self.topic_pages}
+        names |= {key[len("label:") :] for _login, keys in self.knows for key in keys if key.startswith("label:")}
+        names |= {label_key(label) for _team, labels in self.teams for label in labels}
+        names |= self.waiting_on.meeting_labels | self.waiting_on.hold_labels
+        names |= {label for label, _party in self.waiting_on.party_labels}
+        names |= self.blocking_labels
+        return frozenset(names - self.dashboard_labels)
+
+    def is_topic_label(self, label: str) -> bool:
+        lowered = label_key(label)
+        return lowered.startswith(self.issues.topic_label_prefix) or lowered in dict(self.topic_pages)
+
+    def labels_for_page(self, page: str) -> tuple[str, ...]:
+        return tuple(sorted(label for label, pages in self.topic_pages if page in pages))
+
+    def labels_for_location(self, page: str, sections: tuple[str, ...] = ()) -> tuple[str, ...]:
+        """The labels covering a place in the spec: those naming its innermost listed
+        section (`semantics#the-link-element`), else those covering the whole page."""
+        for section in reversed(sections):
+            entry = f"{page}#{section}"
+            found = tuple(sorted(label for label, pages in self.topic_pages if entry in pages))
+            if found:
+                return found
+        return self.labels_for_page(page)
 
 
 def _mapping(value: Any, name: str) -> dict[str, Any]:
@@ -105,6 +253,15 @@ def _non_negative_int(value: Any, name: str, *, maximum: int | None = None) -> i
     return result
 
 
+def _iso_date(value: Any, name: str) -> str:
+    text = str(value).strip()
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        raise ValueError(f"{name} must be a YYYY-MM-DD date") from None
+    return text
+
+
 def load_config(path: str | Path) -> DashboardConfig:
     config_path = Path(path)
     raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
@@ -119,7 +276,51 @@ def load_config(path: str | Path) -> DashboardConfig:
     editors_raw = raw.get("editors", [])
     if not isinstance(editors_raw, list):
         raise ValueError("editors must be a list")
-    editors = frozenset(str(value).strip().lstrip("@").lower() for value in editors_raw if str(value).strip())
+    shares: dict[str, float] = {}
+    retired: set[str] = set()
+    knows_raw: dict[str, list[Any]] = {}
+
+    def person(value: Any, name: str) -> tuple[str, float, str]:
+        """A bare login, or a mapping with `login`, optional `share` and `status`."""
+        if isinstance(value, dict):
+            login = str(value.get("login", "")).strip().lstrip("@").lower()
+            status = str(value.get("status", "active")).strip()
+            if status not in {"active", "retired"}:
+                raise ValueError(f"{name}.status must be active or retired")
+            share = float(value.get("share", 0 if status == "retired" else 1))
+            declared = value.get("knows", [])
+            if not isinstance(declared, list):
+                raise ValueError(f"{name}.knows must be a list")
+            knows_raw[str(value.get("login", "")).strip().lstrip("@").lower()] = declared
+        else:
+            login, status, share = str(value).strip().lstrip("@").lower(), "active", 1.0
+        if not login:
+            raise ValueError(f"{name} entries need a login")
+        if share < 0:
+            raise ValueError(f"{name}.share must not be negative")
+        return login, share, status
+
+    editor_list: list[str] = []
+    for value in editors_raw:
+        if not isinstance(value, dict) and not str(value).strip():
+            continue
+        login, share, status = person(value, "editors")
+        editor_list.append(login)
+        shares[login] = 0.0 if status == "retired" else share
+        if status == "retired":
+            retired.add(login)
+    editors = frozenset(editor_list)
+
+    helpers_raw = raw.get("helpers", [])
+    if not isinstance(helpers_raw, list):
+        raise ValueError("helpers must be a list")
+    helpers: set[str] = set()
+    for value in helpers_raw:
+        login, share, _status = person(value, "helpers")
+        if login in editors:
+            raise ValueError(f"helpers: @{login} is already an editor")
+        helpers.add(login)
+        shares[login] = share
     if not editors:
         raise ValueError("editors must list at least one login")
 
@@ -190,6 +391,11 @@ def load_config(path: str | Path) -> DashboardConfig:
             sampling_raw.get("history_days", 90),
             "sampling.history_days",
         ),
+        issue_page_size=_positive_int(
+            sampling_raw.get("issue_page_size", 25),
+            "sampling.issue_page_size",
+            maximum=100,
+        ),
     )
 
     suggested_raw = _mapping(raw.get("suggested_next", {}), "suggested_next")
@@ -208,6 +414,127 @@ def load_config(path: str | Path) -> DashboardConfig:
         maximum=10,
     )
 
+    incremental_raw = _mapping(raw.get("incremental", {}), "incremental")
+    incremental = IncrementalConfig(
+        full_every_days=_positive_int(
+            incremental_raw.get("full_every_days", 7),
+            "incremental.full_every_days",
+            # The closed-PR search a full fetch runs is what bounds recent history, so
+            # an incremental chain must not outlive it.
+            maximum=sampling.history_days,
+        ),
+        overlap_hours=_non_negative_int(
+            incremental_raw.get("overlap_hours", 2),
+            "incremental.overlap_hours",
+            maximum=48,
+        ),
+    )
+
+    waiting_raw = _mapping(raw.get("waiting_on", {}), "waiting_on")
+    defaults = WaitingOnConfig()
+
+    def label_set(name: str, default: frozenset[str]) -> frozenset[str]:
+        value = waiting_raw.get(name)
+        if value is None:
+            return default
+        if not isinstance(value, list):
+            raise ValueError(f"waiting_on.{name} must be a list")
+        return frozenset(str(item).strip().lower() for item in value if str(item).strip())
+
+    party_raw = waiting_raw.get("party_labels")
+    if party_raw is None:
+        party_labels = defaults.party_labels
+    else:
+        party_raw = _mapping(party_raw, "waiting_on.party_labels")
+        party_labels = tuple((str(label).strip().lower(), str(party).strip()) for label, party in party_raw.items())
+        bad = sorted(party for _label, party in party_labels if party not in _PARTIES)
+        if bad:
+            raise ValueError(f"waiting_on.party_labels names unknown parties: {', '.join(bad)}")
+    waiting_on = WaitingOnConfig(
+        meeting_labels=label_set("meeting_labels", defaults.meeting_labels),
+        hold_labels=label_set("hold_labels", defaults.hold_labels),
+        party_labels=party_labels,
+        stale_author_days=_positive_int(
+            waiting_raw.get("stale_author_days", defaults.stale_author_days),
+            "waiting_on.stale_author_days",
+        ),
+    )
+
+    issues_raw = _mapping(raw.get("issues", {}), "issues")
+    issues = IssuesConfig(
+        window_days=_positive_int(issues_raw.get("window_days", 90), "issues.window_days"),
+        topic_label_prefix=str(issues_raw.get("topic_label_prefix", "topic:")).strip().lower(),
+    )
+    if not issues.topic_label_prefix:
+        raise ValueError("issues.topic_label_prefix must not be empty")
+
+    expertise_raw = _mapping(raw.get("expertise", {}), "expertise")
+    expertise = ExpertiseConfig(
+        since=_iso_date(expertise_raw.get("since", "2016-01-01"), "expertise.since"),
+        half_life_days=_positive_int(expertise_raw.get("half_life_days", 365), "expertise.half_life_days"),
+    )
+    routing_raw = _mapping(raw.get("routing", {}), "routing")
+    prior = float(routing_raw.get("prior", 0.1))
+    if not 0 < prior <= 1:
+        raise ValueError("routing.prior must be greater than 0 and at most 1")
+    routing = RoutingConfig(
+        prior=prior,
+        load_window_days=_positive_int(routing_raw.get("load_window_days", 28), "routing.load_window_days"),
+        start=_iso_date(routing_raw.get("start", "2026-11-23"), "routing.start"),
+    )
+    ignore_raw = raw.get("ignore_pages")
+    if ignore_raw is not None and not isinstance(ignore_raw, list):
+        raise ValueError("ignore_pages must be a list")
+    teams_raw = _mapping(raw.get("teams", {}), "teams")
+    teams = []
+    for slug, labels in teams_raw.items():
+        if not isinstance(labels, list) or not labels:
+            raise ValueError(f"teams.{slug} must be a non-empty list of labels")
+        teams.append((str(slug).strip(), tuple(sorted(str(label).strip().lower() for label in labels))))
+
+    ignore_pages = (
+        frozenset(str(value).strip() for value in ignore_raw)
+        if ignore_raw is not None
+        else DashboardConfig.__dataclass_fields__["ignore_pages"].default
+    )
+    topics_raw = _mapping(raw.get("topics", {}), "topics")
+    topic_pages: dict[str, frozenset[str]] = {}
+    for label, pages in topics_raw.items():
+        topic = str(label).strip().lower()
+        if not topic:
+            raise ValueError("topics: a label must not be empty")
+        # An empty list is a label that covers no page but can still be declared.
+        if not isinstance(pages, list):
+            raise ValueError(f"topics.{label} must be a list of spec pages")
+        values = frozenset(str(page).strip().lower() for page in pages if str(page).strip())
+        ignored = sorted(value for value in values if value.partition("#")[0] in ignore_pages)
+        if ignored:
+            raise ValueError(f"topics.{label}: {', '.join(ignored)} in ignore_pages, so they say nothing")
+        topic_pages[topic] = values
+
+    dashboard_labels_raw = raw.get("dashboard_labels", [])
+    if not isinstance(dashboard_labels_raw, list):
+        raise ValueError("dashboard_labels must be a list")
+    dashboard_labels = frozenset(label_key(str(value)) for value in dashboard_labels_raw if str(value).strip())
+    unmapped = sorted(dashboard_labels - set(topic_pages))
+    if unmapped:
+        raise ValueError(f"dashboard_labels: {', '.join(unmapped)} must be a key of topics:")
+
+    knows: dict[str, frozenset[str]] = {}
+    for login, declared in knows_raw.items():
+        keys = set()
+        for entry in declared:
+            text = str(entry).strip().lower()
+            if not text:
+                raise ValueError(f"knows of @{login} has an empty entry")
+            if text.startswith(issues.topic_label_prefix) or text in topic_pages:
+                keys.add(f"label:{text}")
+            else:
+                if text in ignore_pages:
+                    raise ValueError(f"knows of @{login}: {text} is in ignore_pages, so it says nothing")
+                keys.add(f"page:{text}")
+        knows[login] = frozenset(keys)
+
     blocking_labels_raw = raw.get("blocking_labels", [])
     if not isinstance(blocking_labels_raw, list):
         raise ValueError("blocking_labels must be a list")
@@ -215,10 +542,27 @@ def load_config(path: str | Path) -> DashboardConfig:
     return DashboardConfig(
         repository=RepositoryConfig(owner=owner, name=name),
         editors=editors,
+        retired_editors=frozenset(retired),
+        helpers=frozenset(helpers),
+        shares=tuple(sorted(shares.items())),
+        knows=tuple(sorted(knows.items())),
+        topic_pages=tuple(sorted(topic_pages.items())),
+        dashboard_labels=dashboard_labels,
         response_targets=targets,
         attention=attention,
         ready_bounded=bounded,
         blocking_labels=frozenset(str(value).strip().lower() for value in blocking_labels_raw if str(value).strip()),
         sampling=sampling,
         suggested_next=SuggestedNextConfig(cycle, first_response_lead),
+        incremental=incremental,
+        waiting_on=waiting_on,
+        issues=issues,
+        expertise=expertise,
+        routing=routing,
+        ignore_pages=ignore_pages,
+        teams=tuple(sorted(teams)),
+        min_reviews_of_others=_positive_int(
+            _mapping(raw.get("contributors", {}), "contributors").get("min_reviews_of_others", 10),
+            "contributors.min_reviews_of_others",
+        ),
     )

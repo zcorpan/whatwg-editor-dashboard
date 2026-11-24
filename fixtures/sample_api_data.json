@@ -3029,5 +3029,384 @@
         "nodes": []
       }
     }
-  ]
+  ],
+  "open_issues": [
+    {
+      "id": "I_14001",
+      "number": 14001,
+      "title": "Clarify what happens to a detached form owner",
+      "url": "https://github.com/whatwg/html/issues/14001",
+      "state": "OPEN",
+      "author": {
+        "login": "olivia"
+      },
+      "authorAssociation": "NONE",
+      "body": "The spec doesn't say.",
+      "createdAt": "2026-08-01T09:00:00Z",
+      "updatedAt": "2026-08-01T09:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "labels": {
+        "nodes": []
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "timelineFirst": {
+        "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": []
+      },
+      "timelineLast": {
+        "totalCount": 0,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": []
+      },
+      "labeledEvents": {
+        "nodes": []
+      },
+      "closedEvents": {
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "nodes": []
+      }
+    },
+    {
+      "id": "I_14002",
+      "number": 14002,
+      "title": "Popover light dismiss inside shadow trees",
+      "url": "https://github.com/whatwg/html/issues/14002",
+      "state": "OPEN",
+      "author": {
+        "login": "pete"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "createdAt": "2026-07-20T10:00:00Z",
+      "updatedAt": "2026-08-02T15:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "labels": {
+        "nodes": [
+          {
+            "name": "topic: popover"
+          }
+        ]
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "timelineFirst": {
+        "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "IC_1",
+            "author": {
+              "login": "pete"
+            },
+            "authorAssociation": "NONE",
+            "body": "@zcorpan what do you think?",
+            "createdAt": "2026-08-02T15:00:00Z",
+            "updatedAt": "2026-08-02T15:00:00Z"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "IC_1",
+            "author": {
+              "login": "pete"
+            },
+            "authorAssociation": "NONE",
+            "body": "@zcorpan what do you think?",
+            "createdAt": "2026-08-02T15:00:00Z",
+            "updatedAt": "2026-08-02T15:00:00Z"
+          }
+        ]
+      },
+      "labeledEvents": {
+        "nodes": [
+          {
+            "createdAt": "2026-07-21T08:00:00Z",
+            "actor": {
+              "login": "annevk"
+            },
+            "label": {
+              "name": "topic: popover"
+            }
+          }
+        ]
+      },
+      "closedEvents": {
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "nodes": []
+      }
+    },
+    {
+      "id": "I_14003",
+      "number": 14003,
+      "title": "Frobnication state is undefined",
+      "url": "https://github.com/whatwg/html/issues/14003",
+      "state": "OPEN",
+      "author": {
+        "login": "quinn"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "createdAt": "2026-06-01T10:00:00Z",
+      "updatedAt": "2026-08-01T12:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "labels": {
+        "nodes": [
+          {
+            "name": "topic: forms"
+          }
+        ]
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "timelineFirst": {
+        "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "IC_2",
+            "author": {
+              "login": "quinn"
+            },
+            "authorAssociation": "NONE",
+            "body": "@annevk could you take a look at the PR?",
+            "createdAt": "2026-08-01T12:00:00Z",
+            "updatedAt": "2026-08-01T12:00:00Z"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "IC_2",
+            "author": {
+              "login": "quinn"
+            },
+            "authorAssociation": "NONE",
+            "body": "@annevk could you take a look at the PR?",
+            "createdAt": "2026-08-01T12:00:00Z",
+            "updatedAt": "2026-08-01T12:00:00Z"
+          }
+        ]
+      },
+      "labeledEvents": {
+        "nodes": []
+      },
+      "closedEvents": {
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "nodes": [
+          {
+            "number": 13001
+          }
+        ]
+      }
+    },
+    {
+      "id": "I_14004",
+      "number": 14004,
+      "title": "Add a <frobnicate> element",
+      "url": "https://github.com/whatwg/html/issues/14004",
+      "state": "OPEN",
+      "author": {
+        "login": "rosa"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "createdAt": "2024-01-10T10:00:00Z",
+      "updatedAt": "2025-05-01T10:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "labels": {
+        "nodes": [
+          {
+            "name": "addition/proposal"
+          },
+          {
+            "name": "needs implementer interest"
+          }
+        ]
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "timelineFirst": {
+        "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "IC_3",
+            "author": {
+              "login": "rosa"
+            },
+            "authorAssociation": "NONE",
+            "body": "Any news?",
+            "createdAt": "2025-05-01T10:00:00Z",
+            "updatedAt": "2025-05-01T10:00:00Z"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 1,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "IC_3",
+            "author": {
+              "login": "rosa"
+            },
+            "authorAssociation": "NONE",
+            "body": "Any news?",
+            "createdAt": "2025-05-01T10:00:00Z",
+            "updatedAt": "2025-05-01T10:00:00Z"
+          }
+        ]
+      },
+      "labeledEvents": {
+        "nodes": []
+      },
+      "closedEvents": {
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "nodes": []
+      }
+    },
+    {
+      "id": "I_14005",
+      "number": 14005,
+      "title": "Typo in the event loop processing model",
+      "url": "https://github.com/whatwg/html/issues/14005",
+      "state": "OPEN",
+      "author": {
+        "login": "sam"
+      },
+      "authorAssociation": "NONE",
+      "body": "",
+      "createdAt": "2026-07-25T10:00:00Z",
+      "updatedAt": "2026-07-26T10:00:00Z",
+      "lastEditedAt": null,
+      "closedAt": null,
+      "labels": {
+        "nodes": [
+          {
+            "name": "topic: event loop"
+          }
+        ]
+      },
+      "assignees": {
+        "nodes": []
+      },
+      "timelineFirst": {
+        "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "IC_4",
+            "author": {
+              "login": "sam"
+            },
+            "authorAssociation": "NONE",
+            "body": "Step 3.",
+            "createdAt": "2026-07-25T11:00:00Z",
+            "updatedAt": "2026-07-25T11:00:00Z"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "IC_5",
+            "author": {
+              "login": "domfarolino"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "Thanks, would you like to send a PR?",
+            "createdAt": "2026-07-26T10:00:00Z",
+            "updatedAt": "2026-07-26T10:00:00Z"
+          }
+        ]
+      },
+      "timelineLast": {
+        "totalCount": 2,
+        "pageInfo": {
+          "hasNextPage": false
+        },
+        "nodes": [
+          {
+            "__typename": "IssueComment",
+            "id": "IC_4",
+            "author": {
+              "login": "sam"
+            },
+            "authorAssociation": "NONE",
+            "body": "Step 3.",
+            "createdAt": "2026-07-25T11:00:00Z",
+            "updatedAt": "2026-07-25T11:00:00Z"
+          },
+          {
+            "__typename": "IssueComment",
+            "id": "IC_5",
+            "author": {
+              "login": "domfarolino"
+            },
+            "authorAssociation": "MEMBER",
+            "body": "Thanks, would you like to send a PR?",
+            "createdAt": "2026-07-26T10:00:00Z",
+            "updatedAt": "2026-07-26T10:00:00Z"
+          }
+        ]
+      },
+      "labeledEvents": {
+        "nodes": []
+      },
+      "closedEvents": {
+        "nodes": []
+      },
+      "closedByPullRequestsReferences": {
+        "nodes": []
+      }
+    }
+  ],
+  "recently_closed_issues": []
 }
