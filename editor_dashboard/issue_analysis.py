@@ -29,6 +29,8 @@ from .analysis import (
     _mention_pattern,
     _response_target_hours,
     is_bot,
+    latest_activity_by,
+    pending_direct,
     perspective_keys,
 )
 from .config import DashboardConfig
@@ -171,6 +173,10 @@ def _wait(party: str, who: Iterable[str] = (), since: datetime | None = None, de
     return WaitingOn(party, who, since, Reason(f"waiting-{party}", label, detail=detail, timestamp=since, tone=tone))
 
 
+def _responders(issue: IssueSnapshot, config: DashboardConfig) -> frozenset[str]:
+    return config.editors | (config.helpers - {issue.author})
+
+
 def _issue_waiting_on(issue: IssueSnapshot, config: DashboardConfig) -> WaitingOn:
     labels = {label.lower() for label in issue.labels}
     meeting = sorted(label for label in issue.labels if label.lower() in config.waiting_on.meeting_labels)
@@ -182,7 +188,8 @@ def _issue_waiting_on(issue: IssueSnapshot, config: DashboardConfig) -> WaitingO
     if issue.fixed_by:
         return _wait("fix", [str(number) for number in issue.fixed_by])
 
-    editors = config.editors
+    # A helper's reply answers the reporter as an editor's does, except on their own issue.
+    editors = _responders(issue, config)
     editor_comments = [
         activity for activity in issue.timeline if activity.author in editors and not is_bot(activity.author)
     ]
@@ -192,7 +199,7 @@ def _issue_waiting_on(issue: IssueSnapshot, config: DashboardConfig) -> WaitingO
         if activity.author not in editors and not is_bot(activity.author)
     ]
     latest_other = max((activity.updated_at for activity in others), default=issue.created_at)
-    if issue.author in editors and not others:
+    if issue.author in config.editors and not others:
         latest_other = None
     if editor_comments:
         latest_editor = max(editor_comments, key=lambda activity: (activity.updated_at, activity.id))
@@ -298,7 +305,28 @@ def _issue_perspective(
     cutoff = now - timedelta(days=config.attention.activity_window_days)
     lanes: list[str] = []
     reasons: list[Reason] = []
-    actionable = bool(direct) or waiting_on.party == "editors"
+    if editor is None:
+        answered = False
+        pending = direct
+    else:
+        # Read as one person, the discussion is somebody else's move once they spoke
+        # last apart from the editors and helpers, as on their own issue that only they
+        # have spoken on.
+        answered_at = latest_activity_by(issue.timeline, editor)
+        if issue.author == editor:
+            answered_at = max(filter(None, (answered_at, issue.created_at)))
+        others = [
+            activity.updated_at
+            for activity in issue.timeline
+            if activity.author != editor and activity.author not in _responders(issue, config) and not is_bot(activity.author)
+        ]
+        if issue.author != editor:
+            others.append(issue.created_at)
+        other_side = max(others, default=None)
+        answered = answered_at is not None and (other_side is None or answered_at > other_side)
+        pending = pending_direct(direct, answered_at=answered_at, answered=answered, own=False)
+    editors_turn = waiting_on.party == "editors" and not answered
+    actionable = bool(pending) or editors_turn
     if issue.updated_at >= cutoff and (involved or direct) and actionable and not issue.fixed_by:
         lanes.append("active")
         reasons.append(
@@ -312,7 +340,7 @@ def _issue_perspective(
     if not issue.fixed_by:
         if direct:
             lanes.append("direct")
-        elif expired and waiting_on.party == "editors":
+        elif expired and editors_turn:
             lanes.append("stale_direct")
     reasons.extend((*direct, *expired))
 
@@ -328,6 +356,7 @@ def _issue_perspective(
         land_at=None,
         has_attention_signal=bool(direct),
         latest_review=None,
+        others_move=answered and waiting_on.party == "editors",
         content_fingerprint=_issue_content_fingerprint(issue, editor) if editor else None,
         attention_fingerprint=_attention_fingerprint((*direct, *expired)) if editor else None,
     )
@@ -384,7 +413,7 @@ def analyze_issue(
     contributor_times = [
         activity.updated_at
         for activity in issue.timeline
-        if activity.author not in editors and not is_bot(activity.author)
+        if activity.author not in _responders(issue, config) and not is_bot(activity.author)
     ]
     if contributor:
         contributor_times.append(issue.created_at)

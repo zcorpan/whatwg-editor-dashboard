@@ -3,13 +3,15 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from editor_dashboard.build import build_site
 from editor_dashboard.config import load_config
 from editor_dashboard.github import load_fixture
-from editor_dashboard.issue_analysis import analyze_issues
+from editor_dashboard.issue_analysis import analyze_issue, analyze_issues
+from editor_dashboard.models import Activity
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -98,6 +100,26 @@ class IssueTests(unittest.TestCase):
         serialized = json.dumps([item for item in self.payload["items"] if item.get("kind") == "issue"])
         self.assertNotIn("would you like to send a PR", serialized)
         self.assertNotIn("The spec doesn't say", serialized)
+
+    def comment(self, author: str, hours_ago: float) -> Activity:
+        at = NOW - timedelta(hours=hours_ago)
+        return Activity(f"c-{author}-{hours_ago}", "IssueComment", author, "NONE", at, at, "", None)
+
+    def recent_issue(self, **changes):
+        base = next(issue for issue in self.data.open_issues if issue.number == 14001)
+        return analyze_issue(replace(base, updated_at=NOW - timedelta(hours=1), **changes), self.config, now=NOW)
+
+    def test_a_helpers_reply_hands_the_issue_to_the_discussion(self) -> None:
+        answered = self.recent_issue(timeline=(self.comment("heidi", 5), self.comment("noamr", 2)))
+        self.assertEqual(answered.waiting_on.party, "author")
+        self.assertIsNone(answered.current_wait_hours)
+        self.assertNotIn("active", answered.perspectives["noamr"].lanes)
+
+    def test_a_helpers_own_issue_waits_on_the_editors(self) -> None:
+        own = self.recent_issue(author="noamr", timeline=(self.comment("noamr", 2),))
+        self.assertEqual(own.waiting_on.party, "editors")
+        self.assertTrue(own.perspectives["noamr"].others_move)
+        self.assertFalse(own.perspectives["annevk"].others_move)
 
 
 if __name__ == "__main__":
