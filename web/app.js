@@ -15,7 +15,10 @@ const CLOCK_TICK_MS = 60 * 1000;
 
 // Collapsible sections, and how each one starts before this browser has an opinion.
 const SECTION_DEFAULTS = {"queue-controls": false, "suggested-section": true, "lanes-section": true};
-const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, perspective: null, identity: null, kind: "all", openSections: {}});
+// Nothing stored yet opens the controls, so a first visit finds the Editor and You
+// are selects. Stored state that never recorded the panel keeps it collapsed, so it
+// doesn't reopen for returning readers.
+const DEFAULT_SETTINGS = () => ({showAddressed: false, showSnoozed: false, perspective: null, identity: null, kind: "all", openSections: {"queue-controls": true}});
 // Which items the queue shows. Additive to the stored settings, so STATE_VERSION stays.
 const KINDS = ["all", "pr", "issue"];
 const readKind = value => (KINDS.includes(value) ? value : "all");
@@ -711,7 +714,7 @@ function syncPerspectiveControl() {
   document.querySelector("#editor-perspective").value = current || "";
   document.querySelector("#editor-identity").value = identityKey() || "";
 
-  // Repeated next to the heading, because the controls panel starts collapsed and a
+  // Repeated next to the heading, because the controls panel may be collapsed and a
   // queue showing somebody else's attention lanes must not look like your own.
   const badge = document.querySelector("#suggested-perspective");
   const elsewhere = browsingSomebodyElse();
