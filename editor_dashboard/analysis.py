@@ -62,6 +62,10 @@ class PerspectiveView:
     land_at: datetime | None
     has_attention_signal: bool
     latest_review: Activity | None
+    # The item reads as the reviewers' move, but not this person's: it is their own,
+    # they replied after the other side last moved, or a helper is iterating on it
+    # with the author. Only the last applies to ALL_EDITORS.
+    others_move: bool
     # Both are None for ALL_EDITORS. A fingerprint has to exclude exactly one
     # person's own footprint to mean anything, and the union is not a person; the
     # browser reads the fingerprints of whoever the user says they are, whichever
@@ -74,6 +78,7 @@ class PerspectiveView:
             "lanes": list(self.lanes),
             "reasons": [reason.to_public_dict() for reason in self.reasons],
             "has_attention_signal": self.has_attention_signal,
+            "others_move": self.others_move,
             "fingerprint": self.content_fingerprint,
             "attention_fingerprint": self.attention_fingerprint,
         }
@@ -249,10 +254,21 @@ def _first_editor_response(
     return first, known
 
 
+def _responders(pr: PullRequestSnapshot, config: DashboardConfig) -> frozenset[str]:
+    """Whose reply answers the author: the editors, and the helpers apart from the author.
+
+    A helper's reply hands the item to its author as an editor's does, but a helper's
+    own PR still waits on the editors. The response metrics stay the editors' own.
+    """
+    return config.editors | (config.helpers - {pr.author})
+
+
 def _contributor_activity_times(
     pr: PullRequestSnapshot,
     editors: frozenset[str],
+    responders: frozenset[str] | None = None,
 ) -> list[datetime]:
+    responders = editors if responders is None else responders
     times: list[datetime] = []
     author_is_contributor = pr.author not in editors and not is_bot(pr.author)
     if author_is_contributor:
@@ -270,16 +286,21 @@ def _contributor_activity_times(
         times.append(pr.head_committed_at)
 
     for activity in pr.timeline:
-        if activity.author not in editors and not is_bot(activity.author):
+        if activity.author not in responders and not is_bot(activity.author):
             times.append(activity.updated_at)
     return times
 
 
-def _editor_activity_times(pr: PullRequestSnapshot, editors: frozenset[str]) -> list[datetime]:
+def _editor_activity_times(
+    pr: PullRequestSnapshot,
+    editors: frozenset[str],
+    responders: frozenset[str] | None = None,
+) -> list[datetime]:
+    responders = editors if responders is None else responders
     times = [
         activity.updated_at
         for activity in pr.timeline
-        if activity.author in editors and not is_bot(activity.author)
+        if activity.author in responders and not is_bot(activity.author)
     ]
     if pr.head_committed_at and pr.head_author in editors and not is_bot(pr.head_author):
         times.append(pr.head_committed_at)
@@ -583,6 +604,11 @@ class WaitingOn:
     who: tuple[str, ...]
     since: datetime | None
     reason: Reason
+    # Helpers who took part and haven't approved since: until they do, the PR is
+    # theirs and the author's to iterate on, and no editor's move.
+    helpers_reviewing: tuple[str, ...] = ()
+    # Helpers whose latest word is an approval, which hands the PR to the editors.
+    helpers_approved: tuple[str, ...] = ()
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -590,6 +616,8 @@ class WaitingOn:
             "who": list(self.who),
             "since": isoformat(self.since),
             "reason": self.reason.to_public_dict(),
+            "helpers_reviewing": list(self.helpers_reviewing),
+            "helpers_approved": list(self.helpers_approved),
         }
 
 
@@ -704,6 +732,50 @@ def _short_reference(url: str, repository_slug: str) -> str:
     return f"#{number}" if slug.lower() == repository_slug.lower() else f"{slug}#{number}"
 
 
+def _latest_author_move(pr: PullRequestSnapshot, editors: frozenset[str]) -> datetime:
+    """When the author last moved: opened, readied, edited, pushed, or replied.
+
+    A commit an editor pushed to the branch is not the author's move.
+    """
+    author = pr.author
+    times: list[datetime] = [pr.ready_for_review_at, pr.created_at]
+    if pr.last_edited_at:
+        times.append(pr.last_edited_at)
+    head_author = pr.head_author or author
+    if pr.head_committed_at and (head_author == author or head_author not in editors):
+        times.append(pr.head_committed_at)
+    for activity in (*pr.timeline, *pr.reviews):
+        if activity.author == author and not is_bot(activity.author) and activity.state != "PENDING":
+            times.append(activity.updated_at)
+    return max(times)
+
+
+def latest_activity_by(activities: Iterable[Activity], login: str) -> datetime | None:
+    """When ``login`` last commented or reviewed. A pending review is not public yet."""
+    return max(
+        (activity.updated_at for activity in activities if activity.author == login and activity.state != "PENDING"),
+        default=None,
+    )
+
+
+def pending_direct(direct: Iterable[Reason], *, answered_at: datetime | None, answered: bool, own: bool) -> list[Reason]:
+    """The direct signals the person has not answered yet.
+
+    A mention is answered by any later reply. A review request or an assignment has no
+    time of its own (it carries the item's update time), so it counts as answered once
+    the person has replied since the other side last moved. Nobody is asking the
+    author for their own item.
+    """
+    pending: list[Reason] = []
+    for reason in direct:
+        if reason.code.startswith("mentioned"):
+            if answered_at is None or (reason.timestamp is not None and reason.timestamp > answered_at):
+                pending.append(reason)
+        elif not own and not answered:
+            pending.append(reason)
+    return pending
+
+
 def _waiting_on(
     pr: PullRequestSnapshot,
     config: DashboardConfig,
@@ -722,7 +794,14 @@ def _waiting_on(
     editors = config.editors
     author = pr.author
 
-    def wait(party: str, who: Iterable[str] = (), since: datetime | None = None, detail: str | None = None) -> WaitingOn:
+    def wait(
+        party: str,
+        who: Iterable[str] = (),
+        since: datetime | None = None,
+        detail: str | None = None,
+        *,
+        helpers: tuple[tuple[str, ...], tuple[str, ...]] = ((), ()),
+    ) -> WaitingOn:
         who = tuple(who)
         label = _PARTY_LABELS[party]
         if party == "editors" and who:
@@ -730,7 +809,7 @@ def _waiting_on(
         elif party == "dependency" and who:
             label = "Waiting on " + ", ".join(_short_reference(url, slug) for url in who)
         reason = Reason(f"waiting-{party}", label, detail=detail, timestamp=since, tone=_PARTY_TONES[party])
-        return WaitingOn(party, who, since, reason)
+        return WaitingOn(party, who, since, reason, helpers_reviewing=helpers[0], helpers_approved=helpers[1])
 
     meeting = sorted(label for label in pr.labels if label.lower() in config.waiting_on.meeting_labels)
     if meeting:
@@ -759,24 +838,45 @@ def _waiting_on(
             # Nothing says why it is held, so somebody has to look.
             notes.append(Reason("held-without-dependency", f"Held by {', '.join(held)}", detail="No dependency named", tone="warning"))
 
-    # Who acted last, the author or an editor other than the author. Other people's
-    # comments are discussion, not a move.
-    author_times: list[datetime] = [pr.ready_for_review_at, pr.created_at]
-    if pr.last_edited_at:
-        author_times.append(pr.last_edited_at)
-    reviewer_activity: list[Activity] = []
-    head_author = pr.head_author or author
-    if pr.head_committed_at:
-        if head_author == author or head_author not in editors:
-            author_times.append(pr.head_committed_at)
-    for activity in (*pr.timeline, *pr.reviews):
-        if is_bot(activity.author) or activity.state == "PENDING":
+    # Who acted last, the author or an editor or helper other than the author. Other
+    # people's comments are discussion, not a move.
+    responders = _responders(pr, config)
+    latest_author = _latest_author_move(pr, responders)
+    reviewer_activity = [
+        activity
+        for activity in (*pr.timeline, *pr.reviews)
+        if not is_bot(activity.author)
+        and activity.state != "PENDING"
+        and activity.author != author
+        and activity.author in responders
+    ]
+    # A helper and the author iterate until the helper approves; then the editors
+    # review and land it. A helper's latest word decides which: an approval hands
+    # the PR to the editors and settles what the helper said before it.
+    helper_latest: dict[str, Activity] = {}
+    for activity in reviewer_activity:
+        if activity.author in editors:
             continue
-        if activity.author == author:
-            author_times.append(activity.updated_at)
-        elif activity.author in editors:
-            reviewer_activity.append(activity)
-    latest_author = max(author_times)
+        current_latest = helper_latest.get(activity.author)
+        if current_latest is None or (activity.updated_at, activity.id) > (current_latest.updated_at, current_latest.id):
+            helper_latest[activity.author] = activity
+    approved_by_helpers = sorted(login for login, activity in helper_latest.items() if activity.state == "APPROVED")
+    # Only while no editor has spoken since: a PR the editors are reviewing too is
+    # theirs, and one comment from a helper doesn't take it over.
+    latest_editor_word = max(
+        (activity.updated_at for activity in reviewer_activity if activity.author in editors),
+        default=None,
+    )
+    reviewing = sorted(
+        (
+            login
+            for login, activity in helper_latest.items()
+            if login not in approved_by_helpers and (latest_editor_word is None or activity.updated_at > latest_editor_word)
+        ),
+        key=lambda login: (-helper_latest[login].updated_at.timestamp(), login),
+    )
+    helpers = (tuple(reviewing), tuple(approved_by_helpers))
+    reviewer_activity = [activity for activity in reviewer_activity if activity.author not in approved_by_helpers]
 
     # Each editor's latest verdict: a plain comment neither grants nor revokes one.
     verdicts: dict[str, Activity] = {}
@@ -812,13 +912,18 @@ def _waiting_on(
     if reviewer_activity:
         latest_reviewer = max(reviewer_activity, key=lambda activity: (activity.updated_at, activity.id))
         if latest_reviewer.updated_at > latest_author:
-            return wait("author", since=latest_reviewer.updated_at, detail=f"since @{latest_reviewer.author} replied"), notes
+            return wait("author", since=latest_reviewer.updated_at, detail=f"since @{latest_reviewer.author} replied", helpers=helpers), notes
 
-    explicit = sorted({login for login in (*pr.review_requests, *pr.assignees) if login in editors and login != author})
-    if explicit:
-        who: Iterable[str] = explicit
+    approved_detail = "approved by " + ", ".join(f"@{login}" for login in approved_by_helpers) if approved_by_helpers else None
+    explicit = sorted(
+        {login for login in (*pr.review_requests, *pr.assignees) if login in responders and login != author and login not in approved_by_helpers}
+    )
+    if reviewing:
+        who: Iterable[str] = reviewing
+    elif explicit:
+        who = explicit
     else:
-        # The editors already in the conversation, most recent first.
+        # The editors and helpers already in the conversation, most recent first.
         recent: dict[str, datetime] = {}
         for activity in reviewer_activity:
             if activity.author and activity.updated_at > recent.get(activity.author, datetime.min.replace(tzinfo=timezone.utc)):
@@ -828,7 +933,7 @@ def _waiting_on(
             (login for login in recent if login not in config.retired_editors),
             key=lambda login: (-recent[login].timestamp(), login),
         )
-    return wait("editors", who, since=latest_author), notes
+    return wait("editors", who, since=latest_author, detail=approved_detail, helpers=helpers), notes
 
 
 def suggested_labels(pr: PullRequestSnapshot, waiting_on: WaitingOn) -> tuple[SuggestedLabel, ...]:
@@ -968,11 +1073,35 @@ def _perspective_view(
     # this editor currently in the middle of", not "which claim on their attention
     # is oldest".
     activity_cutoff = now - timedelta(days=config.attention.activity_window_days)
-    involved = bool(direct) or bool(rereview) or latest_review is not None
+    # While a helper iterates with the author, the PR is theirs, not any editor's, and
+    # theirs to follow even if they have only commented.
+    with_helper = bool(waiting_on.helpers_reviewing) and editor not in waiting_on.helpers_reviewing
+    involved = bool(direct) or bool(rereview) or latest_review is not None or editor in waiting_on.helpers_reviewing
+    if editor is None:
+        own = answered = False
+        pending = direct
+        editors_turn = waiting_on.party == "editors" and not with_helper
+        merge_turn = waiting_on.party == "merge"
+    else:
+        # Read as one person, "waiting on the editors" is somebody else's move when the
+        # PR is their own, or when they replied after the author last moved, which only
+        # happens when the reply didn't hand the PR back: a helper's approval.
+        own = pr.author == editor
+        author_moved_at = _latest_author_move(pr, _responders(pr, config))
+        answered_at = latest_activity_by((*pr.timeline, *pr.reviews), editor)
+        if own:
+            # Pushing, editing or opening the PR answers a mention as well as a reply
+            # does, including one on the issue the PR fixes.
+            answered_at = max(filter(None, (answered_at, author_moved_at)))
+        answered = answered_at is not None and answered_at > author_moved_at
+        pending = pending_direct(direct, answered_at=answered_at, answered=answered, own=own)
+        editors_turn = waiting_on.party == "editors" and not own and not answered and not with_helper
+        merge_turn = waiting_on.party == "merge" and editor in waiting_on.who
     # Recent, and something this editor can act on: a PR that recently moved to its
     # author or to implementers is not work in progress for the editor, so it no
-    # longer leads the queue. A direct request always is.
-    actionable = bool(direct) or waiting_on.party in {"editors", "merge"}
+    # longer leads the queue. Nor is one that waits on another editor's verdict or
+    # merge. An unanswered direct request always is.
+    actionable = bool(pending) or editors_turn or merge_turn
     is_active = bool(pr.updated_at >= activity_cutoff and involved and actionable)
 
     lanes: list[str] = []
@@ -988,16 +1117,16 @@ def _perspective_view(
             )
         )
     # A stale mention or a re-review only claims attention while the move is the
-    # editors'. Once the PR waits on its author, an implementer or a dependency, both
-    # used to keep it in the queue anyway, which is most of what made those lanes long.
-    editors_turn = waiting_on.party == "editors"
+    # editors' (this editor's, read as one person). Once the PR waits on its author, an
+    # implementer or a dependency, both used to keep it in the queue anyway, which is
+    # most of what made those lanes long.
     if direct:
         lanes.append("direct")
     elif expired and editors_turn:
         lanes.append("stale_direct")
     if rereview and editors_turn:
         lanes.append("rereview")
-    if waiting_on.party == "merge" and (editor is None or editor in waiting_on.who):
+    if merge_turn:
         lanes.append("land")
     reasons.extend((*direct, *expired, *rereview))
 
@@ -1018,6 +1147,11 @@ def _perspective_view(
         land_at=waiting_on.since if "land" in lanes else None,
         has_attention_signal=bool(direct or rereview),
         latest_review=latest_review,
+        others_move=(
+            (own and waiting_on.party != "author")
+            or (answered and waiting_on.party == "editors")
+            or (with_helper and waiting_on.party in {"editors", "author"})
+        ),
         content_fingerprint=_content_fingerprint(pr, editor, body_hash, linked) if editor else None,
         # Expired mentions stay in the hash so that a signal ageing out does not by
         # itself mark an already-seen item unseen again.
@@ -1082,8 +1216,9 @@ def analyze_pull_request(
             linked=linked_issues,
         )
 
-    contributor_times = _contributor_activity_times(pr, config.editors)
-    editor_times = _editor_activity_times(pr, config.editors)
+    responders = _responders(pr, config)
+    contributor_times = _contributor_activity_times(pr, config.editors, responders)
+    editor_times = _editor_activity_times(pr, config.editors, responders)
     latest_contributor = max(contributor_times) if contributor_times else None
     latest_editor = max(editor_times) if editor_times else None
     waiting_on_editor = bool(

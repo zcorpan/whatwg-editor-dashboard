@@ -202,6 +202,99 @@ class WaitingOnTests(PRVariants):
         self.assertNotIn("rereview", handed_back.perspectives["zcorpan"].lanes)
 
 
+class PerspectiveMoveTests(PRVariants):
+    """Read as one person, "waiting on the editors" can still be somebody else's move."""
+
+    def recent(self, **changes):
+        return self.waiting(updated_at=NOW - timedelta(hours=1), **changes)
+
+    def test_your_own_pr_waits_on_the_other_editors(self) -> None:
+        # The author replying in a review thread is a review of their own PR.
+        analysis = self.recent(
+            author="annevk",
+            head_author="annevk",
+            reviews=(review("annevk", 3, "COMMENTED"), review("zcorpan", 30, "COMMENTED")),
+            timeline=(activity("annevk", 2),),
+        )
+        self.assertEqual(analysis.waiting_on.party, "editors")
+        own = analysis.perspectives["annevk"]
+        self.assertTrue(own.others_move)
+        self.assertFalse({"active", "rereview", "stale_direct"} & set(own.lanes))
+        self.assertIn("active", analysis.perspectives["zcorpan"].lanes)
+        self.assertFalse(analysis.perspectives["zcorpan"].others_move)
+
+    def test_a_helpers_reply_hands_the_pr_to_its_author(self) -> None:
+        answered = self.recent(review_requests=("noamr",), timeline=(activity("noamr", 2),))
+        self.assertEqual(answered.waiting_on.party, "author")
+        self.assertNotIn("active", answered.perspectives["noamr"].lanes)
+        self.assertIn("direct", answered.perspectives["noamr"].lanes)
+        again = self.recent(review_requests=("noamr",), timeline=(activity("noamr", 2), activity("heidi", 1)))
+        self.assertEqual(again.waiting_on.who, ("noamr",))
+        self.assertIn("active", again.perspectives["noamr"].lanes)
+
+    def test_a_helpers_approval_hands_the_pr_to_the_editors(self) -> None:
+        analysis = self.recent(reviews=(review("noamr", 2, "APPROVED"),))
+        self.assertEqual(analysis.waiting_on.party, "editors")
+        self.assertTrue(analysis.perspectives["noamr"].others_move)
+        self.assertNotIn("active", analysis.perspectives["noamr"].lanes)
+        self.assertFalse(analysis.perspectives["annevk"].others_move)
+
+    def test_a_helper_and_the_author_iterate_until_the_helper_approves(self) -> None:
+        iterating = self.recent(timeline=(activity("noamr", 10), activity("heidi", 5)))
+        self.assertEqual(iterating.waiting_on.party, "editors")
+        self.assertEqual(iterating.waiting_on.who, ("noamr",))
+        self.assertIn("active", iterating.perspectives["noamr"].lanes)
+        self.assertFalse(iterating.perspectives["noamr"].others_move)
+        for editor in ("annevk", "all-editors"):
+            self.assertTrue(iterating.perspectives[editor].others_move)
+        self.assertNotIn("routed", iterating.perspectives["all-editors"].lanes)
+
+        approved = self.recent(
+            timeline=(activity("noamr", 10), activity("heidi", 5)),
+            reviews=(review("noamr", 2, "APPROVED"),),
+        )
+        self.assertEqual(approved.waiting_on.party, "editors")
+        self.assertEqual(approved.waiting_on.who, ())
+        self.assertEqual(approved.waiting_on.helpers_approved, ("noamr",))
+        self.assertEqual(approved.waiting_on.reason.detail, "approved by @noamr")
+        self.assertTrue(approved.perspectives["noamr"].others_move)
+        for editor in ("annevk", "all-editors"):
+            self.assertFalse(approved.perspectives[editor].others_move)
+
+    def test_a_helper_does_not_take_over_a_pr_editors_are_reviewing(self) -> None:
+        analysis = self.recent(timeline=(activity("noamr", 10), activity("annevk", 8), activity("heidi", 5)))
+        self.assertEqual(analysis.waiting_on.who, ("annevk", "noamr"))
+        self.assertEqual(analysis.waiting_on.helpers_reviewing, ())
+        self.assertFalse(analysis.perspectives["annevk"].others_move)
+
+    def test_a_helper_commenting_after_approving_is_reviewing_again(self) -> None:
+        analysis = self.recent(reviews=(review("noamr", 5, "APPROVED"),), timeline=(activity("noamr", 2),))
+        self.assertEqual(analysis.waiting_on.party, "author")
+        self.assertEqual(analysis.waiting_on.helpers_reviewing, ("noamr",))
+
+    def test_a_helpers_own_pr_waits_on_the_editors(self) -> None:
+        analysis = self.recent(author="noamr", head_author="noamr", timeline=(activity("noamr", 2),))
+        self.assertEqual(analysis.waiting_on.party, "editors")
+        self.assertIn("oldest_wait", analysis.shared_lanes)
+
+    def test_a_mention_after_your_reply_is_still_a_request(self) -> None:
+        mention = replace(activity("annevk", 1), body="@noamr what do you think?")
+        analysis = self.recent(timeline=(activity("noamr", 2), mention))
+        self.assertIn("active", analysis.perspectives["noamr"].lanes)
+
+    def test_opening_your_own_pr_answers_an_earlier_mention(self) -> None:
+        mention = replace(activity("zcorpan", 30), body="@annevk can you write this up?")
+        analysis = self.recent(author="annevk", head_author="annevk", head_committed_at=NOW - timedelta(hours=20), timeline=(mention,))
+        self.assertNotIn("active", analysis.perspectives["annevk"].lanes)
+
+    def test_somebody_elses_approval_is_theirs_to_land(self) -> None:
+        analysis = self.recent(reviews=(review("zcorpan", 30, "COMMENTED"), review("annevk", 3, "APPROVED")))
+        self.assertEqual(analysis.waiting_on.party, "merge")
+        self.assertIn("active", analysis.perspectives["annevk"].lanes)
+        self.assertNotIn("active", analysis.perspectives["zcorpan"].lanes)
+        self.assertIn("active", analysis.perspectives["all-editors"].lanes)
+
+
 class SuggestedLabelTests(PRVariants):
     def suggestions(self, **changes) -> set[str]:
         return {suggestion.label for suggestion in self.waiting(**changes).suggested_labels}

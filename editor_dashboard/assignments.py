@@ -160,10 +160,15 @@ def apply_assignments(
 
 
 def _unowned(analysis: PRAnalysis | IssueAnalysis) -> bool:
-    """Never answered, and nobody named: waiting for somebody to pick it up."""
+    """Never answered, and nobody named: waiting for somebody to pick it up.
+
+    A PR a helper approved has been picked up, and is the editors' to review now
+    rather than whoever the walk routed it to, which may be that helper.
+    """
     lanes = analysis.shared_lanes
     return (
         ("reply_window" in lanes or "overdue" in lanes)
         and analysis.waiting_on.party == "editors"
         and not analysis.waiting_on.who
+        and not analysis.waiting_on.helpers_approved
     )

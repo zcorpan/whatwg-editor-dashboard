@@ -624,8 +624,14 @@ function renderList(container, items, emptyMessage) {
 function suggestedItems() {
   const result = [];
   const seen = new Set();
-  const add = item => {
+  const perspective = perspectiveKey();
+  // The attention lanes already leave out what is somebody else's move from this
+  // perspective; the shared lanes can't, so their items are checked here. Their own
+  // lane views still list them.
+  const othersMove = item => Boolean(item.perspectives?.[perspective]?.others_move);
+  const add = (item, {shared = true} = {}) => {
     if (!item || seen.has(item.key) || !itemVisible(item)) return false;
+    if (shared && othersMove(item)) return false;
     seen.add(item.key);
     result.push(item);
     return true;
@@ -638,13 +644,13 @@ function suggestedItems() {
   // Read as one person, the ones routed to them come first: that is what spreading
   // the work means. The stable sort keeps deadline order within each group.
   const leadLimit = dashboard.suggested_next.first_response_lead || 0;
-  const perspective = perspectiveKey();
   const routedHere = item => Boolean(item.routing && item.routing.owner === perspective);
   const lead = orderedVisibleItems(laneKeys("reply_window"))
+    .filter(item => !othersMove(item))
     .sort((a, b) => Number(routedHere(b)) - Number(routedHere(a)));
   for (const item of lead.slice(0, leadLimit)) add(item);
 
-  for (const item of orderedVisibleItems(laneKeys("active"))) add(item);
+  for (const item of orderedVisibleItems(laneKeys("active"))) add(item, {shared: false});
 
   const cycle = dashboard.suggested_next.cycle || [];
   const laneItems = new Map(cycle.map(lane => [lane, orderedVisibleItems(laneKeys(lane))]));
@@ -658,7 +664,7 @@ function suggestedItems() {
       let index = indexes.get(lane) || 0;
       while (index < values.length && seen.has(values[index].key)) index += 1;
       indexes.set(lane, index + 1);
-      if (index < values.length && add(values[index])) {
+      if (index < values.length && add(values[index], {shared: !dashboard.perspective_lanes?.[perspective]?.[lane]})) {
         madeProgress = true;
         addedAfterActive += 1;
         if (addedAfterActive >= SUGGESTED_LIMIT_AFTER_ACTIVE) break;

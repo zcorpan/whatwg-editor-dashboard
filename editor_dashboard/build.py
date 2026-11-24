@@ -20,7 +20,7 @@ from .models import isoformat
 LANE_DESCRIPTIONS = {
     "active": {
         "title": "Active now",
-        "description": "Recently changed PRs the selected editor is already involved in, newest activity first.",
+        "description": "Recently changed PRs the selected editor is already involved in and that are their move, newest activity first.",
     },
     "direct": {
         "title": "Direct requests",
