@@ -103,8 +103,9 @@ def _backlog_points(
 
     Every open PR and every PR closed inside ``history_days`` is in the sample, so
     "was this PR open at time t" is answerable exactly for any t in the window. The
-    unanswered series is narrower: it needs the first editor response, which is only
-    trustworthy when the beginning-of-timeline sample established it.
+    unanswered series is narrower: it needs the first response by an editor or
+    helper, which is only trustworthy when the beginning-of-timeline sample
+    established it.
     """
     target_hours = config.response_targets.initial_editor_response_days * 24
     points: list[dict[str, Any]] = []
@@ -117,9 +118,9 @@ def _backlog_points(
             if not _open_at(analysis.pr, moment):
                 continue
             open_prs += 1
-            if not _contributor_pr(analysis, config) or not analysis.first_editor_response_known:
+            if not _contributor_pr(analysis, config) or not analysis.first_response_known:
                 continue
-            response = analysis.first_editor_response
+            response = analysis.first_response
             if response is not None and response.created_at <= moment:
                 continue
             awaiting += 1
@@ -157,13 +158,13 @@ def _bucket_metrics(
         eligible = [
             analysis
             for analysis in readied
-            if _contributor_pr(analysis, config) and analysis.first_editor_response_known
+            if _contributor_pr(analysis, config) and analysis.first_response_known
         ]
-        within_target = sum(
-            analysis.first_editor_response_hours is not None
-            and analysis.first_editor_response_hours <= target_hours
+        within = [
+            analysis
             for analysis in eligible
-        )
+            if analysis.first_response_hours is not None and analysis.first_response_hours <= target_hours
+        ]
         credited: dict[str, int] = {}
         for analysis in merged:
             reviewer = _first_editor_reviewer(analysis.pr, config, analysis.pr.merged_at)
@@ -179,13 +180,51 @@ def _bucket_metrics(
                 "merged_with_editor_review": sum(credited.values()),
                 "merged_by_first_reviewer": dict(sorted(credited.items())),
                 "first_response_eligible": len(eligible),
-                "first_response_within_target": within_target,
+                "first_response_within_target": len(within),
+                "first_response_within_target_by_editors": sum(
+                    analysis.first_response.author in config.editors for analysis in within
+                ),
                 # A bucket whose PRs are not all older than the target cannot report a
                 # rate yet: the misses have not had time to happen.
                 "first_response_mature": bucket.end <= now - timedelta(hours=target_hours),
             }
         )
     return results
+
+
+def _contributor_issue(analysis: Any, config: DashboardConfig) -> bool:
+    """An issue a contributor opened. A helper's own issue is one: it waits on the editors."""
+    author = analysis.issue.author
+    return author not in config.editors and not is_bot(author)
+
+
+def _issue_points(issues: list[Any], config: DashboardConfig, now: datetime) -> list[dict[str, Any]]:
+    """Contributor issues still unanswered past the target, at each weekly moment.
+
+    Only issues opened inside ``issues.window_days`` of the moment count, as in the
+    overdue lane, so that a decade of dormant feature requests doesn't swamp it. An
+    issue an open PR says it fixes is that PR's to answer, as in the lane.
+    """
+    target = timedelta(hours=config.response_targets.initial_editor_response_days * 24)
+    window = timedelta(days=config.issues.window_days)
+    points = []
+    for offset in range(TREND_WINDOW_DAYS, -1, -TREND_BUCKET_DAYS):
+        moment = now - timedelta(days=offset)
+        overdue = 0
+        for analysis in issues:
+            issue = analysis.issue
+            if not _contributor_issue(analysis, config) or not analysis.first_response_known or issue.fixed_by:
+                continue
+            if not (moment - window <= issue.created_at <= moment - target):
+                continue
+            if issue.closed_at is not None and issue.closed_at <= moment:
+                continue
+            response = analysis.first_response
+            if response is not None and response.created_at <= moment:
+                continue
+            overdue += 1
+        points.append({"at": isoformat(moment), "overdue_first_response": overdue})
+    return points
 
 
 def _issue_buckets(issues: list[Any], config: DashboardConfig, now: datetime) -> list[dict[str, Any]]:
@@ -201,9 +240,7 @@ def _issue_buckets(issues: list[Any], config: DashboardConfig, now: datetime) ->
         opened = [
             analysis
             for analysis in issues
-            if bucket.start < analysis.issue.created_at <= bucket.end
-            and analysis.issue.author not in config.people
-            and not is_bot(analysis.issue.author)
+            if bucket.start < analysis.issue.created_at <= bucket.end and _contributor_issue(analysis, config)
         ]
         eligible = [analysis for analysis in opened if analysis.first_response_known]
         within = [
@@ -232,100 +269,89 @@ def _status(on_track: bool, watch: bool = False) -> str:
     return "watch" if watch else "off_track"
 
 
+def _rate(buckets: list[dict[str, Any]], now: datetime, target_percent: int, label: str) -> dict[str, Any]:
+    """A first-response rate over the mature buckets, and its recent change.
+
+    The rate has no per-moment value to difference, so "improving" compares the most
+    recent buckets against the earlier ones inside the same window.
+    """
+    mature = [bucket for bucket in buckets if bucket["first_response_mature"]]
+
+    def percent_of(values: list[dict[str, Any]]) -> float | None:
+        return _percent(
+            sum(bucket["first_response_within_target"] for bucket in values),
+            sum(bucket["first_response_eligible"] for bucket in values),
+        )
+
+    within = sum(bucket["first_response_within_target"] for bucket in mature)
+    percent = percent_of(mature)
+    recent_start = isoformat(now - timedelta(days=RECENT_WINDOW_DAYS))
+    recent_percent = percent_of([bucket for bucket in mature if bucket["end"] > recent_start])
+    earlier_percent = percent_of([bucket for bucket in mature if bucket["end"] <= recent_start])
+    return {
+        "label": label,
+        "percent": percent,
+        "within_target": within,
+        "within_target_by_editors": sum(bucket["first_response_within_target_by_editors"] for bucket in mature),
+        "eligible": sum(bucket["first_response_eligible"] for bucket in mature),
+        "target_percent": target_percent,
+        "recent_days": RECENT_WINDOW_DAYS,
+        "recent_percent": recent_percent,
+        "earlier_percent": earlier_percent,
+        "change": (
+            _round(recent_percent - earlier_percent)
+            if recent_percent is not None and earlier_percent is not None
+            else None
+        ),
+        "lower_is_better": False,
+        "status": (
+            "unknown"
+            if percent is None
+            else _status(percent >= target_percent, percent >= target_percent - 20)
+        ),
+    }
+
+
+def _unanswered(points: list[dict[str, Any]], label: str) -> dict[str, Any]:
+    """How many contributors wait past the target now, and how that moved."""
+    first, last = points[0]["overdue_first_response"], points[-1]["overdue_first_response"]
+    return {
+        "label": label,
+        "value": last,
+        "change": last - first,
+        "lower_is_better": True,
+        "status": _status(last == 0 or last <= first),
+        "series": "overdue_first_response",
+    }
+
+
 def _health(
     points: list[dict[str, Any]],
     buckets: list[dict[str, Any]],
     config: DashboardConfig,
     now: datetime,
     issue_buckets: list[dict[str, Any]] | None = None,
+    issue_points: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Reduce the trend to three judgements, each with an unambiguous good direction."""
-    first, last = points[0], points[-1]
+    """The same two judgements for pull requests and for issues: the share of
+    contributors answered inside the target, and how many still wait past it.
 
-    mature = [bucket for bucket in buckets if bucket["first_response_mature"]]
-    eligible = sum(bucket["first_response_eligible"] for bucket in mature)
-    within_target = sum(bucket["first_response_within_target"] for bucket in mature)
-    percent = _percent(within_target, eligible)
+    The open and closed counts are left to foolip's spec-stats, which covers them.
+    """
+    days = config.response_targets.initial_editor_response_days
     target_percent = config.response_targets.first_response_within_target_percent
-
-    # The rate has no per-moment value to difference, so "improving" compares the most
-    # recent buckets against the earlier ones inside the same window.
-    recent_start = isoformat(now - timedelta(days=RECENT_WINDOW_DAYS))
-    recent = [bucket for bucket in mature if bucket["end"] > recent_start]
-    earlier = [bucket for bucket in mature if bucket["end"] <= recent_start]
-    recent_percent = _percent(
-        sum(bucket["first_response_within_target"] for bucket in recent),
-        sum(bucket["first_response_eligible"] for bucket in recent),
-    )
-    earlier_percent = _percent(
-        sum(bucket["first_response_within_target"] for bucket in earlier),
-        sum(bucket["first_response_eligible"] for bucket in earlier),
-    )
-    rate_change = (
-        _round(recent_percent - earlier_percent)
-        if recent_percent is not None and earlier_percent is not None
-        else None
-    )
-
-    if percent is None:
-        response_status = "unknown"
-    else:
-        response_status = _status(percent >= target_percent, percent >= target_percent - 20)
-
     indicators = {
-        "backlog": {
-            "label": "Open pull requests",
-            "value": last["open_prs"],
-            "change": last["open_prs"] - first["open_prs"],
-            "lower_is_better": True,
-            "status": _status(last["open_prs"] <= first["open_prs"]),
-            "series": "open_prs",
-        },
-        "overdue_first_response": {
-            "label": f"Waiting over {config.response_targets.initial_editor_response_days} days for a first reply",
-            "value": last["overdue_first_response"],
-            "change": last["overdue_first_response"] - first["overdue_first_response"],
-            "lower_is_better": True,
-            "status": _status(
-                last["overdue_first_response"] == 0
-                or last["overdue_first_response"] <= first["overdue_first_response"]
-            ),
-            "series": "overdue_first_response",
-        },
-        "first_response_rate": {
-            "label": f"First reply within {config.response_targets.initial_editor_response_days} days",
-            "percent": percent,
-            "within_target": within_target,
-            "eligible": eligible,
-            "target_percent": target_percent,
-            "recent_days": RECENT_WINDOW_DAYS,
-            "recent_percent": recent_percent,
-            "earlier_percent": earlier_percent,
-            "change": rate_change,
-            "lower_is_better": False,
-            "status": response_status,
-        },
+        "first_response_rate": _rate(buckets, now, target_percent, f"PRs answered within {days} days"),
+        "overdue_first_response": _unanswered(points, f"PRs still unanswered after {days} days"),
     }
-
     if issue_buckets:
-        mature_issues = [bucket for bucket in issue_buckets if bucket["first_response_mature"]]
-        issue_eligible = sum(bucket["first_response_eligible"] for bucket in mature_issues)
-        issue_within = sum(bucket["first_response_within_target"] for bucket in mature_issues)
-        issue_by_editors = sum(bucket["first_response_within_target_by_editors"] for bucket in mature_issues)
-        issue_percent = _percent(issue_within, issue_eligible)
-        indicators["issue_first_response_rate"] = {
-            "label": f"New issues answered within {config.response_targets.initial_editor_response_days} days",
-            "percent": issue_percent,
-            "within_target": issue_within,
-            "within_target_by_editors": issue_by_editors,
-            "eligible": issue_eligible,
-            "target_percent": target_percent,
-            "lower_is_better": False,
-            "status": (
-                "unknown"
-                if issue_percent is None
-                else _status(issue_percent >= target_percent, issue_percent >= target_percent - 20)
-            ),
+        indicators["issue_first_response_rate"] = _rate(
+            issue_buckets, now, target_percent, f"Issues answered within {days} days"
+        )
+    if issue_points:
+        indicators["issue_overdue_first_response"] = {
+            **_unanswered(issue_points, f"Issues still unanswered after {days} days"),
+            "window_days": config.issues.window_days,
         }
 
     ranking = {"off_track": 0, "watch": 1, "unknown": 2, "on_track": 3}
@@ -530,7 +556,7 @@ def build_metrics(
         if _contributor_pr(analysis, config)
     )
     unknown_first_response = sum(
-        not analysis.first_editor_response_known
+        not analysis.first_response_known
         for analysis in open_values
         if _contributor_pr(analysis, config)
     )
@@ -539,6 +565,7 @@ def build_metrics(
     points = _backlog_points(all_values, config, now)
     buckets = _bucket_metrics(all_values, config, now)
     issue_buckets = _issue_buckets(issue_values, config, now) if issue_values else []
+    issue_points = _issue_points(issue_values, config, now) if issue_values else []
     parties: dict[str, int] = {}
     for analysis in open_values:
         parties[analysis.waiting_on.party] = parties.get(analysis.waiting_on.party, 0) + 1
@@ -574,8 +601,9 @@ def build_metrics(
             "points": points,
             "buckets": buckets,
             "issue_buckets": issue_buckets,
+            "issue_points": issue_points,
         },
-        "health": _health(points, buckets, config, now, issue_buckets),
+        "health": _health(points, buckets, config, now, issue_buckets, issue_points),
         "editors": _editor_impact(all_values, config, now),
         "coverage": {
             "open_timeline_complete": sum(analysis.pr.timeline_sample_complete for analysis in open_values),

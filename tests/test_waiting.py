@@ -272,6 +272,16 @@ class PerspectiveMoveTests(PRVariants):
         self.assertEqual(analysis.waiting_on.party, "author")
         self.assertEqual(analysis.waiting_on.helpers_reviewing, ("noamr",))
 
+    def test_a_helpers_first_reply_answers_the_contributor(self) -> None:
+        # It is the first response for the contributor; the editor figures keep their own.
+        analysis = self.waiting(timeline=(activity("noamr", 24),))
+        self.assertEqual(analysis.first_response.author, "noamr")
+        self.assertTrue(analysis.first_response_known)
+        self.assertIsNone(analysis.first_editor_response)
+        self.assertFalse({"reply_window", "overdue"} & set(analysis.shared_lanes))
+        unanswered = self.waiting()
+        self.assertIn("reply_window", unanswered.shared_lanes)
+
     def test_a_helpers_own_pr_waits_on_the_editors(self) -> None:
         analysis = self.recent(author="noamr", head_author="noamr", timeline=(activity("noamr", 2),))
         self.assertEqual(analysis.waiting_on.party, "editors")

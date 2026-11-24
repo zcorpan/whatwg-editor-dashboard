@@ -115,6 +115,17 @@ class IssueTests(unittest.TestCase):
         self.assertIsNone(answered.current_wait_hours)
         self.assertNotIn("active", answered.perspectives["noamr"].lanes)
 
+    def test_unanswered_issues_are_counted_week_by_week(self) -> None:
+        from editor_dashboard.metrics import _issue_points
+
+        unanswered = self.recent_issue(created_at=NOW - timedelta(days=10), timeline=())
+        answered = self.recent_issue(created_at=NOW - timedelta(days=10), timeline=(self.comment("noamr", 200),))
+        dormant = self.recent_issue(created_at=NOW - timedelta(days=400), timeline=())
+        points = _issue_points([unanswered, answered, dormant], self.config, NOW)
+        self.assertEqual(points[-1]["overdue_first_response"], 1)
+        # Ten days ago it was just opened, so not yet past the target.
+        self.assertEqual(points[-2]["overdue_first_response"], 0)
+
     def test_a_helpers_own_issue_waits_on_the_editors(self) -> None:
         own = self.recent_issue(author="noamr", timeline=(self.comment("noamr", 2),))
         self.assertEqual(own.waiting_on.party, "editors")

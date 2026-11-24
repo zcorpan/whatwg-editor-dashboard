@@ -85,6 +85,7 @@
       </div>
 
       <div class="trend-cards four-up" id="trend-cards"></div>
+      <p class="chart-hint related-stats">For how many pull requests and issues are open and how fast they close, see foolip's spec-stats for <a href="https://foolip.github.io/spec-stats/reviews/html/">pull requests</a> and <a href="https://foolip.github.io/spec-stats/issues/html/">issues</a>.</p>
 
       <section class="whose-move" aria-labelledby="whose-move-heading">
         <h2 id="whose-move-heading">Whose move the open pull requests are</h2>
@@ -95,16 +96,14 @@
         <summary>Weekly numbers behind these charts</summary>
         <div class="table-wrap">
           <table id="trend-table">
-            <caption>Weekly reconstruction of the open backlog and the first-response rate. The backlog columns are counted at the end of each week.</caption>
+            <caption>Answered within the target, by week ready for review or opened, and still unanswered past it, counted at the end of each week.</caption>
             <thead>
               <tr>
                 <th scope="col">Week of</th>
-                <th scope="col">Open PRs</th>
-                <th scope="col">Awaiting a first reply</th>
-                <th scope="col">Waiting over target</th>
-                <th scope="col">Ready for review</th>
-                <th scope="col">Merged</th>
-                <th scope="col">First reply within target</th>
+                <th scope="col">PRs answered in time</th>
+                <th scope="col">PRs still unanswered</th>
+                <th scope="col">Issues answered in time</th>
+                <th scope="col">Issues still unanswered</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -205,6 +204,7 @@
       <div class="view-heading">
         <h1>Methodology</h1>
       </div>
+      <p class="methodology-about">Unofficial: not a WHATWG product, and its rules and targets aren't WHATWG policy. Source and issues: <a href="https://github.com/zcorpan/whatwg-editor-dashboard">zcorpan/whatwg-editor-dashboard</a>.</p>
       <div id="methodology-content" class="methodology-grid"></div>
     </section>
   </main>

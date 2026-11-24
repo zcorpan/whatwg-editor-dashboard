@@ -1086,10 +1086,9 @@ function renderWhoseMove() {
 
 // One small line of weekly activity per person. Colour carries nothing here, so it is
 // the text colour; the numbers are in the row and in the label.
-function sparkline(values, description) {
+function sparkline(values, description, {max = Math.max(1, ...values)} = {}) {
   const width = 96;
   const height = 22;
-  const max = Math.max(1, ...values);
   const step = values.length > 1 ? width / (values.length - 1) : width;
   const path = values.map((value, index) => `${index ? "L" : "M"}${(index * step).toFixed(1)},${(height - 2 - (value / max) * (height - 4)).toFixed(1)}`).join(" ");
   return svgElement("svg", {class: "sparkline", viewBox: `0 0 ${width} ${height}`, width, height, role: "img", "aria-label": description}, [
@@ -1102,13 +1101,13 @@ function renderTeam() {
   if (!people) return;
   const weeks = Math.round(people.window_days / 7);
   document.querySelector("#team-window").textContent = `Last ${weeks} weeks`;
+  const weeklyActivity = row => row.weekly.reviews.map((_, index) =>
+    row.weekly.reviews[index] + row.weekly.first_replies[index] + row.weekly.merged[index] + row.weekly.issues_closed[index]);
+  // One scale for every row, set by the busiest week anyone had, so the lines compare.
+  const busiestWeek = Math.max(1, ...people.rows.flatMap(weeklyActivity));
   document.querySelector("#team-table tbody").replaceChildren(...people.rows.map(row => {
-    const activity = row.weekly.reviews.map((_, index) =>
-      row.weekly.reviews[index] + row.weekly.first_replies[index] + row.weekly.merged[index] + row.weekly.issues_closed[index]);
-    const name = element("th", {attrs: {scope: "row"}}, [
-      `@${row.login}`,
-      row.role === "editor" ? "" : element("span", {className: "role-note", text: ` ${row.role}`}),
-    ]);
+    const activity = weeklyActivity(row);
+    const name = element("th", {attrs: {scope: "row"}, text: `@${row.login}`});
     if (row.qualified_by) name.title = `Listed because they ${row.qualified_by}.`;
     const routed = row.routed.routed
       ? `${row.routed.answered_in_time} of ${row.routed.routed} (${row.routed.answered_by_them} by them)`
@@ -1118,7 +1117,7 @@ function renderTeam() {
       : "None";
     return element("tr", {}, [
       name,
-      element("td", {}, [sparkline(activity, `Weekly reviews, first replies, merges and issue closes: ${activity.join(", ")}`)]),
+      element("td", {}, [sparkline(activity, `Weekly reviews, first replies, merges and issue closes: ${activity.join(", ")}`, {max: busiestWeek})]),
       ...[row.totals.reviews, row.totals.first_replies, row.totals.triaged, row.totals.merged, row.totals.authored_merged, row.totals.issues_closed]
         .map(value => element("td", {text: numberFormat(value)})),
       element("td", {text: routed}),
@@ -1128,7 +1127,53 @@ function renderTeam() {
   document.querySelector("#team-note").textContent =
     `Counts describe public events in order, not their cause. Reviews are of other people's PRs; first replies are the first response on a contributor's PR or issue; issues triaged are those whose first response was a label. ` +
     `Routed counts items routed since ${people.routing_start} whose response target has passed. ` +
-    `Anyone who isn't an editor or helper but reviewed at least ${people.min_reviews_of_others} other people's PRs is listed too.`;
+    `Anyone who isn't an editor or helper but reviewed at least ${people.min_reviews_of_others} other people's PRs is listed too. ` +
+    `The activity lines share one scale, up to ${numberFormat(busiestWeek)} a week.`;
+}
+
+function rateCard(indicator, buckets, {targetDays, hint, describe}) {
+  const mature = buckets.filter(bucket => bucket.first_response_mature);
+  return trendCard({
+    title: indicator.label,
+    status: indicator.status,
+    value: percentText(indicator.percent),
+    note: element("span", {
+      className: "chip muted",
+      text: `${numberFormat(indicator.within_target_by_editors)} of ${numberFormat(indicator.within_target)} by editors`,
+    }),
+    statusText: statusLine(indicator.status, {
+      problem: `below ${indicator.target_percent}%`,
+      change: indicator.change,
+      unit: " points",
+      period: "vs the earlier weeks",
+    }),
+    hint,
+    chart: lineChart(mature.map(bucket => (
+      bucket.first_response_eligible ? (bucket.first_response_within_target / bucket.first_response_eligible) * 100 : null
+    )), {
+      labels: mature.map(bucket => weekLabel(bucket.start)),
+      scale: {min: 0, max: 100, step: 50},
+      formatValue: percentText,
+      formatTick: value => `${Math.round(value)}%`,
+      description: describe(percentText(indicator.percent)),
+    }),
+  });
+}
+
+function unansweredCard(indicator, points, {period, hint, describe}) {
+  return trendCard({
+    title: indicator.label,
+    status: indicator.status,
+    value: numberFormat(indicator.value),
+    statusText: statusLine(indicator.status, {problem: "growing", change: indicator.change, period}),
+    hint,
+    chart: lineChart(points.map(point => point.overdue_first_response), {
+      labels: points.map(point => weekLabel(point.at)),
+      formatValue: numberFormat,
+      formatTick: value => numberFormat(Math.round(value)),
+      description: describe(numberFormat(indicator.value)),
+    }),
+  });
 }
 
 function renderHealth() {
@@ -1142,104 +1187,56 @@ function renderHealth() {
   const targetDays = dashboard.response_targets.initial_editor_response_days;
   document.querySelector("#health-date").textContent = `Generated ${localDate(metrics.generated_at)}`;
 
-  const pointLabels = points.map(point => weekLabel(point.at));
-  const backlog = health.indicators.backlog;
-  const overdue = health.indicators.overdue_first_response;
-  const rate = health.indicators.first_response_rate;
-
-  const matureBuckets = buckets.filter(bucket => bucket.first_response_mature);
-  const rateValues = matureBuckets.map(bucket => (
-    bucket.first_response_eligible
-      ? (bucket.first_response_within_target / bucket.first_response_eligible) * 100
-      : null
-  ));
-  const rateLabels = matureBuckets.map(bucket => weekLabel(bucket.start));
-
-  document.querySelector("#trend-cards").replaceChildren(
-    trendCard({
-      title: backlog.label,
-      status: backlog.status,
-      value: numberFormat(backlog.value),
-      statusText: statusLine(backlog.status, {problem: "growing", change: backlog.change, period}),
-      hint: "Open pull requests at the end of each week. Fewer is better.",
-      chart: lineChart(points.map(point => point.open_prs), {
-        labels: pointLabels,
-        formatValue: numberFormat,
-        formatTick: value => numberFormat(Math.round(value)),
-        description: `Open pull requests each week for ${weeks} weeks, ending at ${numberFormat(backlog.value)}.`,
-      }),
+  // The same two cards for pull requests and for issues, in an order that makes
+  // each row of the two-by-two layout one kind: the share answered in time, then
+  // how many still wait past it.
+  const indicators = health.indicators;
+  const issuePoints = trends.issue_points || [];
+  const issueBuckets = trends.issue_buckets || [];
+  const cards = [
+    rateCard(indicators.first_response_rate, buckets, {
+      targetDays,
+      hint: `Share of contributor PRs with a reply by an editor or helper inside ${targetDays} days, by week ready for review. Target ${indicators.first_response_rate.target_percent}%. Higher is better.`,
+      describe: percent => `Share of contributor pull requests answered within ${targetDays} days, by week ready for review; ${percent} across the window.`,
     }),
-    trendCard({
-      title: overdue.label,
-      status: overdue.status,
-      value: numberFormat(overdue.value),
-      statusText: statusLine(overdue.status, {problem: "growing", change: overdue.change, period}),
-      hint: `Open contributor PRs with no editor reply after ${targetDays} days. Fewer is better.`,
-      chart: lineChart(points.map(point => point.overdue_first_response), {
-        labels: pointLabels,
-        formatValue: numberFormat,
-        formatTick: value => numberFormat(Math.round(value)),
-        description: `Contributor pull requests waiting more than ${targetDays} days for a first editor reply, each week for ${weeks} weeks, ending at ${numberFormat(overdue.value)}.`,
-      }),
+    unansweredCard(indicators.overdue_first_response, points, {
+      period,
+      hint: `Open contributor PRs with no reply by an editor or helper after ${targetDays} days. Fewer is better.`,
+      describe: value => `Contributor pull requests unanswered after ${targetDays} days, each week for ${weeks} weeks, ending at ${value}.`,
     }),
-    trendCard({
-      title: rate.label,
-      status: rate.status,
-      value: percentText(rate.percent),
-      statusText: statusLine(rate.status, {
-        problem: `below ${rate.target_percent}%`,
-        change: rate.change,
-        unit: " points",
-        period: "vs the earlier weeks",
-      }),
-      hint: `Share of contributor PRs answered inside ${targetDays} days. Target ${rate.target_percent}%. Higher is better.`,
-      chart: lineChart(rateValues, {
-        labels: rateLabels,
-        scale: {min: 0, max: 100, step: 50},
-        formatValue: percentText,
-        formatTick: value => `${Math.round(value)}%`,
-        description: `Share of contributor pull requests answered within ${targetDays} days, by week ready for review; ${percentText(rate.percent)} across the window.`,
-      }),
-    }),
-  );
-
-  const issueRate = health.indicators.issue_first_response_rate;
-  if (issueRate) {
-    const issueBuckets = (trends.issue_buckets || []).filter(bucket => bucket.first_response_mature);
-    document.querySelector("#trend-cards").append(trendCard({
-      title: issueRate.label,
-      status: issueRate.status,
-      value: percentText(issueRate.percent),
-      note: element("span", {className: "chip muted", text: `${numberFormat(issueRate.within_target_by_editors)} of ${numberFormat(issueRate.within_target)} by editors`}),
-      statusText: statusLine(issueRate.status, {problem: `below ${issueRate.target_percent}%`}),
-      hint: `Share of new contributor issues with a comment, label or close by an editor or helper inside ${targetDays} days. Target ${issueRate.target_percent}%. Higher is better.`,
-      chart: lineChart(issueBuckets.map(bucket => (
-        bucket.first_response_eligible ? (bucket.first_response_within_target / bucket.first_response_eligible) * 100 : null
-      )), {
-        labels: issueBuckets.map(bucket => weekLabel(bucket.start)),
-        scale: {min: 0, max: 100, step: 50},
-        formatValue: percentText,
-        formatTick: value => `${Math.round(value)}%`,
-        description: `Share of new contributor issues answered within ${targetDays} days, by week opened; ${percentText(issueRate.percent)} across the window.`,
-      }),
+  ];
+  if (indicators.issue_first_response_rate) {
+    cards.push(rateCard(indicators.issue_first_response_rate, issueBuckets, {
+      targetDays,
+      hint: `Share of new contributor issues with a comment, label or close by an editor or helper inside ${targetDays} days, by week opened. Target ${indicators.issue_first_response_rate.target_percent}%. Higher is better.`,
+      describe: percent => `Share of new contributor issues answered within ${targetDays} days, by week opened; ${percent} across the window.`,
     }));
   }
+  if (indicators.issue_overdue_first_response) {
+    cards.push(unansweredCard(indicators.issue_overdue_first_response, issuePoints, {
+      period,
+      hint: `Open contributor issues from the last ${indicators.issue_overdue_first_response.window_days} days with no comment, label or close by an editor or helper after ${targetDays} days. Fewer is better.`,
+      describe: value => `Contributor issues unanswered after ${targetDays} days, each week for ${weeks} weeks, ending at ${value}.`,
+    }));
+  }
+  document.querySelector("#trend-cards").replaceChildren(...cards);
+
   renderWhoseMove();
   renderTeam();
 
 
+  const share = bucket => bucket.first_response_eligible
+    ? `${bucket.first_response_within_target}/${bucket.first_response_eligible}${bucket.first_response_mature ? "" : " (partial week)"}`
+    : "—";
   document.querySelector("#trend-table tbody").replaceChildren(...buckets.map((bucket, index) => {
-    const point = points[index + 1];
+    const issueBucket = issueBuckets[index];
+    const issuePoint = issuePoints[index + 1];
     return tableRow([
       weekLabel(bucket.start),
-      numberFormat(point.open_prs),
-      numberFormat(point.awaiting_first_response),
-      numberFormat(point.overdue_first_response),
-      numberFormat(bucket.ready_for_review),
-      numberFormat(bucket.merged),
-      bucket.first_response_eligible
-        ? `${bucket.first_response_within_target}/${bucket.first_response_eligible}${bucket.first_response_mature ? "" : " (partial week)"}`
-        : "—",
+      share(bucket),
+      numberFormat(points[index + 1].overdue_first_response),
+      issueBucket ? share(issueBucket) : "—",
+      issuePoint ? numberFormat(issuePoint.overdue_first_response) : "—",
     ]);
   }));
 
@@ -1398,45 +1395,24 @@ function renderImpact(weeks) {
 
 function renderMethodology() {
   const methodology = dashboard.methodology;
-  const content = document.querySelector("#methodology-content");
+  const card = (title, children) => element("article", {className: "methodology-card"}, [element("h2", {text: title}), ...children]);
+  const list = values => element("ul", {}, values.map(value => element("li", {text: value})));
 
-  const principles = element("article", {className: "methodology-card"}, [
-    element("h2", {text: "Principles"}),
-    element("ul", {}, methodology.principles.map(value => element("li", {text: value}))),
-  ]);
-
-  const limitations = element("article", {className: "methodology-card"}, [
-    element("h2", {text: "Known limitations"}),
-    element("ul", {}, methodology.known_limitations.map(value => element("li", {text: value}))),
-  ]);
-
-  const sampling = element("article", {className: "methodology-card wide"}, [
-    element("h2", {text: "Sampling and API economy"}),
-  ]);
-  const samplingList = element("ul");
-  for (const value of Object.values(methodology.sampling)) samplingList.append(element("li", {text: value}));
-  sampling.append(samplingList);
-
-  const rules = element("article", {className: "methodology-card wide"}, [
-    element("h2", {text: "Queue definitions"}),
-  ]);
-  const ruleGrid = element("div", {className: "rule-grid"});
+  const lanes = element("div", {className: "rule-grid"});
   for (const lane of LANE_ORDER.filter(value => value !== "all")) {
     const descriptor = dashboard.lane_descriptions[lane];
-    ruleGrid.append(element("div", {className: "rule-item"}, [
+    lanes.append(element("div", {className: "rule-item"}, [
       element("strong", {text: descriptor.title}),
       element("span", {text: descriptor.description}),
     ]));
   }
-  rules.append(ruleGrid);
 
-  const privacy = element("article", {className: "methodology-card wide"}, [
-    element("h2", {text: "Public/private boundary"}),
-    element("p", {text: "The scheduled build fetches public repository data only. The deployed data.json contains derived public signals and metrics, never GitHub notification state or browser-local workflow choices."}),
-    element("p", {text: "The browser stores seen attention fingerprints, addressed content fingerprints, pins, snooze deadlines, and opened timestamps in localStorage. Export and import are manual; no state is sent to a server."}),
-  ]);
-
-  content.replaceChildren(principles, limitations, sampling, rules, privacy);
+  document.querySelector("#methodology-content").replaceChildren(
+    card("How it works", [list(methodology.how_it_works)]),
+    card("Lanes", [lanes]),
+    card("Privacy", [list(methodology.privacy)]),
+    card("Limitations", [list(methodology.limitations)]),
+  );
 }
 
 function updateBuildIndicator() {

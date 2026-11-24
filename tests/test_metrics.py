@@ -63,10 +63,17 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(points[0]["open_prs"], 4)
         self.assertGreaterEqual(points[-1]["awaiting_first_response"], points[-1]["overdue_first_response"])
 
-        backlog = self.metrics["health"]["indicators"]["backlog"]
-        self.assertEqual(backlog["change"], points[-1]["open_prs"] - points[0]["open_prs"])
-        self.assertTrue(backlog["lower_is_better"])
-        self.assertEqual(backlog["status"], "off_track")
+        unanswered = self.metrics["health"]["indicators"]["overdue_first_response"]
+        self.assertEqual(unanswered["value"], points[-1]["overdue_first_response"])
+        self.assertEqual(unanswered["change"], points[-1]["overdue_first_response"] - points[0]["overdue_first_response"])
+        self.assertTrue(unanswered["lower_is_better"])
+
+    def test_the_health_view_asks_the_same_two_questions_of_prs_and_issues(self) -> None:
+        # Open and closed counts are left to foolip's spec-stats.
+        indicators = self.metrics["health"]["indicators"]
+        self.assertNotIn("backlog", indicators)
+        self.assertEqual(indicators["first_response_rate"]["label"], "PRs answered within 7 days")
+        self.assertEqual(indicators["overdue_first_response"]["label"], "PRs still unanswered after 7 days")
 
     def test_the_current_week_cannot_report_a_first_response_rate_yet(self) -> None:
         """A PR opened three days ago has not missed a seven-day target yet.

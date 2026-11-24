@@ -19,7 +19,7 @@ Lanes that depend on who is asking:
 
 Lanes that are properties of the item:
 
-- **Reply window open**: contributor items with no editor response yet, still inside the seven-day target, closest to the deadline first.
+- **Reply window open**: contributor items with no reply from an editor or helper yet, still inside the seven-day target, closest to the deadline first.
 - **First reply overdue**: the same, past the target.
 - **Longest waits**: contributor activity no editor or helper has answered, longest first.
 - **Ready**: mergeable, no blocker, a bounded diff, and a complete description checklist.
@@ -46,9 +46,9 @@ Issues use the same rules where the meaning carries over. Only issues opened, or
 
 ## Health view
 
-Four trends over twelve weeks: open pull requests, contributors waiting past the first-response target, and the shares of contributor PRs and new issues answered inside it, each saying whether it is on target and how it changed. Then how the work divides: merges by week split by editor, reviews, first replies, and a **Who did what** table per editor and helper.
+The same two questions for pull requests and for issues, as twelve-week trends: the share of contributors answered by an editor or helper within seven days (with how many of those were editors), and how many still wait past it. Each card says whether it is on target and how it changed. Open and closed counts are left to foolip's [spec-stats](https://foolip.github.io/spec-stats/reviews/html/). Then how the work divides: merges by week split by editor, reviews, first replies, and a **Who did what** table per editor and helper.
 
-The weekly backlog is reconstructed from the current sample rather than stored. The newest week never counts toward the response rate, because its PRs can't have missed the target yet. Wording describes event order, not causation: "merged after a review", never "because of".
+The weekly counts are reconstructed from the current sample rather than stored. The newest week never counts toward the response rate, because its PRs can't have missed the target yet. Wording describes event order, not causation: "merged after a review", never "because of".
 
 ## Running locally
 

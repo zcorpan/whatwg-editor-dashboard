@@ -95,6 +95,7 @@ class PRAnalysis:
     latest_contributor_activity_at: datetime | None
     latest_editor_activity_at: datetime | None
     current_wait_hours: float | None
+    # The first reply by an editor, which is what the editor impact figures count.
     first_editor_response: Activity | None
     first_editor_response_known: bool
     first_editor_response_hours: float | None
@@ -104,6 +105,11 @@ class PRAnalysis:
     first_time_contributor: bool
     age_hours: float
     linked_issues: tuple[LinkedIssue, ...] = ()
+    # The first reply by an editor or helper, which is what answers the contributor:
+    # the reply window, the overdue lane and the health view's PR figures.
+    first_response: Activity | None = None
+    first_response_known: bool = False
+    first_response_hours: float | None = None
 
     kind = "pr"
 
@@ -178,6 +184,9 @@ class PRAnalysis:
                 if self.first_editor_response_hours is not None
                 else None
             ),
+            "first_response_at": isoformat(self.first_response.created_at if self.first_response else None),
+            "first_response_by": self.first_response.author if self.first_response else None,
+            "first_response_known": self.first_response_known,
             "waiting_on": self.waiting_on.to_public_dict(),
             "outstanding": [{"party": item.party, "label": item.label} for item in self.outstanding],
             "suggested_labels": [suggestion.to_public_dict() for suggestion in self.suggested_labels],
@@ -1229,21 +1238,21 @@ def analyze_pull_request(
     )
     current_wait_hours = _hours_between(latest_contributor, now) if waiting_on_editor and latest_contributor else None
 
-    first_editor, first_response_known = _first_editor_response(pr, config.editors)
+    first_editor, first_editor_known = _first_editor_response(pr, config.editors)
+    # A helper's reply answers the contributor too; the editor figures keep their own.
+    first_reply, first_reply_known = _first_editor_response(pr, responders)
+
     # Counted from when the PR became ready for review, like its age. An editor who
     # already replied to the draft has answered, so that clamps to zero.
-    first_response_hours = (
-        _hours_between(pr.ready_for_review_at, first_editor.created_at)
-        if first_editor and first_response_known
-        else None
-    )
+    def hours_to(response: Activity | None, known: bool) -> float | None:
+        return _hours_between(pr.ready_for_review_at, response.created_at) if response and known else None
 
     ready_bounded, positive_reasons, blockers = _ready_and_blockers(pr, checklist, config)
     # A PR that was a draft is only asking for review since it was last marked ready.
     age_hours = _hours_between(pr.ready_for_review_at, now)
     target_hours = _response_target_hours(config)
 
-    # "Never received a first editor response", split on the response target into two
+    # "Never received a first response", split on the response target into two
     # lanes with opposite meanings: inside the target a reply can still meet it, past
     # it the outcome is already fixed. The pair is deliberately unbounded by age — an
     # earlier seven-day cap dropped a PR on the very day it missed the target, so the
@@ -1252,8 +1261,8 @@ def analyze_pull_request(
     never_answered = bool(
         pr.author not in config.editors
         and not is_bot(pr.author)
-        and first_editor is None
-        and first_response_known
+        and first_reply is None
+        and first_reply_known
     )
     in_reply_window = never_answered and age_hours <= target_hours
     first_response_overdue = never_answered and age_hours > target_hours
@@ -1286,7 +1295,7 @@ def analyze_pull_request(
         shared_reasons.append(
             Reason(
                 "first-response-overdue",
-                "First editor response overdue",
+                "First response overdue",
                 detail=f"{age_hours / 24:.1f} days ready for review",
                 timestamp=pr.ready_for_review_at,
                 tone="urgent",
@@ -1297,7 +1306,7 @@ def analyze_pull_request(
         shared_reasons.append(
             Reason(
                 "new-untriaged",
-                "Awaiting a first editor response",
+                "Awaiting a first response",
                 detail=f"{(target_hours - age_hours) / 24:.1f} days left of the "
                 f"{config.response_targets.initial_editor_response_days}-day target",
                 timestamp=pr.ready_for_review_at,
@@ -1309,7 +1318,7 @@ def analyze_pull_request(
         shared_reasons.append(
             Reason(
                 "waiting-on-editor",
-                "Contributor activity awaiting editor response",
+                "Contributor activity awaiting a response",
                 detail=f"{days:.1f} days",
                 timestamp=latest_contributor,
                 tone="attention" if days < config.response_targets.initial_editor_response_days else "urgent",
@@ -1345,8 +1354,11 @@ def analyze_pull_request(
         latest_editor_activity_at=latest_editor,
         current_wait_hours=current_wait_hours,
         first_editor_response=first_editor,
-        first_editor_response_known=first_response_known,
-        first_editor_response_hours=first_response_hours,
+        first_editor_response_known=first_editor_known,
+        first_editor_response_hours=hours_to(first_editor, first_editor_known),
+        first_response=first_reply,
+        first_response_known=first_reply_known,
+        first_response_hours=hours_to(first_reply, first_reply_known),
         waiting_on=waiting_on,
         outstanding=outstanding,
         suggested_labels=suggested_labels(pr, waiting_on),

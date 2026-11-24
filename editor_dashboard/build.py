@@ -20,71 +20,68 @@ from .models import isoformat
 LANE_DESCRIPTIONS = {
     "active": {
         "title": "Active now",
-        "description": "Recently changed PRs the selected editor is already involved in and that are their move, newest activity first.",
+        "description": "Recently changed items you're involved in and whose move is yours. Newest first.",
     },
     "direct": {
         "title": "Direct requests",
-        "description": "Review requests and assignments currently held by the selected editor, plus public mentions of them inside the activity window.",
+        "description": "Review requests and assignments you hold, and mentions in the activity window.",
     },
     "stale_direct": {
         "title": "Stale mentions",
-        "description": "Mentions of the selected editor older than the activity window, kept findable but no longer claiming the queue.",
+        "description": "Older mentions, findable without leading the queue.",
     },
     "rereview": {
         "title": "Re-review owed",
-        "description": "The PR changed or the author replied after the selected editor's latest sampled review, and the next move is an editor's.",
+        "description": "Changed, or the author replied, since your latest review. Your move.",
     },
     "land": {
         "title": "Ready to land",
-        "description": "The selected editor approved the current head, no other editor's latest review requests changes, and no template checklist item is left unticked. A merge conflict is shown but does not hold a PR here.",
+        "description": "You approved the current head, nobody's latest review requests changes, and the checklist is ticked. Merge conflicts are shown but don't hold it here.",
     },
     "reply_window": {
         "title": "Reply window open",
-        "description": "Contributor PRs that have never received a sampled editor response and are still inside the response target, closest to the deadline first. The only ones where a first reply can still meet the target.",
+        "description": "Contributor items with no reply yet, still inside the target. Closest to the deadline first: a reply can still make it.",
     },
     "overdue": {
         "title": "First reply overdue",
-        "description": "Contributor PRs that have never received a sampled editor response and are past the response target, oldest first.",
+        "description": "Contributor items with no reply yet, past the target. Oldest first.",
     },
     "oldest_wait": {
         "title": "Longest waits",
-        "description": "Time since the latest sampled non-editor human activity not followed by editor activity.",
+        "description": "Contributor activity nobody has answered since. Longest wait first.",
     },
     "ready_bounded": {
         "title": "Ready",
-        "description": "A deterministic quick-win heuristic: mergeable, no detected blocker, bounded diff, and sufficient description-checklist completion.",
+        "description": "Quick wins: mergeable, no blocker, a small diff and a ticked checklist.",
     },
     "stale_author": {
         "title": "Long wait on author",
-        "description": "The next move has been the author's for a long time: an editor requested changes or replied last. Candidates to ping or close, longest first.",
+        "description": "The author's move for a long time. Candidates to ping or close, longest first.",
     },
     "triage": {
         "title": "Needs triage",
-        "description": "Issues opened inside the issue window that have no topic label yet, oldest first. Labeling one is a first response.",
+        "description": "Recent issues without a topic label, oldest first. Labeling one is a first response.",
     },
     "routed": {
         "title": "Routed to you",
-        "description": "Unanswered PRs and issues nobody was asked about directly, each routed to one person by topic expertise and recent load, oldest first. The card says why.",
+        "description": "Unanswered items nobody was asked about, routed to one person by topic and load. Oldest first; the card says why.",
     },
     "all": {
         "title": "All open",
-        "description": "Every open pull request that is ready for review, and every open issue in another lane, ordered by latest public GitHub update.",
+        "description": "Every open PR ready for review, and every open issue in another lane. Latest update first.",
     },
 }
 
 
 def _queue_order_principle(config: DashboardConfig) -> str:
     lead = config.suggested_next.first_response_lead
-    recency = (
-        "The queue leads with recent activity on PRs the editor is already involved in. "
-        f"'Recent' means the latest {config.attention.activity_window_days} days."
-    )
+    days = config.attention.activity_window_days
     if not lead:
-        return recency
+        return f"Suggested next leads with recent activity (the last {days} days) on items you're involved in."
     return (
-        f"Up to {lead} contributor PRs that have never had an editor reply and are still inside the "
-        f"{config.response_targets.initial_editor_response_days}-day target come first, closest to the "
-        "deadline first, because those are the only ones where a reply can still meet it. " + recency
+        f"Suggested next leads with up to {lead} unanswered contributor items still inside the "
+        f"{config.response_targets.initial_editor_response_days}-day target, then recent activity "
+        f"(the last {days} days) on items you're involved in."
     )
 
 
@@ -111,103 +108,47 @@ def _perspective_options(config: DashboardConfig) -> list[dict[str, Any]]:
 
 
 def _methodology(config: DashboardConfig) -> dict[str, Any]:
+    sampling = config.sampling
+    days = config.response_targets.initial_editor_response_days
     return {
-        "principles": [
-            "No LLM is used. Every classification is produced by deterministic, inspectable rules.",
+        "how_it_works": [
+            "Rebuilt daily from public GitHub data. No LLM: every classification is a rule, and each card shows its evidence.",
             _queue_order_principle(config),
-            "The attention lanes are computed for every configured editor, so the queue can be read from any one editor's perspective or from all of them at once.",
-            "Which editor you are is chosen in the browser and stored only there; the build has no configured viewer and the published data names nobody as the reader.",
             (
-                "Draft pull requests are left out of every lane and every health figure. A PR that was "
-                "a draft is counted from when it was last marked ready for review, not from when it was opened."
+                "Each item says whose move it is: labels first, then an open change request, a current approval, "
+                "then who acted last. Conflicts and failing checks never hand a PR back. A helper's reply counts "
+                "as an editor's, and a helper and the author iterate until the helper approves."
             ),
+            "Attention lanes are per person, and leave out your own items and ones you answered last.",
+            "Unanswered items nobody was asked about are routed to one person by declared topics and load.",
             (
-                "Every item says whose move it is. Labels decide first, then an unaddressed change request, "
-                "a current approval, and finally who acted last; a merge conflict or failing checks never hand a PR back to its author."
+                f"A first response is a reply by an editor or helper, with a {days}-day target. Drafts are left out, "
+                "and a PR's clocks start when it was last marked ready."
             ),
-            (
-                "Unanswered contributor items nobody was asked about are routed to one person by the topics each person "
-                "declares in the dashboard configuration and by recent load. A routing decision never changes once made "
-                "unless the configuration or the item's topics do."
-            ),
-            "Suggested labels and GitHub teams are only suggestions: nothing is ever applied or mentioned automatically.",
-            "The generated site contains public GitHub data only.",
-            "Seen, addressed, pinned, snoozed, and opened state is stored only in the browser.",
-            "Description checklist completion is descriptive and is not an assessment of test sufficiency or specification readiness.",
+            "Suggested labels and teams are never applied automatically.",
         ],
-        "sampling": {
-            "timeline": (
-                f"The first and last {config.sampling.timeline_each_end} issue comments/reviews are sampled per PR. "
-                "Metrics that require complete middle history are omitted when the sample is incomplete."
-            ),
-            "reviews": (
-                f"The latest {config.sampling.reviews_per_pr} reviews of any author are sampled per PR, "
-                "which is what the per-editor impact figures are counted from."
-            ),
-            "mergeability": (
-                "GitHub computes mergeability lazily and answers UNKNOWN to a cold query, so the "
-                "build re-asks for those pull requests once GitHub has had time to compute. Any "
-                "that stay unknown are shown as unknown rather than guessed at."
-            ),
-            "review_threads": (
-                f"The first {config.sampling.review_threads} review threads are sampled for unresolved-thread detection."
-            ),
-            "history": (
-                f"Closed PRs are fetched for the latest {config.sampling.history_days} days. The health "
-                "view reconstructs its weekly trend from a twelve-week window inside that, where every "
-                "close is known and the backlog at each week can be counted exactly."
-            ),
-        },
-        "known_limitations": [
-            "GitHub notification unread state is not fetched; the browser shows locally unseen public attention signals instead.",
+        "privacy": [
+            "Published data is public GitHub signals only, with no description, comment or review text.",
+            "Your identity and seen, addressed, pinned and snoozed state stay in this browser.",
+        ],
+        "limitations": [
             (
-                "A public mention stops counting as a direct request once it falls outside the activity "
-                "window; it moves to the stale lane rather than disappearing. Review requests and "
-                "assignments do not expire because GitHub clears them on review."
+                f"Long threads are sampled: the first and last {sampling.timeline_each_end} comments, the latest "
+                f"{sampling.reviews_per_pr} reviews and the first {sampling.review_threads} review threads. "
+                "Figures that need the middle are dropped when it's missing."
             ),
+            "Inline review replies aren't read.",
             (
-                "First-time contributor detection treats an author with no repository association as a "
-                "first-time contributor, which also covers authors whose only prior PRs were closed unmerged."
+                f"Trends span twelve weeks (closed PRs: the last {sampling.history_days} days) and replay today's "
+                "drafts, authors and editor list."
             ),
-            "Inline review-thread replies are not inspected for mentions or response-time metrics in this MVP.",
-            "Review-request and assignment connections expose current state, not a complete timestamped history; their displayed timestamp uses the PR update time and is excluded from the seen-signal fingerprint.",
-            (
-                "Each editor's addressed-content fingerprint ignores that editor's own comments, reviews and "
-                "review threads, along with the review request GitHub clears when they review, so that reviewing "
-                "a PR does not undo 'address until changed'. A renewed review request with no other change "
-                "therefore does not return the PR on its own, and only the newest comment or review by somebody "
-                "else is fingerprinted, so an edit to an older one is not detected. Mergeability is excluded "
-                "too: GitHub computes it lazily and answers UNKNOWN to a cold query, so it changes "
-                "between builds without the pull request changing."
-            ),
-            (
-                "The queue's editor selector changes which attention lanes and evidence chips are shown; the "
-                "separate identity setting decides whose signals count as seen and addressed. Until an identity "
-                "is chosen the browser tracks pins and snoozes only, because those two markers are the ones that "
-                "need to know whose footprint to leave out of a fingerprint."
-            ),
-            "The configured current editor list is applied to the full sampled history; historical editor-membership changes are not reconstructed.",
-            (
-                "The weekly trend replays today's PR data at past moments. Draft state, authorship and "
-                "editor membership are taken as they are now: a PR that is a draft today is absent from "
-                "the whole window, and one that was converted back to draft and readied again counts only "
-                "from the latest time it was marked ready."
-            ),
-            "A PR description edit is attributed to the PR author because the sampled API data does not identify who edited the description.",
-            (
-                "First-response clocks start when a PR was last marked ready for review. An editor reply "
-                "to the draft still counts as the first response, so it meets the target."
-            ),
-            "A ready-and-bounded result is a prioritization hint, not a merge recommendation.",
-            "No claim is made about actual test coverage, implementer interest, web compatibility, or consensus quality.",
-            (
-                "Spec pages come from the heading that precedes each changed line in the current HTML source; a change under "
-                "a heading renamed since is not attributed to any page."
-            ),
-            (
-                "The team section counts public events per person. It says nothing about work that leaves no public trace on "
-                "this repository, such as reviews elsewhere, meetings, or implementation work."
-            ),
+            f"Mentions expire after {config.attention.activity_window_days} days; review requests and assignments last until GitHub clears them.",
+            "Address until changed ignores your own activity and checks only the newest comment by someone else.",
+            "Mergeability GitHub hasn't computed shows as unknown.",
+            "Description edits are attributed to the author.",
+            "Changes under a renamed heading aren't attributed to a spec page.",
+            "Figures count public events here only: not test coverage, implementer interest, consensus, or work elsewhere.",
+            "Unseen means not opened in this browser, not GitHub's unread state.",
         ],
     }
 

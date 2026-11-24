@@ -432,7 +432,7 @@ def analyze_issue(
         shared_reasons.append(
             Reason(
                 "new-untriaged",
-                "Awaiting a first editor response",
+                "Awaiting a first response",
                 detail=f"{(target_hours - age_hours) / 24:.1f} days left of the "
                 f"{config.response_targets.initial_editor_response_days}-day target",
                 timestamp=issue.created_at,
@@ -444,7 +444,7 @@ def analyze_issue(
         shared_reasons.append(
             Reason(
                 "first-response-overdue",
-                "First editor response overdue",
+                "First response overdue",
                 detail=f"{age_hours / 24:.1f} days open",
                 timestamp=issue.created_at,
                 tone="urgent",
@@ -456,7 +456,7 @@ def analyze_issue(
         shared_reasons.append(
             Reason(
                 "waiting-on-editor",
-                "Contributor activity awaiting editor response",
+                "Contributor activity awaiting a response",
                 detail=f"{days:.1f} days",
                 timestamp=latest_contributor,
                 tone="attention" if days < config.response_targets.initial_editor_response_days else "urgent",

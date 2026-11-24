@@ -65,8 +65,8 @@ def build_people(
                 count(review.author, "reviews", review.created_at)
                 if review.created_at >= since:
                     reviewed_prs[review.author].add(pr.number)
-        response = analysis.first_editor_response
-        if response is not None and analysis.first_editor_response_known and pr.author not in config.editors:
+        response = analysis.first_response
+        if response is not None and analysis.first_response_known and pr.author not in config.editors:
             count(response.author, "first_replies", response.created_at)
     for analysis in issue_values:
         response = analysis.first_response
@@ -86,9 +86,9 @@ def build_people(
     start = datetime.fromisoformat(config.routing.start).replace(tzinfo=now.tzinfo)
     responses: dict[str, tuple[datetime | None, str | None]] = {}
     for analysis in pr_values:
-        response = analysis.first_editor_response
+        response = analysis.first_response
         responses[f"{slug}#{analysis.number}"] = (
-            (response.created_at, response.author) if response and analysis.first_editor_response_known else (None, None)
+            (response.created_at, response.author) if response and analysis.first_response_known else (None, None)
         )
     for analysis in issue_values:
         response = analysis.first_response

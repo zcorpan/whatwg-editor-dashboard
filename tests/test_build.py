@@ -75,8 +75,8 @@ class BuildTests(unittest.TestCase):
         )
         self.assertTrue(set(payload["lanes"]["reply_window"]) <= item_keys)
 
-        principles = " ".join(payload["methodology"]["principles"])
-        self.assertIn("still inside the 7-day target", principles)
+        how = " ".join(payload["methodology"]["how_it_works"])
+        self.assertIn("still inside the 7-day target", how)
 
     def test_publishes_a_queue_perspective_for_every_editor(self) -> None:
         config = load_config(ROOT / "dashboard.yml")
