@@ -184,6 +184,7 @@ editors:
       - "topic: text-level semantics"
       - "topic: timers and user prompts"
       - "topic: user activation"
+      - "topic: xml"
 
 # Non-editors who review regularly enough to take routed review work. They get their
 # own queue perspective but are not editors for any metric.
@@ -344,7 +345,7 @@ topics:
   "topic: messaging": [web-messaging, comms]
   "topic: navigation": [nav-history-apis, browsing-the-web, document-lifecycle]
   "topic: origin": [origin]
-  "topic: parser": [parsing, xhtml, named-characters]
+  "topic: parser": [parsing, named-characters]
   "topic: popover": [popover]
   "topic: reflect": [common-dom-interfaces]
   "topic: resource hints (inc. preload)": [speculative-loading]
@@ -364,6 +365,7 @@ topics:
   "topic: timers and user prompts": [timers-and-user-prompts]
   "topic: url": [urls-and-fetching, "semantics#the-base-element"]
   "topic: workers and worklets": [workers, worklets]
+  "topic: xml": [xhtml]
   "removal/deprecation": [obsolete]
   # Not a GitHub label: a catch-all for the element and document pages that no
   # per-category label (whatwg/html#13322) covers. A section entry (`page#section`,
@@ -407,7 +409,7 @@ ignore_pages:
 # GitHub teams (whatwg/meta GITHUB-TEAMS.md) and the labels whose items they are a good
 # audience for. Suggested, never mentioned: the triager decides.
 teams:
-  html-parser: ["topic: parser"]
+  html-parser: ["topic: parser", "topic: xml"]
   forms: ["topic: forms", "topic: select", "topic: fieldset", "topic: button"]
   media: ["topic: media"]
   canvas: ["topic: canvas"]
