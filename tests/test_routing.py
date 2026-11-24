@@ -147,23 +147,6 @@ class TopicTests(unittest.TestCase):
         # What no per-category label covers falls to the catch-all.
         self.assertEqual(item_topics([], self.config, pages={"microdata": 1}), {"label:element semantics": 1.0})
 
-    def test_old_labels_count_as_the_names_that_replace_them(self) -> None:
-        topics = item_topics(["topic: timing", "topic: link"], self.config)
-        self.assertEqual(set(topics), {"label:topic: timers and user prompts", "label:topic: links"})
-        # Before the rename, the existing label is what gets suggested.
-        suggester = LabelSuggester.from_config(self.config, ["topic: timing"])
-        self.assertEqual(suggester.from_pages({"timers-and-user-prompts": 2}, self.config)[0], "topic: timing")
-        # Of two old labels being merged, the first listed in topic_aliases.
-        suggester = LabelSuggester.from_config(
-            self.config, ["topic: cross-origin-embedder-policy", "topic: cross-origin-opener-policy"]
-        )
-        self.assertEqual(suggester.from_pages({"browsers": 2}, self.config)[0], "topic: cross-origin-opener-policy")
-        # Afterwards, the new one.
-        suggester = LabelSuggester.from_config(self.config, ["topic: timing", "topic: timers and user prompts"])
-        self.assertEqual(
-            suggester.from_pages({"timers-and-user-prompts": 2}, self.config)[0], "topic: timers and user prompts"
-        )
-
     def test_mapped_labels_without_the_prefix_are_topic_labels(self) -> None:
         self.assertIn("label:accessibility", item_topics(["accessibility", "clarification"], self.config))
         self.assertNotIn("label:clarification", item_topics(["accessibility", "clarification"], self.config))

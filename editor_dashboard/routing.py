@@ -34,7 +34,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
-from .config import DashboardConfig
+from .config import DashboardConfig, label_key
 from .topics import Topics, display_name
 
 
@@ -162,11 +162,11 @@ def suggest_teams(candidate: Candidate, config: DashboardConfig) -> list[TeamSug
     review one (the maintainer guidelines ask for the documentation team to be made
     aware), or nobody routed to declares the topic.
     """
-    labels = {config.canonical_label(label) for label in candidate.labels}
+    labels = {label_key(label) for label in candidate.labels}
     declared = any(declared_overlap(config, login, candidate.topics)[0] > 0 for login in pool(config, candidate.kind))
     suggestions: list[TeamSuggestion] = []
     for team, team_labels in config.teams:
-        matching = sorted(labels & {config.canonical_label(label) for label in team_labels})
+        matching = sorted(labels & {label_key(label) for label in team_labels})
         if not matching or team in candidate.mentioned_teams:
             continue
         if "needs implementer interest" in labels:

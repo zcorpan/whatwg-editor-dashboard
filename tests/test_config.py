@@ -120,20 +120,3 @@ class TopicPagesConfigTests(unittest.TestCase):
     def test_rejects_ignored_pages(self) -> None:
         with self.assertRaisesRegex(ValueError, "ignore_pages"):
             config_with_people("editors: [zcorpan]\ntopics:\n  \"topic: x\": [indices]\n")
-
-
-class TopicAliasConfigTests(unittest.TestCase):
-    def test_knows_accepts_old_and_new_names(self) -> None:
-        config = config_with_people(
-            "editors:\n  - login: zcorpan\n    knows:\n      - \"topic: timing\"\n"
-            "topic_aliases:\n  \"topic: timers and user prompts\": [\"topic: timing\"]\n"
-        )
-        self.assertEqual(config.knows_of("zcorpan"), frozenset({"label:topic: timers and user prompts"}))
-        self.assertEqual(config.canonical_label("Topic: Timing"), "topic: timers and user prompts")
-
-    def test_rejects_an_old_name_in_topics(self) -> None:
-        with self.assertRaisesRegex(ValueError, "name that replaces it"):
-            config_with_people(
-                "editors: [zcorpan]\ntopics:\n  \"topic: timing\": [timers-and-user-prompts]\n"
-                "topic_aliases:\n  \"topic: timers and user prompts\": [\"topic: timing\"]\n"
-            )

@@ -381,21 +381,6 @@ topics:
   "spec tooling": []
   "dev edition": []
 
-# Labels proposed to be renamed or merged, under the name that replaces them. An item
-# with an old label counts as the new one, and `knows:` and `teams:` accept either, so
-# the new names work before the labels are changed on GitHub. Suggestions only ever
-# name a label that exists. The labels new in whatwg/html#13322 (topic: mathml,
-# topic: messaging, topic: sections, topic: grouping content, topic: text-level
-# semantics, topic: document metadata) need no alias.
-topic_aliases:
-  "topic: cross-origin isolation": ["topic: cross-origin-opener-policy", "topic: cross-origin-embedder-policy"]
-  "topic: links": ["topic: link", "topic: hyperlink"]
-  "topic: forms": ["topic: fieldset"]
-  "topic: navigation": ["topic: location"]
-  "topic: workers and worklets": ["topic: workers", "topic: worklets"]
-  "topic: timers and user prompts": ["topic: timing"]
-  "topic: dynamic markup insertion": ["topic: document.open()"]
-
 # Spec pages every change touches, which say nothing about its topic.
 ignore_pages:
   - acknowledgements
@@ -410,12 +395,12 @@ ignore_pages:
 # audience for. Suggested, never mentioned: the triager decides.
 teams:
   html-parser: ["topic: parser", "topic: xml"]
-  forms: ["topic: forms", "topic: select", "topic: fieldset", "topic: button"]
+  forms: ["topic: forms", "topic: select", "topic: button"]
   media: ["topic: media"]
   canvas: ["topic: canvas"]
   rendering: ["topic: rendering"]
   components: ["topic: custom elements", "topic: shadow"]
-  cross-origin-isolation: ["topic: cross-origin-opener-policy", "topic: cross-origin-embedder-policy"]
+  cross-origin-isolation: ["topic: cross-origin isolation"]
   modules: ["topic: script", "topic: imports/exports"]
   css: ["topic: style", "topic: selectors"]
   storage: ["topic: storage"]

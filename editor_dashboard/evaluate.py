@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any
 
-from .config import DashboardConfig
+from .config import DashboardConfig, label_key
 from .expertise import contributions
 from .github import RepositoryData
 from .models import HistoryRecord
@@ -37,7 +37,7 @@ def label_suggestion_precision(data: RepositoryData, spec: SpecPages, config: Da
         suggestion = suggester.from_pages(pages, config)
         if suggestion is not None:
             suggested += 1
-            correct += config.canonical_label(suggestion[0]) in labels
+            correct += label_key(suggestion[0]) in labels
     return {
         "labeled_with_pages": labeled,
         "suggested": suggested,

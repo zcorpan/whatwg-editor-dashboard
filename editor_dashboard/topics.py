@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 
-from .config import DashboardConfig
+from .config import DashboardConfig, label_key
 from .spec_pages import split_location
 
 
@@ -21,9 +21,8 @@ Topics = dict[str, float]
 
 
 def topic_labels(labels: Iterable[str], config: DashboardConfig) -> list[str]:
-    """The labels that say what an item is about, by their lowercased current names:
-    `topic:` ones and the mapped ones, with renamed and merged ones under their new name."""
-    return sorted({config.canonical_label(label) for label in labels if config.is_topic_label(label)})
+    """The labels that say what an item is about, lowercased: `topic:` ones and the mapped ones."""
+    return sorted({label_key(label) for label in labels if config.is_topic_label(label)})
 
 
 def page_shares(pages: Mapping[str, int] | None, config: DashboardConfig) -> dict[str, float]:
@@ -85,9 +84,8 @@ def top_page(shares: Mapping[str, float]) -> str | None:
 class LabelSuggester:
     """A topic label for an unlabeled item, from the `topics:` map or its title.
 
-    Only labels that exist on GitHub are suggested, under the name GitHub has: a name
-    in `topics:` that replaces a label nobody has renamed yet is suggested as the old
-    one, and one that exists nowhere yet is not suggested at all.
+    Only labels some item carries are suggested, under the name GitHub has, so a name
+    in `topics:` that exists nowhere yet is not suggested at all.
     """
 
     label_words: tuple[tuple[re.Pattern[str], str], ...]
@@ -97,18 +95,10 @@ class LabelSuggester:
     @classmethod
     def from_config(cls, config: DashboardConfig, known_labels: Iterable[str]) -> "LabelSuggester":
         prefix = config.issues.topic_label_prefix
-        # The label under its own current name wins; failing that, the old label
-        # listed first under it in `topic_aliases`.
-        order = {alias: index for index, (alias, _canonical) in enumerate(config.topic_aliases)}
-
-        def rank(label: str) -> tuple[int, str]:
-            lowered = label.lower()
-            return (-1 if lowered == config.canonical_label(label) else order.get(lowered, len(order)), lowered)
-
         existing: dict[str, str] = {}
-        for label in sorted(set(known_labels), key=rank):
+        for label in sorted(set(known_labels)):
             if config.is_topic_label(label):
-                existing.setdefault(config.canonical_label(label), label)
+                existing.setdefault(label_key(label), label)
         words = []
         for label in sorted(set(existing.values())):
             if not label.lower().startswith(prefix):
