@@ -38,8 +38,9 @@
   --chart-grid: #e6e9f0;
   --chart-axis: #b7beca;
   --shadow: 0 10px 30px rgba(34, 40, 55, 0.08);
+  --scroll-shadow: rgba(34, 40, 55, 0.2);
   --radius: 14px;
-  --max-width: 1240px;
+  --max-width: 1500px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -72,6 +73,8 @@
     --series-5: #bb881e;
     --series-other: #97a1b1;
     --series-rest: #414a59;
+    /* A dark shadow barely shows on a dark surface, so the edge is lit instead. */
+    --scroll-shadow: rgba(174, 181, 193, 0.28);
     --chart-grid: #2b313b;
     --chart-axis: #4a5362;
     --shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
@@ -161,6 +164,7 @@ main {
   padding-right: 1.25rem;
 }
 .view { padding: 1.5rem 0 3rem; }
+#health-view { container-type: inline-size; }
 .view-heading {
   display: flex;
   align-items: baseline;
@@ -628,7 +632,6 @@ main {
 
 .trend-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: .8rem;
 }
 .trend-card {
@@ -677,7 +680,7 @@ main {
 
 .stat-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: .75rem;
   margin-top: .8rem;
 }
@@ -690,18 +693,64 @@ main {
 .stat-value { display: block; font-size: 1.9rem; line-height: 1; font-weight: 800; letter-spacing: -.04em; }
 .stat-label { display: block; margin-top: .4rem; font-size: .8rem; font-weight: 640; }
 .stat-note { display: block; margin-top: .3rem; color: var(--muted); font-size: .72rem; }
+/* After `.stat-row`, which it overrides: four cards go four, two or one across,
+   never three over one. */
+.four-up { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@container (max-width: 1080px) { .four-up { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 540px) { .four-up { grid-template-columns: minmax(0, 1fr); } }
 
+/* Scroll shadow at the right edge: the `local` cover moves with the content and
+   hides the `scroll` shadow once there is nothing more to show, so an overflowing
+   table says so even where the platform hides scrollbars. Cells other than the
+   first column must stay transparent. */
 .table-wrap {
+  container-type: inline-size;
   overflow-x: auto;
+  /* No rubber-banding sideways: the pinned caption and column would come loose
+     from the edge they are pinned to. Vertical scrolling still chains to the page. */
+  overscroll-behavior-x: none;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background:
+    linear-gradient(to left, var(--surface) 40%, transparent) right / 2.5rem 100% no-repeat local,
+    radial-gradient(farthest-side at 100% 50%, var(--scroll-shadow), transparent) right / 1.25rem 100% no-repeat scroll,
+    var(--surface);
+}
+/* The first column stays put and the rest scrolls under it. Once scrolled, a
+   1px line gives it a sharp edge. Without scroll-driven animations the
+   animation would sit at its end state for good, so the line is left out. */
+.table-wrap :is(th, td):first-child {
+  position: sticky;
+  left: 0;
   background: var(--surface);
 }
+@supports (animation-timeline: scroll()) {
+  .table-wrap :is(th, td):first-child {
+    animation: pinned-column-edge linear both;
+    animation-timeline: scroll(nearest inline);
+    animation-range: 0 .5rem;
+  }
+}
+@keyframes pinned-column-edge {
+  from { box-shadow: inset -1px 0 transparent; }
+  to { box-shadow: inset -1px 0 var(--border); }
+}
 table { width: 100%; border-collapse: collapse; font-size: .82rem; }
-caption { padding: .8rem 1rem .2rem; color: var(--muted); text-align: left; font-size: .73rem; }
+/* A caption is as wide as its table, which leaves sticky no room to move it, so
+   it is narrowed to the visible width of the scroller and pinned there. */
+caption {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  width: 100cqi;
+  padding: .8rem 1rem .2rem;
+  color: var(--muted);
+  text-align: left;
+  font-size: .73rem;
+}
 th, td { padding: .8rem .9rem; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
 th:first-child, td:first-child { text-align: left; }
-thead th { color: var(--muted); font-size: .72rem; letter-spacing: .05em; }
+thead th { color: var(--muted); font-size: .72rem; letter-spacing: .05em; vertical-align: bottom; white-space: normal; text-wrap: balance; }
 tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
 tbody th { font-weight: 730; }
 .section-note, .fine-print { color: var(--muted); font-size: .79rem; }
