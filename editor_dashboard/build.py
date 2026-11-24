@@ -268,6 +268,7 @@ def build_site(
         perspective_lanes=perspective_lanes,
         config=config,
         now=now,
+        repository_labels=repository_data.labels,
     )
     metrics["people"] = build_people(
         prs=[*open_analyses, *closed_analyses],

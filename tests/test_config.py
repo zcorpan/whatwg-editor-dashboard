@@ -120,3 +120,17 @@ class TopicPagesConfigTests(unittest.TestCase):
     def test_rejects_ignored_pages(self) -> None:
         with self.assertRaisesRegex(ValueError, "ignore_pages"):
             config_with_people("editors: [zcorpan]\ntopics:\n  \"topic: x\": [indices]\n")
+
+
+class DashboardLabelTests(unittest.TestCase):
+    def test_dashboard_labels_are_left_out_of_the_labels_checked_against_github(self) -> None:
+        config = config_with_people(
+            "editors: [zcorpan]\ntopics:\n  \"element semantics\": [dom]\n  \"topic: forms\": [forms]\n"
+            "dashboard_labels: [Element Semantics]\n"
+        )
+        self.assertIn("topic: forms", config.named_labels())
+        self.assertNotIn("element semantics", config.named_labels())
+
+    def test_a_dashboard_label_must_be_a_topic(self) -> None:
+        with self.assertRaisesRegex(ValueError, "dashboard_labels"):
+            config_with_people("editors: [zcorpan]\ndashboard_labels: [nowhere]\n")

@@ -234,8 +234,6 @@ blocking_labels:
   - do not merge yet
   - needs implementer interest
   - needs tests
-  - needs work
-  - blocked
 
 sampling:
   # The outer page is deliberately small because each PR includes several nested samples.
@@ -282,7 +280,6 @@ waiting_on:
   # decides.
   hold_labels:
     - do not merge yet
-    - blocked
   party_labels:
     needs implementer interest: implementers
     needs compat analysis: compat
@@ -380,6 +377,11 @@ topics:
   "document conformance": [syntax]
   "spec tooling": []
   "dev edition": []
+
+# Keys of topics: that are not GitHub labels. Builds warn about any other label this
+# file names that the repository doesn't have.
+dashboard_labels:
+  - element semantics
 
 # Spec pages every change touches, which say nothing about its topic.
 ignore_pages:

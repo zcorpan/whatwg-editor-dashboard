@@ -50,6 +50,7 @@ def apply_assignments(
     perspective_lanes: dict[str, dict[str, list[str]]],
     config: DashboardConfig,
     now: datetime,
+    repository_labels: Iterable[str] | None = None,
 ) -> Assignments:
     """Route every recent contributor item, then annotate the published ones.
 
@@ -117,7 +118,9 @@ def apply_assignments(
             issue.title,
         )
 
-    suggester = LabelSuggester.from_config(config, known_labels)
+    # The repository's own label list when the fetch has it, so that a label nobody has
+    # used yet can be suggested; else the labels items carry.
+    suggester = LabelSuggester.from_config(config, known_labels if repository_labels is None else repository_labels)
 
     decisions = route(candidates.values(), config)
     for key, decision in decisions.items():

@@ -86,7 +86,7 @@ class WaitingOnConfig:
     meeting_labels: frozenset[str] = frozenset({"agenda+", "agenda+ f2f"})
     # "Must not merge per rationale in comment": usually a dependency that has to land
     # first, so on its own it does not decide who is next. See analysis.py.
-    hold_labels: frozenset[str] = frozenset({"do not merge yet", "blocked"})
+    hold_labels: frozenset[str] = frozenset({"do not merge yet"})
     # Label -> the party it says the PR waits on.
     party_labels: tuple[tuple[str, str], ...] = (
         ("needs implementer interest", "implementers"),
@@ -186,6 +186,9 @@ class DashboardConfig:
     # counts as being about the labels that cover it, so `knows:` only needs labels.
     # Every key is a topic label, `topic:` prefix or not.
     topic_pages: tuple[tuple[str, frozenset[str]], ...] = ()
+    # Keys of `topics:` that are not GitHub labels, lowercased: names for parts of the
+    # spec no label covers. They route like labels but are never suggested.
+    dashboard_labels: frozenset[str] = frozenset()
 
     @property
     def people(self) -> frozenset[str]:
@@ -197,6 +200,16 @@ class DashboardConfig:
 
     def knows_of(self, login: str) -> frozenset[str]:
         return dict(self.knows).get(login, frozenset())
+
+    def named_labels(self) -> frozenset[str]:
+        """Every GitHub label this file names, lowercased."""
+        names = {label for label, _pages in self.topic_pages}
+        names |= {key[len("label:") :] for _login, keys in self.knows for key in keys if key.startswith("label:")}
+        names |= {label_key(label) for _team, labels in self.teams for label in labels}
+        names |= self.waiting_on.meeting_labels | self.waiting_on.hold_labels
+        names |= {label for label, _party in self.waiting_on.party_labels}
+        names |= self.blocking_labels
+        return frozenset(names - self.dashboard_labels)
 
     def is_topic_label(self, label: str) -> bool:
         lowered = label_key(label)
@@ -499,6 +512,14 @@ def load_config(path: str | Path) -> DashboardConfig:
             raise ValueError(f"topics.{label}: {', '.join(ignored)} in ignore_pages, so they say nothing")
         topic_pages[topic] = values
 
+    dashboard_labels_raw = raw.get("dashboard_labels", [])
+    if not isinstance(dashboard_labels_raw, list):
+        raise ValueError("dashboard_labels must be a list")
+    dashboard_labels = frozenset(label_key(str(value)) for value in dashboard_labels_raw if str(value).strip())
+    unmapped = sorted(dashboard_labels - set(topic_pages))
+    if unmapped:
+        raise ValueError(f"dashboard_labels: {', '.join(unmapped)} must be a key of topics:")
+
     knows: dict[str, frozenset[str]] = {}
     for login, declared in knows_raw.items():
         keys = set()
@@ -526,6 +547,7 @@ def load_config(path: str | Path) -> DashboardConfig:
         shares=tuple(sorted(shares.items())),
         knows=tuple(sorted(knows.items())),
         topic_pages=tuple(sorted(topic_pages.items())),
+        dashboard_labels=dashboard_labels,
         response_targets=targets,
         attention=attention,
         ready_bounded=bounded,

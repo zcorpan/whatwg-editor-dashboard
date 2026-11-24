@@ -141,6 +141,17 @@ class FakeGitHub:
                     }
                 )
             return {"nodes": nodes, "rateLimit": RATE}
+        if name == "RepositoryLabels":
+            return {
+                "repository": {
+                    "labels": {
+                        "totalCount": 1,
+                        "nodes": [{"name": "topic: parser"}],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                },
+                "rateLimit": RATE,
+            }
         if name == "IssueFreshness":
             return {
                 "nodes": [

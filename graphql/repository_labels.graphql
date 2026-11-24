@@ -1,0 +1,22 @@
+# Every label the repository has, asked for on every build: label suggestions name
+# only these, and dashboard.yml is checked against them.
+query RepositoryLabels($owner: String!, $name: String!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    labels(first: 100, after: $cursor, orderBy: { field: NAME, direction: ASC }) {
+      totalCount
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        name
+      }
+    }
+  }
+  rateLimit {
+    cost
+    limit
+    remaining
+    resetAt
+  }
+}

@@ -160,8 +160,11 @@ class TopicTests(unittest.TestCase):
         # Two labels cover it, or none does: no suggestion.
         self.assertIsNone(suggester.from_pages({"iframe-embed-object": 3}, self.config))
         self.assertIsNone(suggester.from_pages({"uncovered-page": 3}, self.config))
-        # topic: semantics covers sections, but does not exist on GitHub yet.
+        # topic: sections covers sections.html, but this repository doesn't have it.
         self.assertIsNone(suggester.from_pages({"sections": 3}, self.config))
+        # A label that exists is suggested even if no item carries it yet.
+        fresh = LabelSuggester.from_config(self.config, ["topic: sections"])
+        self.assertEqual(fresh.from_pages({"sections": 3}, self.config)[0], "topic: sections")
         self.assertEqual(suggester.from_title("The <dialog> element closes twice")[0], "topic: dialog")
 
 

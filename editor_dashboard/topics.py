@@ -84,8 +84,8 @@ def top_page(shares: Mapping[str, float]) -> str | None:
 class LabelSuggester:
     """A topic label for an unlabeled item, from the `topics:` map or its title.
 
-    Only labels some item carries are suggested, under the name GitHub has, so a name
-    in `topics:` that exists nowhere yet is not suggested at all.
+    Only labels that exist are suggested, under the name GitHub has, so a key of
+    `topics:` that is not a GitHub label is never suggested.
     """
 
     label_words: tuple[tuple[re.Pattern[str], str], ...]

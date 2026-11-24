@@ -33,7 +33,10 @@ class FakeClient:
         open_responses: list[dict[str, Any]],
         closed_responses: list[dict[str, Any]],
         mergeability_responses: list[dict[str, Any]] | None = None,
+        labels: tuple[str, ...] | None = None,
     ) -> None:
+        # By default the repository has every label dashboard.yml names.
+        self.labels = labels if labels is not None else tuple(sorted(load_config(ROOT / "dashboard.yml").named_labels()))
         self.open_responses = iter(open_responses)
         self.closed_responses = iter(closed_responses)
         self.mergeability_responses = iter(mergeability_responses or [])
@@ -47,6 +50,17 @@ class FakeClient:
             return next(self.closed_responses)
         if "query PullRequestMergeability" in query:
             return next(self.mergeability_responses)
+        if "query RepositoryLabels" in query:
+            return {
+                "repository": {
+                    "labels": {
+                        "totalCount": len(self.labels),
+                        "nodes": [{"name": name} for name in self.labels],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                },
+                "rateLimit": rate_limit(1),
+            }
         if "query OpenIssues" in query:
             return {
                 "repository": {
@@ -419,10 +433,10 @@ class GitHubFetchTests(unittest.TestCase):
             {pr.number for pr in data.recently_closed_pull_requests},
             {int(closes_during_build["number"]), int(already_closed["number"])},
         )
-        # Three PR pages, one page each of open and recently closed issues, and one of
-        # merged-PR history.
-        self.assertEqual(data.metadata.query_count, 6)
-        self.assertEqual(data.metadata.total_cost, 28)
+        # Three PR pages, one page each of open and recently closed issues, one of
+        # merged-PR history, and one of the repository's labels.
+        self.assertEqual(data.metadata.query_count, 7)
+        self.assertEqual(data.metadata.total_cost, 29)
         self.assertEqual(data.metadata.effective_page_size, 10)
         self.assertTrue(all(call["pageSize"] == 10 for call in client.calls if "reviewCount" in call))
         self.assertTrue(any("Deduplicated open" in warning for warning in data.metadata.warnings))
@@ -528,6 +542,18 @@ class GitHubFetchTests(unittest.TestCase):
         self.assertEqual(data.recently_closed_pull_requests, ())
         self.assertEqual(data.metadata.drafts_excluded, 2)
         self.assertFalse(any("ids" in call for call in client.calls))
+
+    def test_labels_dashboard_yml_names_that_the_repository_lacks_are_a_warning(self) -> None:
+        empty = {"search": {"issueCount": 0, "nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}, "rateLimit": rate_limit(1)}
+        client = FakeClient(open_responses=[self._open_page([])], closed_responses=[empty], labels=("Topic: Parser", "agenda+"))
+        data = fetch_repository_data(self.config, "unused", now=NOW, client=client, sleep=lambda _: None)
+        self.assertEqual(data.labels, ("Topic: Parser", "agenda+"))
+        warning = next(value for value in data.metadata.warnings if value.startswith("dashboard.yml names labels"))
+        self.assertIn("topic: forms", warning)
+        # Case doesn't matter, and dashboard-only names are not GitHub labels.
+        self.assertNotIn("topic: parser", warning)
+        self.assertNotIn("agenda+,", warning)
+        self.assertNotIn("element semantics", warning)
 
 
 if __name__ == "__main__":

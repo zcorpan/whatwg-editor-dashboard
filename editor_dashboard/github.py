@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import DashboardConfig
+from .config import DashboardConfig, label_key
 from .models import (
     DependencyState,
     HistoryRecord,
@@ -132,6 +132,9 @@ class RepositoryData:
     # What held open PRs say they depend on, by canonical URL (see references.py).
     # Fetched fresh on every build: it is other repositories' state.
     dependency_states: dict[str, DependencyState] = field(default_factory=dict)
+    # Every label the repository has, fetched fresh on every build. None when not known
+    # (a fixture without them, or a failed fetch): then the labels items carry stand in.
+    labels: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -1118,6 +1121,31 @@ def _fetch_dependency_states(
     return states
 
 
+def _fetch_labels(config: DashboardConfig, graphql: GraphQLClient, metadata: FetchMetadata) -> tuple[str, ...] | None:
+    """The repository's labels. Only suggestions and a config check depend on them,
+    so a failure is a warning."""
+    try:
+        nodes, _total = _paginate(
+            graphql,
+            _read_query("repository_labels.graphql"),
+            {"owner": config.repository.owner, "name": config.repository.name},
+            metadata,
+            lambda data: ((data.get("repository") or {}).get("labels")),
+            "labels",
+        )
+    except GitHubAPIError as error:
+        metadata.warnings.append(f"Could not fetch the repository's labels: {error}")
+        return None
+    labels = tuple(sorted({str(node["name"]) for node in nodes if node.get("name")}))
+    missing = sorted(config.named_labels() - {label_key(label) for label in labels})
+    if missing:
+        # Most likely renamed or deleted on GitHub since dashboard.yml was written.
+        metadata.warnings.append(
+            f"dashboard.yml names labels {config.repository.slug} doesn't have: {', '.join(missing)}."
+        )
+    return labels
+
+
 def _repository_data(
     open_nodes: Iterable[dict[str, Any]],
     closed_nodes: Iterable[dict[str, Any]],
@@ -1126,6 +1154,7 @@ def _repository_data(
     open_issue_nodes: Iterable[dict[str, Any]] = (),
     closed_issue_nodes: Iterable[dict[str, Any]] = (),
     history_nodes: Iterable[dict[str, Any]] = (),
+    labels: Iterable[str] | None = None,
 ) -> RepositoryData:
     """Snapshots in PR-number order, so a build's output never depends on fetch order."""
     ordered_open = sorted(open_nodes, key=lambda node: int(node["number"]))
@@ -1142,6 +1171,7 @@ def _repository_data(
             issues_from_nodes(sorted(closed_issue_nodes, key=lambda node: int(node["number"])))
         ),
         history=tuple(history),
+        labels=None if labels is None else tuple(sorted(set(labels))),
     )
 
 
@@ -1178,6 +1208,7 @@ def fetch_with_snapshot(
         else:
             metadata.refetched_prs = refetched
             metadata.refetched_issues = refetched_issues
+            labels = _fetch_labels(config, graphql, metadata)
             open_nodes, closed_nodes, dependencies = _finish(
                 config, graphql, metadata, list(open_map.values()), list(closed_map.values()), sleep=sleep
             )
@@ -1211,6 +1242,7 @@ def fetch_with_snapshot(
                     open_issue_map.values(),
                     closed_issue_map.values(),
                     previous.history_nodes.values(),
+                    labels,
                 ),
                 snapshot,
             )
@@ -1224,6 +1256,7 @@ def fetch_with_snapshot(
     # An issue can close between the two fetches; the later snapshot wins, as for PRs.
     closed_issue_numbers = {int(node["number"]) for node in closed_issue_nodes}
     open_issue_nodes = [node for node in open_issue_nodes if int(node["number"]) not in closed_issue_numbers]
+    labels = _fetch_labels(config, graphql, metadata)
     open_nodes, closed_nodes, dependencies = _finish(config, graphql, metadata, open_nodes, closed_nodes, sleep=sleep)
     metadata.last_full_fetch_at = isoformat(now)
 
@@ -1251,7 +1284,14 @@ def fetch_with_snapshot(
     )
     return (
         _repository_data(
-            open_nodes, closed_nodes, metadata, dependencies, open_issue_nodes, closed_issue_nodes, history_nodes
+            open_nodes,
+            closed_nodes,
+            metadata,
+            dependencies,
+            open_issue_nodes,
+            closed_issue_nodes,
+            history_nodes,
+            labels,
         ),
         snapshot,
     )
@@ -1299,4 +1339,5 @@ def load_fixture(path: str | Path) -> RepositoryData:
         raw.get("open_issues") or [],
         raw.get("recently_closed_issues") or [],
         raw.get("history_pull_requests") or [],
+        raw.get("labels"),
     )
